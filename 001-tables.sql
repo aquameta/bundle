@@ -76,6 +76,13 @@ create table commit_row_deleted (
     position integer not null
 );
 
+create table commit_field_changed (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    commit_id uuid not null references repo(id),
+    field_id meta.field_id not null,
+    new_value text
+);
+
 create table commit_field_added (
     id uuid not null default public.uuid_generate_v4() primary key,
     commit_id uuid not null references repo(id),
@@ -88,13 +95,6 @@ create table commit_field_deleted (
     commit_id uuid not null references repo(id),
     field_id meta.field_id not null,
     value text
-);
-
-create table commit_field_changed (
-    id uuid not null default public.uuid_generate_v4() primary key,
-    commit_id uuid not null references repo(id),
-    field_id meta.field_id not null,
-    new_value text
 );
 
 
