@@ -1,0 +1,4 @@
+comment = 'Version control system for schema and data'
+default_version = '0.1.0'
+relocatable = false
+schema = 'delta'
