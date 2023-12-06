@@ -1,17 +1,38 @@
 set search_path=delta;
-------------------------------------------------------------------------------
--- REPOSITORY CREATE / DELETE
-------------------------------------------------------------------------------
-create or replace function repository_create( name text ) returns uuid as $$
-    insert into delta.repository (name) values (repository_create.name) returning id;
+
+-- pff
+create function _exmsg( message text ) returns text as $$
+    select 'Δ💩: ' || message;
 $$ language sql;
 
-create or replace function repository_delete( _repository_id uuid ) returns void as $$
-    -- TODO: delete blobs
-    delete from delta.repository where id = _repository_id;
+------------------------------------------------------------------------------
+-- REPOSITORY FUNCTIONS
+------------------------------------------------------------------------------
+create or replace function repository_create( repository_name text ) returns uuid as $$
+    insert into delta.repository (name) values (repository_name) returning id;
 $$ language sql;
 
-create or replace function _repository_exists( _name text ) returns boolean as $$
+create or replace function _repository_delete( repository_id uuid ) returns void as $$
+    begin
+        if not _repository_exists(repository_id) then
+            raise exception 'Repository with id % does not exist.', repository_id;
+        end if;
+
+        delete from delta.repository where id = repository_id;
+    end;
+$$ language plpgsql;
+
+create or replace function repository_delete( repository_name text ) returns void as $$
+    begin
+        if not repository_exists(repository_name) then
+            raise exception 'Repository with name % does not exist.', repository_name;
+        end if;
+
+        delete from delta.repository where name = repository_name;
+    end;
+$$ language plpgsql;
+
+create or replace function repository_exists( _name text ) returns boolean as $$
     select exists (select 1 from delta.repository where name = _name);
 $$ language sql;
 
@@ -58,15 +79,6 @@ create or replace function _track_row( repository_id uuid, row_id meta.row_id ) 
     end;
 $$ language plpgsql;
 
-create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns uuid as $$
-    select delta._track_row(
-        id,
-        meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
-    )
-    from delta.repository where name=repository_name;
-$$ language sql;
-
 
 create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
@@ -75,7 +87,7 @@ returns uuid as $$
     begin
 
         -- assert repository exists
-        if not delta._repository_exists(repository_name) then
+        if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
@@ -154,7 +166,7 @@ returns uuid as $$
     begin
 
         -- assert repository exists
-        if not delta._repository_exists(repository_name) then
+        if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
@@ -213,22 +225,6 @@ $$ language sql;
 
 --
 -- unstage a field change
---
-
---
--- stage a field added
---
-
---
--- unstage a field added
---
-
---
--- stage a field deleted
---
-
---
--- unstage a field deleted
 --
 
 
