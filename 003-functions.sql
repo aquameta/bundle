@@ -2,44 +2,44 @@ set search_path=delta;
 ------------------------------------------------------------------------------
 -- REPOSITORY CREATE / DELETE
 ------------------------------------------------------------------------------
-create or replace function repo_create( name text ) returns uuid as $$
-    insert into delta.repo (name) values (name) returning id;
+create or replace function repository_create( name text ) returns uuid as $$
+    insert into delta.repository (name) values (repository_create.name) returning id;
 $$ language sql;
 
-create or replace function repo_delete( _repo_id uuid ) returns void as $$
+create or replace function repository_delete( _repository_id uuid ) returns void as $$
     -- TODO: delete blobs
-    delete from delta.repo where id = _repo_id;
+    delete from delta.repository where id = _repository_id;
 $$ language sql;
 
-create or replace function repo_exists( name text ) returns boolean as $$
-    select exists (select 1 from delta.repo where name = repo_exists.name);
+create or replace function _repository_exists( _name text ) returns boolean as $$
+    select exists (select 1 from delta.repository where name = _name);
 $$ language sql;
 
-create or replace function _repo_exists( repository_id uuid ) returns boolean as $$
-    select exists (select 1 from delta.repo where id = repository_id);
+create or replace function _repository_exists( repository_id uuid ) returns boolean as $$
+    select exists (select 1 from delta.repository where id = repository_id);
 $$ language sql;
 
 create or replace function _repository_has_commits( _repository_id uuid ) returns boolean as $$
     select exists (select 1 from delta.commit where repository_id = _repository_id);
 $$ language sql;
 
-create or replace function _repo_id( name text ) returns uuid as $$
-    select id from delta.repo where name= _repo_id.name;
+create or replace function _repository_id( name text ) returns uuid as $$
+    select id from delta.repository where name= _repository_id.name;
 $$ stable language sql;
 
 ------------------------------------------------------------------------------
 -- ROW TRACK / UNTRACK FUNCTIONS
 ------------------------------------------------------------------------------
 -- track a row
-create or replace function _track_row( repo_id uuid, row_id meta.row_id ) returns uuid as $$
+create or replace function _track_row( repository_id uuid, row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         exists boolean;
     begin
 
-        -- assert repo exists
-        if not delta._repo_exists(repo_id) then
-            raise exception 'Repository with id % does not exist.', repo_id;
+        -- assert repository exists
+        if not delta._repository_exists(repository_id) then
+            raise exception 'Repository with id % does not exist.', repository_id;
         end if;
 
         -- assert row exists
@@ -48,45 +48,66 @@ create or replace function _track_row( repo_id uuid, row_id meta.row_id ) return
         end if;
 
         -- assert row is not already in a bundle or tracked or staged
-        -- NOTE: unclear whether this constraint is desirable.  Can a row be tracked by more than one repo?
+        -- NOTE: unclear whether this constraint is desirable.  Can a row be tracked by more than one repository?
 
-        insert into delta.tracked_row_added (repo_id, row_id)
-        select id, row_id from delta.repo r where r.id = repo_id
+        insert into delta.tracked_row_added (repository_id, row_id)
+        select id, row_id from delta.repository r where r.id = repository_id
         returning id into tracked_row_id;
 
         return tracked_row_id;
     end;
 $$ language plpgsql;
 
-create or replace function track_row( repo_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     select delta._track_row(
         id,
         meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
     )
-    from delta.repo where name=repo_name;
+    from delta.repository where name=repository_name;
 $$ language sql;
+
+
+create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+returns uuid as $$
+    declare
+        tracked_row_id uuid;
+    begin
+
+        -- assert repository exists
+        if not delta._repository_exists(repository_name) then
+            raise exception 'Repository with name % does not exist.', repository_name;
+        end if;
+
+        select delta._track_row(
+            delta._repository_id(repository_name),
+            meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
+        ) into tracked_row_id;
+
+        return tracked_row_id;
+    end;
+$$ language plpgsql;
 
 
 
 -- untrack a row
-create or replace function _untrack_row( row_id meta.row_id ) returns uuid as $$
+create or replace function _untrack_row( _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         exists boolean;
     begin
-        delete from delta.tracked_row_added tra where tra.row_id = _untrack_row.row_id
+        delete from delta.tracked_row_added tra where tra.row_id = _row_id
         returning id into tracked_row_id;
 
         if tracked_row_id is null then
-            raise exception 'Row with row_id % is not tracked.', _untracked_row.row_id;
+            raise exception 'Row with row_id % is not tracked.', _row_id;
         end if;
 
         return tracked_row_id;
     end;
 $$ language plpgsql;
 
-create or replace function untrack_row( repo_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function untrack_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     select delta._untrack_row( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
@@ -101,59 +122,69 @@ $$ language sql;
 -- stage a row
 --
 
-create or replace function _stage_row( repo_id uuid, row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         staged_row_id uuid;
-        exists boolean;
+        is_tracked boolean;
     begin
 
-        -- assert repo exists
-        select true from delta._untrack_row(_stage_row.row_id) into exists;
-        if not delta._repo_exists(repo_id) then
-            raise exception 'Repository with id % does not exist.', repo_id;
+        -- assert repository exists
+        if not delta._repository_exists(repository_id) then
+            raise exception 'Repository with id % does not exist.', repository_id;
         end if;
 
-        -- TODO: make sure the row is not already in the repo, or tracked by any other repo
+        -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
-        insert into delta.stage_row_added (repo_id, row_id) values ( _stage_row.repo_id, _stage_row.row_id)
+        -- untrack
+        perform delta._untrack_row(_row_id);
+
+        -- stage
+        insert into delta.stage_row_added (repository_id, row_id) values ( repository_id, _row_id)
         returning id into staged_row_id;
 
         return staged_row_id;
     end;
 $$ language plpgsql;
 
-create or replace function stage_row( repo_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function stage_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
-    select * from delta._stage_row(
-        delta._repo_id(repo_name),
-        meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
-    )
-$$ language sql;
+    declare
+        staged_row_id uuid;
+    begin
 
+        -- assert repository exists
+        if not delta._repository_exists(repository_name) then
+            raise exception 'Repository with name % does not exist.', repository_name;
+        end if;
 
-create or replace function stage_tracked_rows( repo_id uuid ) returns void as $$
-    select delta._stage_row(repo_id, row_id) from delta.tracked_row_added;
-$$ language sql;
+        select delta._stage_row(
+            delta._repository_id(repository_name),
+            meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
+        ) into staged_row_id;
+
+        return staged_row_id;
+    end;
+$$ language plpgsql;
 
 
 --
 -- unstage a row
 --
 
-create or replace function _unstage_row( row_id meta.row_id ) returns uuid as $$
+create or replace function _unstage_row( _row_id meta.row_id ) returns uuid as $$
     declare
         staged_row_id uuid;
         row_exists boolean;
     begin
 
         -- assert row is staged
-        select exists (select 1 from delta.stage_row_added sra where sra.row_id = _unstage_row.row_id) into row_exists;
+        select exists (select 1 from delta.stage_row_added sra where sra.row_id = _row_id) into row_exists;
         if not row_exists then
-            raise exception 'Row with row_id % is not staged.', row_id;
+            raise exception 'Row with row_id % is not staged.', _row_id;
         end if;
 
-        delete from delta.stage_row_added sra where sra.row_id = _unstage_row.row_id
+        delete from delta.stage_row_added sra where sra.row_id = _row_id
         returning id into staged_row_id;
 
         return staged_row_id;
@@ -164,6 +195,16 @@ create or replace function unstage_row( schema_name text, relation_name text, pk
 returns uuid as $$
     select delta._unstage_row( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
+
+
+--
+-- stage all tracked rows
+--
+
+create or replace function stage_tracked_rows( _repository_id uuid ) returns setof uuid as $$
+    select delta._stage_row(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
+$$ language sql;
+
 
 
 --
@@ -208,13 +249,13 @@ create function _commit(
         parent_commit_id uuid;
         first_commit boolean := false;
     begin
-        if not delta._repo_exists(_repository_id) then
+        if not delta._repository_exists(_repository_id) then
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
 
         -- if no parent_commit_id is supplied, use head pointer
         if parent_commit_id is null then
-            select head_commit_id from delta.repo where id = _repository_id into parent_commit_id;
+            select head_commit_id from delta.repository where id = _repository_id into parent_commit_id;
         end if;
 
         -- if repository has no head commit and one is not supplied, either this is the first
@@ -228,6 +269,7 @@ create function _commit(
             end if;
         end if;
 
+        -- create the commit
         insert into delta.commit (
             repository_id,
             message,
@@ -243,12 +285,12 @@ create function _commit(
         )
         returning id into commit_id;
 
-        -- update head pointer
-        update delta.repo set head_commit_id = commit_id, checkout_commit_id = commit_id;
+        -- update head pointer, checkout pointer
+        update delta.repository set head_commit_id = commit_id, checkout_commit_id = commit_id;
 
 
         /*
-        insert into commit_row_added select * from stage_row_added where repo_id = _commit.repository_id;
+        insert into commit_row_added select * from stage_row_added where repository_id = _commit.repository_id;
         insert into commit_row_deleted
         insert into commit_field_changed
         */
@@ -267,7 +309,7 @@ create function commit(
 )
 returns uuid as $$
     select delta._commit (id, message, author_name, author_email, parent_commit_id)
-    from delta.repo where name=repository_name;
+    from delta.repository where name=repository_name;
 $$ language sql;
 
 
@@ -300,7 +342,7 @@ $$ language sql;
 
 -- from repo
 
-create or replace function commit_ancestry( _commit_id uuid ) returns uuid[] as $$
+create or replace function _commit_ancestry( _commit_id uuid ) returns uuid[] as $$
     with recursive parent as (
         select c.id, c.parent_id from commit c where c.id=_commit_id
         union

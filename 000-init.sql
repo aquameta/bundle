@@ -7,8 +7,6 @@ create extension if not exists meta;
 create extension if not exists meta_triggers;
 */
 
-
 drop schema if exists delta cascade;
 create schema delta;
 set search_path=delta;
-\timing off

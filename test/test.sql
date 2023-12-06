@@ -1,4 +1,4 @@
-select delta.repo_create('org.example.test');
+select delta.repository_create('org.example.test');
 
 
 /*
@@ -14,10 +14,10 @@ select delta.untrack_row('org.example.test', 'widget', 'dependency_js', 'id', id
 */
 
 select delta.track_row('org.example.test', 'widget', 'widget', 'id', id::text) from widget.widget where name like 'a%';
-select delta.stage_tracked_rows(delta._repo_id('org.example.test'));
+select delta.stage_tracked_rows(delta._repository_id('org.example.test'));
 select delta.commit('org.example.test', 'first commit - a widgets', 'Eric Hanson', 'elhanson@gmail.com');
 
 
 select delta.track_row('org.example.test', 'widget', 'widget', 'id', id::text) from widget.widget where name like 'b%';
-select delta.stage_tracked_rows(delta._repo_id('org.example.test'));
+select delta.stage_tracked_rows(delta._repository_id('org.example.test'));
 select delta.commit('org.example.test', 'second commit - b widgets', 'Eric Hanson', 'elhanson@gmail.com');

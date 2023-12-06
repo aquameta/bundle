@@ -1,10 +1,11 @@
+set search_path=delta;
 --
 --
 -- REPOSITORY
 --
 --
 
-create table repo (
+create table repository (
     id uuid not null default public.uuid_generate_v4() primary key,
     name text not null default '',
     -- head_commit_id uuid, -- (circular, added later)
@@ -50,7 +51,7 @@ create trigger blob_hash_update
 
 create table commit (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid not null references repo(id),
+    repository_id uuid not null references repository(id),
     parent_id uuid references commit(id), --null means first commit
     author_name text not null default '',
     author_email text not null default '',
@@ -59,42 +60,42 @@ create table commit (
 -- TODO: check constraint for only one null parent_id per repo
 
 -- circular dependencies
-alter table repo add head_commit_id uuid references commit(id) on delete set null;
-alter table repo add checkout_commit_id uuid references commit(id) on delete set null;
-alter table repo alter constraint repo_checkout_commit_id_fkey deferrable initially immediate;
-alter table repo alter constraint repo_head_commit_id_fkey deferrable initially immediate;
+alter table repository add head_commit_id uuid references commit(id) on delete set null;
+alter table repository add checkout_commit_id uuid references commit(id) on delete set null;
+alter table repository alter constraint repository_checkout_commit_id_fkey deferrable initially immediate;
+alter table repository alter constraint repository_head_commit_id_fkey deferrable initially immediate;
 
 create table commit_row_added (
     id uuid not null default public.uuid_generate_v4() primary key,
-    commit_id uuid not null references repo(id),
+    commit_id uuid not null references repository(id),
     row_id meta.row_id not null,
     position integer not null
 );
 
 create table commit_row_deleted (
     id uuid not null default public.uuid_generate_v4() primary key,
-    commit_id uuid not null references repo(id),
+    commit_id uuid not null references repository(id),
     row_id meta.row_id not null,
     position integer not null
 );
 
 create table commit_field_changed (
     id uuid not null default public.uuid_generate_v4() primary key,
-    commit_id uuid not null references repo(id),
+    commit_id uuid not null references repository(id),
     field_id meta.field_id not null,
     new_value text
 );
 
 create table commit_field_added (
     id uuid not null default public.uuid_generate_v4() primary key,
-    commit_id uuid not null references repo(id),
+    commit_id uuid not null references repository(id),
     field_id meta.field_id not null,
     value text
 );
 
 create table commit_field_deleted (
     id uuid not null default public.uuid_generate_v4() primary key,
-    commit_id uuid not null references repo(id),
+    commit_id uuid not null references repository(id),
     field_id meta.field_id not null,
     value text
 );
@@ -157,7 +158,7 @@ $$ language plpgsql;
 
 create table tracked_row_added (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repo_id uuid not null references repo(id) on delete cascade,
+    repository_id uuid not null references repository(id) on delete cascade,
     row_id meta.row_id,
     unique (row_id)
 );
@@ -171,25 +172,25 @@ create table tracked_row_added (
 
 create table stage_row_added (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repo_id uuid not null references repo(id) on delete cascade,
+    repository_id uuid not null references repository(id) on delete cascade,
     row_id meta.row_id,
     value jsonb,
-    unique (repo_id, row_id)
+    unique (repository_id, row_id)
 );
 
 create table stage_row_deleted (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repo_id uuid not null references repo(id) on delete cascade,
+    repository_id uuid not null references repository(id) on delete cascade,
     row_id meta.row_id not null,
-    unique (repo_id, row_id)
+    unique (repository_id, row_id)
 );
 
 create table stage_field_changed (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repo_id uuid not null references repo(id),
+    repository_id uuid not null references repository(id),
     field_id meta.field_id,
     value text,
-    unique (repo_id, field_id)
+    unique (repository_id, field_id)
 );
 
 --
