@@ -50,11 +50,13 @@ create trigger blob_hash_update
 
 create table commit (
     id uuid not null default public.uuid_generate_v4() primary key,
-    parent_id uuid not null references commit(id),
+    repository_id uuid not null references repo(id),
+    parent_id uuid references commit(id), --null means first commit
     author_name text not null default '',
     author_email text not null default '',
     message text not null default ''
 );
+-- TODO: check constraint for only one null parent_id per repo
 
 -- circular dependencies
 alter table repo add head_commit_id uuid references commit(id) on delete set null;
