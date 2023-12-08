@@ -10,6 +10,9 @@ Style Guide
   detecting program bugs, not for reporting ordinary error conditions", and can be disabled via
   `plpgsql.check_asserts`.
 
+## Tables
+- Use singular names
+
 ## Functions
 - "public" functions (ones the user might call from the psql prompt or their code) typically take
   human-readable text arguments, e.g. repository name instead of repository id

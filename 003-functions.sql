@@ -137,7 +137,7 @@ $$ language sql;
 create or replace function _stage_row( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
-        staged_row_id uuid;
+        stage_row_added_id uuid;
         is_tracked boolean;
     begin
 
@@ -153,16 +153,16 @@ create or replace function _stage_row( repository_id uuid, _row_id meta.row_id )
 
         -- stage
         insert into delta.stage_row_added (repository_id, row_id) values ( repository_id, _row_id)
-        returning id into staged_row_id;
+        returning id into stage_row_added_id;
 
-        return staged_row_id;
+        return stage_row_added_id;
     end;
 $$ language plpgsql;
 
 create or replace function stage_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     declare
-        staged_row_id uuid;
+        staged_row_added_id uuid;
     begin
 
         -- assert repository exists
@@ -173,9 +173,9 @@ returns uuid as $$
         select delta._stage_row(
             delta._repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
-        ) into staged_row_id;
+        ) into staged_row_added_id;
 
-        return staged_row_id;
+        return staged_row_added_id;
     end;
 $$ language plpgsql;
 
@@ -186,7 +186,7 @@ $$ language plpgsql;
 
 create or replace function _unstage_row( _row_id meta.row_id ) returns uuid as $$
     declare
-        staged_row_id uuid;
+        staged_row_added_id uuid;
         row_exists boolean;
     begin
 
@@ -197,9 +197,9 @@ create or replace function _unstage_row( _row_id meta.row_id ) returns uuid as $
         end if;
 
         delete from delta.stage_row_added sra where sra.row_id = _row_id
-        returning id into staged_row_id;
+        returning id into staged_row_added_id;
 
-        return staged_row_id;
+        return staged_row_added_id;
     end;
 $$ language plpgsql;
 
@@ -216,6 +216,53 @@ $$ language sql;
 create or replace function stage_tracked_rows( _repository_id uuid ) returns setof uuid as $$
     select delta._stage_row(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
 $$ language sql;
+
+
+--
+-- delete row
+--
+
+create or replace function _delete_row( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
+    declare
+        tracked_row_id uuid;
+        stage_row_deleted_id uuid;
+        is_tracked boolean;
+    begin
+
+        -- assert repository exists
+        if not delta._repository_exists(repository_id) then
+            raise exception 'Repository with id % does not exist.', repository_id;
+        end if;
+
+        -- TODO: make sure the row is in the head commit
+
+        -- stage
+        insert into delta.stage_row_deleted (repository_id, row_id) values ( repository_id, _row_id)
+        returning id into stage_row_deleted_id;
+
+        return stage_row_deleted_id;
+    end;
+$$ language plpgsql;
+
+create or replace function delete_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+returns uuid as $$
+    declare
+        stage_row_deleted_id uuid;
+    begin
+
+        -- assert repository exists
+        if not delta.repository_exists(repository_name) then
+            raise exception 'Repository with name % does not exist.', repository_name;
+        end if;
+
+        select delta._delete_row(
+            delta._repository_id(repository_name),
+            meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
+        ) into stage_row_deleted_id;
+
+        return stage_row_deleted_id;
+    end;
+$$ language plpgsql;
 
 
 
@@ -241,7 +288,7 @@ create function _commit(
     parent_commit_id uuid default null
 ) returns uuid as $$
     declare
-        commit_id uuid;
+        new_commit_id uuid;
         parent_commit_id uuid;
         first_commit boolean := false;
     begin
@@ -279,19 +326,30 @@ create function _commit(
             author_email,
             parent_commit_id
         )
-        returning id into commit_id;
+        returning id into new_commit_id;
 
         -- update head pointer, checkout pointer
-        update delta.repository set head_commit_id = commit_id, checkout_commit_id = commit_id;
+        update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id;
 
+        -- commit_row_added
+        insert into delta.commit_row_added (commit_id, row_id, position)
+        select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
 
-        /*
-        insert into commit_row_added select * from stage_row_added where repository_id = _commit.repository_id;
+        delete from delta.stage_row_added where repository_id = _repository_id;
+
+        -- commit_row_deleted
+        insert into delta.commit_row_deleted (commit_id, row_id, position)
+        select new_commit_id, row_id, 0 from delta.stage_row_deleted where repository_id = _repository_id;
+
+        delete from delta.stage_row_deleted where repository_id = _repository_id;
+
+    /*
+        insert into commit_field gtgt
         insert into commit_row_deleted
         insert into commit_field_changed
         */
 
-        return commit_id;
+        return new_commit_id;
     end;
 $$ language plpgsql;
 
@@ -336,14 +394,3 @@ end
 $$ language sql;
 */
 
--- from repo
-
-create or replace function _commit_ancestry( _commit_id uuid ) returns uuid[] as $$
-    with recursive parent as (
-        select c.id, c.parent_id from commit c where c.id=_commit_id
-        union
-        select c.id, c.parent_id from commit c join parent p on c.id = p.parent_id
-    ) select array_agg(id) from parent
-    -- ancestors only
-    where id != _commit_id;
-$$ language sql;
