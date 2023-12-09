@@ -1,3 +1,7 @@
+------------------------------------------------------------------------------
+-- INIT
+------------------------------------------------------------------------------
+
 /*
 create extension if not exists hstore schema public;
 create extension if not exists "uuid-ossp";

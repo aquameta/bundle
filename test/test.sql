@@ -1,3 +1,30 @@
+begin;
+
+create extension if not exists pgtap schema public;
+set search_path=public,meta;
+
+-- select plan(115);
+select * from no_plan();
+
+ 
+\set repo_id '\'9caeb540-8ad5-11e4-b4a9-0800200c9a66\''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+insert into delta.repository(id, name) values (:repo_id, 'com.aquameta.core.bundle.tests');
+
 select delta.repository_create('org.example.test');
 
 select delta.track_row('org.example.test', 'widget', 'widget', 'id', id::text) from widget.widget where name like 'a%';

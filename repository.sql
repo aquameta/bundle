@@ -1,8 +1,9 @@
-set search_path=delta;
+------------------------------------------------------------------------------
+-- DATA MODEL
+------------------------------------------------------------------------------
+
 --
---
--- REPOSITORY
---
+-- repository
 --
 
 create table repository (
@@ -14,9 +15,7 @@ create table repository (
 );
 
 --
---
--- BLOB
---
+-- blob
 --
 
 create table blob (
@@ -43,10 +42,9 @@ create trigger blob_hash_update
     before insert or update on blob
     for each row execute procedure blob_hash_gen_trigger();
 
+
 --
---
--- COMMIT
---
+-- commit
 --
 
 create table commit (
@@ -102,43 +100,74 @@ create table commit_field_deleted (
 
 
 
-create type _commit_ancestry as (commit_id uuid, position integer);
-create or replace function _commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
-    with recursive parent as (
-        select c.id, c.parent_id, 1 as position from commit c where c.id=_commit_id
-        union
-        select c.id, c.parent_id, p.position + 1 from commit c join parent p on c.id = p.parent_id
-    ) select id, position from parent
+
+------------------------------------------------------------------------------
+-- FUNCTIONS
+------------------------------------------------------------------------------
+
+--
+-- create()
+--
+
+create or replace function repository_create( repository_name text ) returns uuid as $$
+    insert into delta.repository (name) values (repository_name) returning id;
 $$ language sql;
 
 
+--
+-- delete()
+--
 
-/*
-recursive cte, traverses commit ancestry tree, grabbing added rows and removing rows deleted
+create or replace function _repository_delete( repository_id uuid ) returns void as $$
+    begin
+        if not _repository_exists(repository_id) then
+            raise exception 'Repository with id % does not exist.', repository_id;
+        end if;
 
-- get the ancestry tree of the commit being materialized, in a cte
-- with ancestry, start with the root commit and move forward in time
-- stop at releases!
-- for each commit
-    - add rows added
-    - remove rows deleted
-*/
+        delete from delta.repository where id = repository_id;
+    end;
+$$ language plpgsql;
 
-create or replace function commit_row( _commit_id uuid ) returns setof meta.row_id as $$
-    select added_row_id from (
-        with recursive ancestry as (
-            select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
-            union
-            select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
-        )
-        select min(a.position) as added_commit_position, cra.row_id as added_row_id
-        from ancestry a
-            left join delta.commit_row_added cra on cra.commit_id = a.commit_id
-        group by cra.row_id
-    ) cra
-    left join delta.commit_row_deleted crd on crd.row_id = cra.added_row_id
-    where crd.row_id is null or crd.position > crd.position;
+create or replace function repository_delete( repository_name text ) returns void as $$
+    begin
+        if not repository_exists(repository_name) then
+            raise exception 'Repository with name % does not exist.', repository_name;
+        end if;
+
+        delete from delta.repository where name = repository_name;
+    end;
+$$ language plpgsql;
+
+--
+-- exists()
+--
+
+create or replace function repository_exists( _name text ) returns boolean as $$
+    select exists (select 1 from delta.repository where name = _name);
 $$ language sql;
+
+create or replace function _repository_exists( repository_id uuid ) returns boolean as $$
+    select exists (select 1 from delta.repository where id = repository_id);
+$$ language sql;
+
+
+--
+-- has_commits()
+--
+
+create or replace function _repository_has_commits( _repository_id uuid ) returns boolean as $$
+    select exists (select 1 from delta.commit where repository_id = _repository_id);
+$$ language sql;
+
+
+--
+-- id()
+--
+
+create or replace function _repository_id( name text ) returns uuid as $$
+    select id from delta.repository where name= _repository_id.name;
+$$ stable language sql;
+
 
 
 --
