@@ -8,7 +8,7 @@
 
 create table repository (
     id uuid not null default public.uuid_generate_v4() primary key,
-    name text not null default '',
+    name text not null check(name != ''),
     -- head_commit_id uuid, -- (circular, added later)
     -- checkout_commit_id uuid, -- (circular, added later)
     unique(name)
@@ -21,7 +21,8 @@ create table repository (
 
 create table blob (
     hash text primary key not null,
-    value text not null
+    value text not null,
+    unique(value)
 );
 
 create or replace function blob_hash_gen_trigger() returns trigger as $$
@@ -31,7 +32,7 @@ create or replace function blob_hash_gen_trigger() returns trigger as $$
         end if;
 
         NEW.hash = public.digest(NEW.value, 'sha256');
-        if exists (select 1 from blob b where b.hash = NEW.hash) then
+        if exists (select 1 from delta.blob b where b.hash = NEW.hash) then
             return NULL;
         end if;
 
@@ -121,8 +122,21 @@ create table commit_field_deleted (
 --
 
 create or replace function repository_create( repository_name text ) returns uuid as $$
-    insert into delta.repository (name) values (repository_name) returning id;
-$$ language sql;
+declare
+    repository_id uuid;
+begin
+    if repository_name = '' then
+        raise exception 'Repository name cannot be empty string.';
+    end if;
+
+    if repository_name is null then
+        raise exception 'Repository name cannot be null.';
+    end if;
+
+    insert into delta.repository (name) values (repository_name) returning id into repository_id;
+    return repository_id;
+end
+$$ language plpgsql;
 
 
 --
@@ -131,7 +145,7 @@ $$ language sql;
 
 create or replace function _repository_delete( repository_id uuid ) returns void as $$
     begin
-        if not _repository_exists(repository_id) then
+        if not delta._repository_exists(repository_id) then
             raise exception 'Repository with id % does not exist.', repository_id;
         end if;
 
@@ -141,7 +155,7 @@ $$ language plpgsql;
 
 create or replace function repository_delete( repository_name text ) returns void as $$
     begin
-        if not repository_exists(repository_name) then
+        if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
@@ -176,8 +190,8 @@ $$ language sql;
 -- id()
 --
 
-create or replace function _repository_id( name text ) returns uuid as $$
-    select id from delta.repository where name= _repository_id.name;
+create or replace function repository_id( repository_name text ) returns uuid as $$
+    select id from delta.repository where name= repository_name;
 $$ stable language sql;
 
 

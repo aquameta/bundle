@@ -29,7 +29,7 @@ create table ignored_column (
 -- ignore self
 /*
 do $$
-    for r in select * from meta.table where schema_name = 'delta' -- FIXME
+    for r in select * from meta.table where schema_name = 'delta'
     loop
         -- ignore all internal tables, except for ignore rules, which are version-controlled.
         if r.name not like 'ignored_%' then
