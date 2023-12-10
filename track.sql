@@ -22,7 +22,7 @@ create or replace function _track_row( repository_id uuid, row_id meta.row_id ) 
             raise exception 'Row with row_id % does not exist.', row_id;
         end if;
 
-        -- assert row is not already in a bundle or tracked or staged
+        -- assert row is not already in a repository or tracked or staged
         -- NOTE: unclear whether this constraint is desirable.  Can a row be tracked by more than one repository?
 
         insert into delta.tracked_row_added (repository_id, row_id)

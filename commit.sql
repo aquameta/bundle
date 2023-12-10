@@ -125,6 +125,11 @@ create function _commit(
 $$ language plpgsql;
 
 
+create function commit_fields(_commit_id) returns setof meta.field_id as $$
+    select meta.field_id('a','b','c','d','e');
+$$ language sql;
+
+
 create function commit(
     repository_name text,
     message text,
