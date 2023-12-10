@@ -3,6 +3,35 @@
 ------------------------------------------------------------------------------
 
 --
+--
+-- tables
+--
+--
+
+create table stage_row_added (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    repository_id uuid not null references repository(id) on delete cascade,
+    row_id meta.row_id,
+    value jsonb,
+    unique (repository_id, row_id)
+);
+
+create table stage_row_deleted (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    repository_id uuid not null references repository(id) on delete cascade,
+    row_id meta.row_id not null,
+    unique (repository_id, row_id)
+);
+
+create table stage_field_changed (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    repository_id uuid not null references repository(id),
+    field_id meta.field_id,
+    value text,
+    unique (repository_id, field_id)
+);
+
+--
 -- stage_row()
 --
 

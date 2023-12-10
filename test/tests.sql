@@ -11,21 +11,20 @@ select * from no_plan();
 
 
 
+select throws_ok(
+    'select delta.repository_create('''')', 
+    'Repository name must not be empty string'
+);
 
 
-
-
-
-
-
-
-
-
-
-
+/*
 insert into delta.repository(id, name) values (:repo_id, 'com.aquameta.core.bundle.tests');
 
+
+gt
 select delta.repository_create('org.example.test');
+
+
 
 select delta.track_row('org.example.test', 'widget', 'widget', 'id', id::text) from widget.widget where name like 'a%';
 select delta.stage_tracked_rows(delta._repository_id('org.example.test'));
@@ -51,3 +50,4 @@ select delta.track_row('org.example.test', 'widget', 'widget', 'id', id::text) f
 select delta.delete_row('org.example.test', 'widget', 'widget', 'id', id::text) from widget.widget where name like 'c%';
 select delta.stage_tracked_rows(delta._repository_id('org.example.test'));
 -- select delta.commit('org.example.test', 'fourth commit - e widgets, delete c widgets', 'Eric Hanson', 'elhanson@gmail.com');
+*/

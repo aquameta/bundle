@@ -14,6 +14,7 @@ create table repository (
     unique(name)
 );
 
+
 --
 -- blob
 --
@@ -82,6 +83,7 @@ create table commit_row_deleted (
     position integer not null
 );
 
+
 --
 -- commit_field
 --
@@ -147,6 +149,7 @@ create or replace function repository_delete( repository_name text ) returns voi
     end;
 $$ language plpgsql;
 
+
 --
 -- exists()
 --
@@ -178,54 +181,53 @@ create or replace function _repository_id( name text ) returns uuid as $$
 $$ stable language sql;
 
 
-
 --
---
--- TRACKED
---
+-- commit_rows()
 --
 
-create table tracked_row_added (
-    id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id,
-    unique (row_id)
-);
+/*
+recursive cte, traverses commit ancestry tree, grabbing added rows and removing rows deleted
+
+- get the ancestry tree of the commit being materialized, in a cte
+- with ancestry, start with the root commit and move forward in time
+- stop at releases!
+- for each commit
+    - add rows added
+    - remove rows deleted
+*/
+
+
+
+create or replace function commit_rows( _commit_id uuid ) returns setof meta.row_id as $$
+    select added_row_id from (
+        with recursive ancestry as (
+            select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
+            union
+            select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
+        )
+        select min(a.position) as added_commit_position, cra.row_id as added_row_id
+        from ancestry a
+            left join delta.commit_row_added cra on cra.commit_id = a.commit_id
+        group by cra.row_id
+    ) cra
+    left join delta.commit_row_deleted crd on crd.row_id = cra.added_row_id
+    where crd.row_id is null or crd.position > crd.position;
+$$ language sql;
 
 
 --
---
--- STAGE
---
+-- commit_fields()
 --
 
-create table stage_row_added (
-    id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id,
-    value jsonb,
-    unique (repository_id, row_id)
-);
+/*
+create or replace function commit_fields( _commit_id uuid ) returns setof meta.field_id as $$
+$$ language sql;
+*/
 
-create table stage_row_deleted (
-    id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id not null,
-    unique (repository_id, row_id)
-);
 
-create table stage_field_changed (
-    id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid not null references repository(id),
-    field_id meta.field_id,
-    value text,
-    unique (repository_id, field_id)
-);
-
+/*
 --
---
--- MIGRATIONS
---
+-- migrations
 --
 
 create table commit_migration (
@@ -246,3 +248,4 @@ create table commit_migration (
 create table dependency (
     id uuid not null default public.uuid_generate_v4() primary key
 );
+*/

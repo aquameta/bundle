@@ -6,7 +6,7 @@
 -- commit_ancestry()
 --
 
-create type _commit_ancestry as (commit_id uuid, position integer);
+create type _commit_ancestry as( commit_id uuid, position integer );
 create or replace function _commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
     with recursive parent as (
         select c.id, c.parent_id, 1 as position from commit c where c.id=_commit_id
@@ -16,40 +16,9 @@ create or replace function _commit_ancestry( _commit_id uuid ) returns setof _co
 $$ language sql;
 
 
-
 --
--- commit_rows()
+-- commit()
 --
-
-/*
-recursive cte, traverses commit ancestry tree, grabbing added rows and removing rows deleted
-
-- get the ancestry tree of the commit being materialized, in a cte
-- with ancestry, start with the root commit and move forward in time
-- stop at releases!
-- for each commit
-    - add rows added
-    - remove rows deleted
-*/
-
-
-
-create or replace function commit_row( _commit_id uuid ) returns setof meta.row_id as $$
-    select added_row_id from (
-        with recursive ancestry as (
-            select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
-            union
-            select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
-        )
-        select min(a.position) as added_commit_position, cra.row_id as added_row_id
-        from ancestry a
-            left join delta.commit_row_added cra on cra.commit_id = a.commit_id
-        group by cra.row_id
-    ) cra
-    left join delta.commit_row_deleted crd on crd.row_id = cra.added_row_id
-    where crd.row_id is null or crd.position > crd.position;
-$$ language sql;
-
 
 create function _commit(
     _repository_id uuid,
@@ -125,11 +94,6 @@ create function _commit(
 $$ language plpgsql;
 
 
-create function commit_fields(_commit_id) returns setof meta.field_id as $$
-    select meta.field_id('a','b','c','d','e');
-$$ language sql;
-
-
 create function commit(
     repository_name text,
     message text,
@@ -138,9 +102,6 @@ create function commit(
     parent_commit_id uuid default null
 )
 returns uuid as $$
-    select delta._commit (id, message, author_name, author_email, parent_commit_id)
+    select delta._commit(id, message, author_name, author_email, parent_commit_id)
     from delta.repository where name=repository_name;
 $$ language sql;
-
-
-
