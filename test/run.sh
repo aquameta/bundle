@@ -4,4 +4,4 @@ cat pg_delta--0.1.0.sql | psql -v ON_ERROR_STOP=1 -v VERBOSITY=terse dev
 cd test/
 ./make.sh
 # cat ../001-*.sql ../002-*.sql ../003-*.sql | psql -v ON_ERROR_STOP=1 -e -b
-cat tests.sql | psql dev
+cat pg_delta--0.1.0.sql | psql dev
