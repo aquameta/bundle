@@ -58,12 +58,18 @@ create table commit (
     message text not null default ''
 );
 -- TODO: check constraint for only one null parent_id per repo
+-- TODO: i am not my own grandpa
 
--- circular dependencies
+--
+-- add circular dependencies
+--
+
 alter table repository add head_commit_id uuid references commit(id) on delete set null;
 alter table repository add checkout_commit_id uuid references commit(id) on delete set null;
-alter table repository alter constraint repository_checkout_commit_id_fkey deferrable initially immediate;
-alter table repository alter constraint repository_head_commit_id_fkey deferrable initially immediate;
+-- deferred, so circular data can be loaded within a transaction
+alter table repository alter constraint repository_checkout_commit_id_fkey deferrable initially
+deferred;
+alter table repository alter constraint repository_head_commit_id_fkey deferrable initially deferred;
 
 
 --
@@ -199,7 +205,7 @@ $$ stable language sql;
 --
 
 /*
-recursive cte, traverses commit ancestry tree, grabbing added rows and removing rows deleted
+recursive cte, traverses commit ancestry, grabbing added rows and removing rows deleted
 
 - get the ancestry tree of the commit being materialized, in a cte
 - with ancestry, start with the root commit and move forward in time
@@ -286,28 +292,29 @@ $$ language sql;
 -- head
 --
 
+-- NOTE: split these up into separate views per-repository, somehow?
 create materialized view head_commit_row as
-select * from delta.commit_rows((select head_commit_id from delta.repository));
+select delta.commit_rows(head_commit_id) from delta.repository;
 
 create materialized view head_commit_field as
-select * from delta.commit_fields((select head_commit_id from delta.repository));
+select delta.commit_fields(head_commit_id) from delta.repository;
 
 
 --
 -- garbage_collect()
 --
 
-/*
 create or replace function garbage_collect() returns void as $$
-    delete from b delta.blob
-    join delta.commit_field_added cfa on cfa.value_hash = b.hash
-    ...
-    
+    delete from delta.blob b
+        left join (
+            select distinct value_hash from (
+                select cfa.value_hash from delta.commit_field_added cfa 
+                union
+                select cfd.value_hash from delta.commit_field_deleted cfd 
+            ) hashes 
+        ) on b.hash = hashes.value_hash
+    where hashes.value_hash is null
 $$ language sql;
-*/
-
-
-
 
 
 /*
