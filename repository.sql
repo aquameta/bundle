@@ -281,6 +281,35 @@ create or replace function commit_fields(_commit_id uuid) returns setof field_ha
     select fa.field_id, fa.value_hash from fields_added fa join fields_deleted fd on fa.commit_id = fd.commit_id join fields_changed fc on fc.commit_id = fd.commit_id
 $$ language sql;
 
+
+--
+-- head
+--
+
+create materialized view head_commit_row as
+select * from delta.commit_rows((select head_commit_id from delta.repository));
+
+create materialized view head_commit_field as
+select * from delta.commit_fields((select head_commit_id from delta.repository));
+
+
+--
+-- garbage_collect()
+--
+
+/*
+create or replace function garbage_collect() returns void as $$
+    delete from b delta.blob
+    join delta.commit_field_added cfa on cfa.value_hash = b.hash
+    ...
+    
+$$ language sql;
+*/
+
+
+
+
+
 /*
 --
 -- migrations
