@@ -306,9 +306,9 @@ select delta.commit_fields(head_commit_id) from delta.repository;
 
 create or replace function garbage_collect() returns void as $$
     with hashes as (
-        select distinct cfa.value_hash from delta.commit_field_added cfa 
+        select distinct cfa.value_hash from delta.commit_field_added cfa
         union
-        select distinct cfd.value_hash from delta.commit_field_deleted cfd 
+        select distinct cfd.value_hash from delta.commit_field_deleted cfd
     )
     delete from delta.blob b
     where b.hash not in (select distinct value_hash from hashes)
