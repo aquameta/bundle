@@ -2,6 +2,10 @@
 -- TRACK / UNTRACK ROW FUNCTIONS
 ------------------------------------------------------------------------------
 
+--
+-- tracked_row_added
+--
+
 create table tracked_row_added (
     id uuid not null default public.uuid_generate_v4() primary key,
     repository_id uuid not null references repository(id) on delete cascade,

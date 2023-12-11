@@ -1,1 +1,1 @@
-vi -p init.sql repository.sql ignore.sql db.sql track.sql stage.sql commit.sql checkout.sql remote.sql merge.sql
+vi -p init.sql repository.sql db.sql ignore.sql track.sql stage.sql commit.sql checkout.sql remote.sql merge.sql

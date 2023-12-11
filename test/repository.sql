@@ -39,7 +39,7 @@ select results_eq(
 -----------------------------------------------------------
 
 select ok(
-    delta.repository_exists('org.example.test'), 
+    delta.repository_exists('org.example.test'),
     'repository_exists() finds an existing repository'
 );
 

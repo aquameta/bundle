@@ -93,23 +93,22 @@ create table commit_field_changed (
     id uuid not null default public.uuid_generate_v4() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
-    new_value text
+    value_hash text
 );
 
 create table commit_field_added (
     id uuid not null default public.uuid_generate_v4() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
-    value text
+    value_hash text
 );
 
 create table commit_field_deleted (
     id uuid not null default public.uuid_generate_v4() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
-    value text
+    value_hash text
 );
-
 
 
 
@@ -210,8 +209,8 @@ recursive cte, traverses commit ancestry tree, grabbing added rows and removing 
     - remove rows deleted
 */
 
-
-
+create type commit_row as ( commit_id uuid, row_id meta.row_id );
+/*
 create or replace function commit_rows( _commit_id uuid ) returns setof meta.row_id as $$
     select added_row_id from (
         with recursive ancestry as (
@@ -227,17 +226,60 @@ create or replace function commit_rows( _commit_id uuid ) returns setof meta.row
     left join delta.commit_row_deleted crd on crd.row_id = cra.added_row_id
     where crd.row_id is null or crd.position > crd.position;
 $$ language sql;
+*/
+
+create or replace function commit_rows( _commit_id uuid ) returns setof meta.row_id as $$
+    with recursive ancestry as (
+        select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
+        union
+        select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
+    ),
+    rows_added as (
+        select a.commit_id, a.position, cra.row_id
+        from ancestry a
+            join delta.commit_row_added cra on cra.commit_id = a.commit_id
+    ),
+    rows_deleted as (
+        select a.commit_id, a.position, crd.row_id
+        from ancestry a
+            join delta.commit_row_deleted crd on crd.commit_id = a.commit_id
+    )
+    -- WIP
+    select ra.row_id from rows_added ra left join rows_deleted rd on rd.commit_id = ra.commit_id
+$$ language sql;
 
 
 --
 -- commit_fields()
 --
 
-/*
-create or replace function commit_fields( _commit_id uuid ) returns setof meta.field_id as $$
-$$ language sql;
-*/
+-- a field and it's value hash
+create type field_hash as ( field_id meta.field_id, value_hash text);
 
+create or replace function commit_fields(_commit_id uuid) returns setof field_hash as $$
+    with recursive ancestry as (
+        select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
+        union
+        select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
+    ),
+    fields_added as (
+        select a.commit_id, a.position, cfa.field_id, cfa.value_hash
+        from ancestry a
+            join delta.commit_field_added cfa on cfa.commit_id = a.commit_id
+    ),
+    fields_deleted as (
+        select a.commit_id, a.position, cfd.field_id, cfd.value_hash
+        from ancestry a
+            join delta.commit_field_deleted cfd on cfd.commit_id = a.commit_id
+    ),
+    fields_changed as (
+        select a.commit_id, a.position, cfc.field_id, cfc.value_hash
+        from ancestry a
+            join delta.commit_field_changed cfc on cfc.commit_id = a.commit_id
+    )
+    --WIP
+    select fa.field_id, fa.value_hash from fields_added fa join fields_deleted fd on fa.commit_id = fd.commit_id join fields_changed fc on fc.commit_id = fd.commit_id
+$$ language sql;
 
 /*
 --
@@ -254,9 +296,7 @@ create table commit_migration (
 );
 
 --
---
--- DEPENDENCIES
---
+-- dependencies
 --
 
 create table dependency (

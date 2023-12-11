@@ -2,6 +2,9 @@
 -- DB / WORKING COPY
 ------------------------------------------------------------------------------
 
+--
+-- db_commit_rows()
+--
 
 create type row_exists as ( row_id meta.row_id, exists boolean);
 create or replace function db_commit_rows( commit_id uuid) returns setof row_exists as $$
@@ -23,12 +26,12 @@ begin
         -- TODO: check that each relation exists and still has the same primary key, else skip it
 
         -- for each relation, select head commit rows in this relation and also
-        -- in this bundle, and inner join them with the relation's data, breaking it out
-        -- into one row per field
+        -- in this repository, and inner join them with the relation's data,
+        -- breaking it out into one row per field
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
-            from bundle.commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from delta.commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     (row_id).pk_value is not distinct from x.%I::text and -- catch null = null!
                     (row_id).schema_name = %L and
@@ -55,10 +58,11 @@ end;
 $$ language plpgsql;
 
 
+--
+-- db_commit_fields()
+--
 
 /*
-db_commit_fields(_commit_id uuid)
-
 Returns a field_hash for live database values for a given commit.  It returns
 *all* columns present, without regard to what columns or fields are actually
 being tracked in the database.  Think `select * from my.table`.  This means:
@@ -86,18 +90,18 @@ Steps:
    return a big list of field_hash records, (meta.field_id, value_hash)
 
 It returns the value hash of all fields on any row in the supplied commit, with
-it's value hash.  Typically this would be called with the bundle's head commit
-(bundle.head_commit_id), though it can be used to diff against previous commits
-as well.
+it's value hash.  Typically this would be called with the repo's head commit
+(repository.head_commit_id), though it can be used to diff against previous
+commits as well.
 
-It is useful for generating a bundle's row list with change info, as well as
-the stage.  When you INNER JOIN this function's results against
+It is useful for generating a repository's row list with change info, as well
+as the stage.  When you INNER JOIN this function's results against
 rowset_row_field, non-matching hashes will be fields changed.  When you OUTER
 JOIN, it'll pick up new fields (from new columns presumably).
 */
 
 
-create or replace function db_commit_fields(commit_id uuid) returns setof bundle.field_hash as $$
+create or replace function db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
 declare
     rel record;
     stmts text[];
@@ -110,19 +114,19 @@ begin
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_name as pk_column_name
-        from bundle.db_commit_rows(commit_id) row_id
+        from delta.commit_rows(commit_id) row_id
         group by row_id::meta.relation_id, (row_id).pk_column_name
     loop
         -- TODO: check that each relation exists and has not been deleted.
         -- currently, when that happens, this function will fail.
 
         -- for each relation, select head commit rows in this relation and also
-        -- in this bundle, and inner join them with the relation's data, breaking it out
+        -- in this repository, and inner join them with the relation's data,
         -- into one row per field
 
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
-            from bundle._get_commit_rows_exist(%L, meta.relation_id(%L,%L)) row_id
+            from delta.db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on -- (#(#) )
                     (row_id).pk_value is not distinct from x.%I::text and -- catch null = null!
                     (row_id).schema_name = %L and
@@ -156,5 +160,3 @@ begin
 
 end
 $$ language plpgsql;
-
-
