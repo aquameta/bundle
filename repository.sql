@@ -21,14 +21,14 @@ create table repository (
 
 create table blob (
     hash text primary key not null,
-    value text not null,
-    unique(value)
+    value text
 );
 
 create or replace function blob_hash_gen_trigger() returns trigger as $$
     begin
         if NEW.value is NULL then
-            return NULL;
+            NEW.hash = '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9'::bytea;
+            return NEW;
         end if;
 
         NEW.hash = public.digest(NEW.value, 'sha256');
@@ -305,15 +305,13 @@ select delta.commit_fields(head_commit_id) from delta.repository;
 --
 
 create or replace function garbage_collect() returns void as $$
+    with hashes as (
+        select distinct cfa.value_hash from delta.commit_field_added cfa 
+        union
+        select distinct cfd.value_hash from delta.commit_field_deleted cfd 
+    )
     delete from delta.blob b
-        left join (
-            select distinct value_hash from (
-                select cfa.value_hash from delta.commit_field_added cfa 
-                union
-                select cfd.value_hash from delta.commit_field_deleted cfd 
-            ) hashes 
-        ) on b.hash = hashes.value_hash
-    where hashes.value_hash is null
+    where b.hash not in (select distinct value_hash from hashes)
 $$ language sql;
 
 

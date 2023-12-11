@@ -23,12 +23,16 @@ begin
         from commit_rows(commit_id, null) row_id
         group by row_id::meta.relation_id, (row_id).pk_column_name
     loop
+
+        -- for each relation, select the commit_rows that are in this relation,i and also in this
+        -- repository, and inner join them with the relation's data, breaking it out into one row per
+        -- field
+
         -- TODO: check that each relation exists and still has the same primary key, else skip it
 
-        -- for each relation, select head commit rows in this relation and also
-        -- in this repository, and inner join them with the relation's data,
-        -- breaking it out into one row per field
-
+        -- TODO: we can speed this up a lot by checking to see if the supplied commit_id is also the
+        -- head_commit_id and, if it is, use the head_commit_row / head_commit_field mat_views.
+ 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
             from delta.commit_rows(%L, meta.relation_id(%L,%L)) row_id
