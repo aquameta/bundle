@@ -6,22 +6,26 @@
 -- db_commit_rows()
 --
 
-create type row_exists as ( row_id meta.row_id, exists boolean);
-create or replace function db_commit_rows( commit_id uuid) returns setof row_exists as $$
+create type row_exists as( row_id meta.row_id, exists boolean );
+create or replace function db_commit_rows( commit_id uuid ) returns setof row_exists as $$
 declare
     rel record;
     stmts text[];
     literals_stmt text;
+    pk_comparisons text[];
+    pk_comparison_stmt text;
+    column_name text;
     stmt text;
+    i integer;
 begin
     -- all relations in the head commit
     for rel in
         select
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
-            (row_id).pk_column_name as pk_column_name
+            (row_id).pk_column_names as pk_column_names
         from commit_rows(commit_id, null) row_id
-        group by row_id::meta.relation_id, (row_id).pk_column_name
+        group by row_id::meta.relation_id, (row_id).pk_column_names
     loop
 
         -- for each relation, select the commit_rows that are in this relation,i and also in this
@@ -32,21 +36,33 @@ begin
 
         -- TODO: we can speed this up a lot by checking to see if the supplied commit_id is also the
         -- head_commit_id and, if it is, use the head_commit_row / head_commit_field mat_views.
- 
+
+
+        -- generate the pk comparisons line
+        pk_comparisons := array[];
+        i := 1;
+        foreach column_name in array rel.pk_column_names loop
+            -- (row_id).pk_value is not distinct from x.%I::text
+            pk_comparisons[i] := '(row_id).pk_values[' || i || '] = x.' || rel.pk_column_names[i];
+            i := i + 1;
+        end loop;
+        pk_comparison_stmt := array_to_string(pk_comparisons, ' and ');
+
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
             from delta.commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
-                    (row_id).pk_value is not distinct from x.%I::text and -- catch null = null!
+                    %s -- (row_id).pk_value = x.$I::text and -- catch null = null!
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
-            rel.pk_column_name,
+            rel.pk_column_names[1], -- 1 is ok here because we're just checking for exist w/ left join
             commit_id,
             rel.schema_name,
             rel.relation_name,
             rel.schema_name,
             rel.relation_name,
             rel.pk_column_name,
+            pk_comparison_stmt,
             rel.schema_name,
             rel.relation_name
         )
@@ -60,6 +76,11 @@ begin
     return query execute literals_stmt;
 end;
 $$ language plpgsql;
+
+
+create function db_head_commit_row( repository_id uuid ) returns setof row_exists as $$
+    select * from db_commit_rows(_head_commit_id(repository_id))
+$$ language sql;
 
 
 --
