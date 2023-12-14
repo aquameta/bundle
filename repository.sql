@@ -123,7 +123,38 @@ create table commit_field_deleted (
 ------------------------------------------------------------------------------
 
 --
--- create()
+-- id()
+--
+
+create or replace function repository_id( repository_name text ) returns uuid as $$
+    select id from delta.repository where name=repository_name;
+$$ stable language sql;
+
+
+--
+-- head_commit_id()
+--
+
+create or replace function _head_commit_id( repository_id uuid ) returns uuid as $$
+    select head_commit_id from delta.repository where id=repository_id;
+$$ stable language sql;
+
+create or replace function head_commit_id( repository_name text ) returns uuid as $$
+    select head_commit_id from delta.repository where name=repository_name;
+$$ stable language sql;
+
+
+--
+-- _checkout_commit_id()
+--
+
+create or replace function _checkout_commit_id( repository_name text ) returns uuid as $$
+    select head_commit_id from delta.repository where name=repository_name;
+$$ stable language sql;
+
+
+--
+-- repository_create()
 --
 
 create or replace function repository_create( repository_name text ) returns uuid as $$
@@ -145,7 +176,7 @@ $$ language plpgsql;
 
 
 --
--- delete()
+-- repository_delete()
 --
 
 create or replace function _repository_delete( repository_id uuid ) returns void as $$
@@ -170,7 +201,7 @@ $$ language plpgsql;
 
 
 --
--- exists()
+-- repository_exists()
 --
 
 create or replace function repository_exists( _name text ) returns boolean as $$
@@ -183,7 +214,7 @@ $$ language sql;
 
 
 --
--- has_commits()
+-- repository_has_commits()
 --
 
 create or replace function _repository_has_commits( _repository_id uuid ) returns boolean as $$
@@ -192,12 +223,26 @@ $$ language sql;
 
 
 --
--- id()
+-- repository_has_uncommitted_changes()
 --
 
-create or replace function repository_id( repository_name text ) returns uuid as $$
-    select id from delta.repository where name= repository_name;
-$$ stable language sql;
+create or replace function _repository_has_uncommitted_changes( _repository_id uuid ) returns boolean as $$
+    declare
+        changes_count integer;
+        is_checked_out boolean;
+    begin
+        -- if it isn't checked out, it doesn't have uncommitted hanges
+        select (checkout_commit_id is not null) from delta.repository where repository_id=_repository_id into is_checked_out;
+        if is_checked_out then return false;
+        end if;
+
+		-- TODO: check for it
+		return false;
+    end;
+$$ language plpgsql;
+
+
+
 
 
 --
@@ -293,11 +338,17 @@ $$ language sql;
 --
 
 -- NOTE: split these up into separate views per-repository, somehow?
-create materialized view head_commit_row as
-select delta.commit_rows(head_commit_id) from delta.repository;
+-- NOTE: index these?
+-- NOTE: convert these to functions?
 
+create materialized view head_commit_row as
+select r.id as repository_id, row_id
+from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
+
+/*
 create materialized view head_commit_field as
-select delta.commit_fields(head_commit_id) from delta.repository;
+select id as repository_id, delta.commit_fields(head_commit_id) from delta.repository;
+*/
 
 
 --
