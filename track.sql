@@ -7,7 +7,7 @@
 --
 
 create table tracked_row_added (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id) on delete cascade,
     row_id meta.row_id,
     unique (row_id)

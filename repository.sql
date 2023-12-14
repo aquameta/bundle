@@ -7,7 +7,7 @@
 --
 
 create table repository (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     name text not null check(name != ''),
     -- head_commit_id uuid, -- (circular, added later)
     -- checkout_commit_id uuid, -- (circular, added later)
@@ -50,7 +50,7 @@ create trigger blob_hash_update
 --
 
 create table commit (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id),
     parent_id uuid references commit(id), --null means first commit
     author_name text not null default '',
@@ -77,14 +77,14 @@ alter table repository alter constraint repository_head_commit_id_fkey deferrabl
 --
 
 create table commit_row_added (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     row_id meta.row_id not null,
     position integer not null
 );
 
 create table commit_row_deleted (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     row_id meta.row_id not null,
     position integer not null
@@ -96,21 +96,21 @@ create table commit_row_deleted (
 --
 
 create table commit_field_changed (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
     value_hash text
 );
 
 create table commit_field_added (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
     value_hash text
 );
 
 create table commit_field_deleted (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
     value_hash text
@@ -321,7 +321,7 @@ $$ language sql;
 --
 
 create table commit_migration (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     up_code text,
     down_code text, -- can we auto-generate a lot of this?
@@ -334,6 +334,6 @@ create table commit_migration (
 --
 
 create table dependency (
-    id uuid not null default public.uuid_generate_v4() primary key
+    id uuid not null default public.uuid_generate_v7() primary key
 );
 */
