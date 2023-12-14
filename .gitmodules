@@ -1,0 +1,9 @@
+[submodule "extensions/meta"]
+	path = extensions/meta
+	url = git@github.com:aquameta/meta.git
+[submodule "extensions/meta_triggers"]
+	path = extensions/meta_triggers
+	url = git@github.com:aquameta/meta_triggers.git
+[submodule "extensions/pg_uuidv7"]
+	path = extensions/pg_uuidv7
+	url = https://github.com/fboulnois/pg_uuidv7.git
