@@ -3,33 +3,36 @@
 ------------------------------------------------------------------------------
 
 --
---
 -- tables
---
 --
 
 create table stage_row_added (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id,
+    row_id meta.row_id, -- TODO: check row_id.pk_values contains no nulls
     value jsonb,
     unique (repository_id, row_id)
 );
 
 create table stage_row_deleted (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id) on delete cascade,
     row_id meta.row_id not null,
     unique (repository_id, row_id)
 );
 
 create table stage_field_changed (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id),
     field_id meta.field_id,
     value text,
     unique (repository_id, field_id)
 );
+
+
+-------------------------------------------------
+-- Staging / Unstaging Functions
+-------------------------------------------------
 
 --
 -- stage_row()
@@ -178,3 +181,108 @@ $$ language sql;
 
 
 
+
+
+
+
+-------------------------------------------------
+-- Set Views / Functions
+-------------------------------------------------
+
+--
+-- untracked_row
+--
+
+create or replace view untracked_row as
+select r.row_id /*, r.row_id::meta.relation_id as relation_id */
+from delta.exec((
+    select array_agg (stmt) from delta.not_ignored_row_stmt
+)) r (row_id meta.row_id)
+
+where r.row_id::text not in ( -- TODO: yuck
+    select a.row_id::text from delta.stage_row_added a
+    union
+    select t.row_id::text from delta.tracked_row_added t
+    union
+    select d.row_id::text from delta.stage_row_deleted d -- TODO: was: join rowset_row rr on d.rowset_row_id=rr.id
+    union
+    select row_id::text from delta.head_commit_row row_id
+);
+
+
+create or replace function tracked_rows( repository_id uuid ) returns setof meta.row_id as $$
+    -- head commit rows
+    select row_id from delta.head_commit_row
+
+    -- ...plus newly tracked rows
+    union
+
+    select tra.row_id
+        from delta.repository r
+            join delta.tracked_row_added tra on tra.repository_id=r.id
+
+    -- plus staged rows
+    union
+
+    select sra.row_id
+        from delta.repository r
+            join delta.stage_row_added sra on sra.repository_id=r.id;
+$$ language sql;
+
+
+--
+-- offstage_row_deleted
+--
+
+create or replace function offstage_row_deleted( _repository_id uuid ) returns setof meta.row_id as
+$$
+    select row_id
+    from delta.db_head_commit_row(_repository_id)
+        where exists = false
+
+    except
+
+    select srd.row_id
+    from delta.stage_row_deleted srd where repository_id = _repository_id;
+$$ language sql;
+
+
+--
+-- stage_row
+--
+
+create or replace function stage_rows( _repository_id uuid ) returns setof row_exists as $$
+    select row_id, false as new_row from (
+        -- head_commit_row
+        select hcr.row_id
+        from repository r
+            join delta.head_commit_row hcr on hcr.repository_id = r.id
+        where r.id = _repository_id
+
+
+        except
+
+        -- ...minus deleted rows
+        select row_id
+        from stage_row_deleted
+        where repository_id = _repository_id
+    ) remaining_rows
+
+    union
+
+    -- ...plus staged rows
+    select sra.row_id, true as new_row
+    from delta.stage_row_added sra
+    where sra.repository_id = _repository_id
+
+$$ language sql;
+
+
+--
+-- stage_row_field
+--
+
+
+--
+-- get_stage_rows_exist
+--

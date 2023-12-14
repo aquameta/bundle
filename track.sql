@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- TRACK / UNTRACK ROW FUNCTIONS
+-- TRACKED / UNTRACKED ROWS
 ------------------------------------------------------------------------------
 
 --
@@ -12,6 +12,17 @@ create table tracked_row_added (
     row_id meta.row_id,
     unique (row_id)
 );
+
+
+--
+-- trackable_nontable_relation
+--
+
+create table trackable_nontable_relation(
+    id uuid not null default public.uuid_generate_v7() primary key,
+    pk_column_id meta.column_id not null
+);
+
 
 
 --
