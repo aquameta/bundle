@@ -32,6 +32,7 @@ create function _commit(
         parent_commit_id uuid;
         first_commit boolean := false;
     begin
+        -- repository exists
         if not delta._repository_exists(_repository_id) then
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
@@ -68,9 +69,6 @@ create function _commit(
         )
         returning id into new_commit_id;
 
-        -- update head pointer, checkout pointer
-        update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id;
-
         -- commit_row_added
         insert into delta.commit_row_added (commit_id, row_id, position)
         select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
@@ -84,10 +82,19 @@ create function _commit(
         delete from delta.stage_row_deleted where repository_id = _repository_id;
 
     /*
-        insert into commit_field gtgt
         insert into commit_row_deleted
         insert into commit_field_changed
-        */
+        insert into commit_field_*
+        insert into blob
+    */
+
+        -- update head pointer, checkout pointer
+        update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id;
+
+        execute format ('refresh materialized view delta.head_commit_row');
+        execute format ('refresh materialized view delta.head_commit_field');
+
+        -- TODO: unset search_path
 
         return new_commit_id;
     end;
