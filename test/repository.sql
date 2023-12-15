@@ -49,6 +49,7 @@ select ok(
 );
 
 -----------------------------------------------------------
+
 select throws_ok(
     'select delta.repository_delete(''org.example.parrot'')',
     'Repository with name org.example.parrot does not exist.',
@@ -59,4 +60,12 @@ select delta.repository_delete('org.example.test');
 select ok(
     not exists (select id from delta.repository where name='org.example.test'),
     'repository_delete() deletes the repository.'
+);
+
+-----------------------------------------------------------
+
+select delta.repository_create('org.opensourceshakespeare.db');
+select ok(
+    delta.repository_exists('org.opensourceshakespeare.db'),
+    'repository_exists() finds an existing repository'
 );

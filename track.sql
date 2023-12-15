@@ -40,6 +40,10 @@ create or replace function _track_row( repository_id uuid, row_id meta.row_id ) 
             raise exception 'Repository with id % does not exist.', repository_id;
         end if;
 
+        if meta.row_exists(meta.row_id('delta','tracked_row_added', 'row_id', row_id::text)) then
+            raise exception 'Row with row_id % is already tracked.', row_id;
+        end if;
+
         -- assert row exists
         if not meta.row_exists(row_id) then
             raise exception 'Row with row_id % does not exist.', row_id;
@@ -57,6 +61,28 @@ create or replace function _track_row( repository_id uuid, row_id meta.row_id ) 
 $$ language plpgsql;
 
 
+create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+returns uuid as $$
+    declare
+        tracked_row_id uuid;
+    begin
+
+        -- assert repository exists
+        if not delta.repository_exists(repository_name) then
+            raise exception 'Repository with name % does not exist.', repository_name;
+        end if;
+
+        select delta._track_row(
+            delta.repository_id(repository_name),
+            meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
+        ) into tracked_row_id;
+
+        return tracked_row_id;
+    end;
+$$ language plpgsql;
+
+
+
 create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     declare
@@ -69,7 +95,7 @@ returns uuid as $$
         end if;
 
         select delta._track_row(
-            delta._repository_id(repository_name),
+            delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
         ) into tracked_row_id;
 

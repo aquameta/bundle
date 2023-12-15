@@ -52,7 +52,7 @@ begin
             select row_id, x.%I is not null as exists
             from delta.commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
-                    %s -- (row_id).pk_value = x.$I::text and -- catch null = null!
+                    %s and -- (row_id).pk_value = x.$I::text and
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
             rel.pk_column_names[1], -- 1 is ok here because we're just checking for exist w/ left join
@@ -61,7 +61,6 @@ begin
             rel.relation_name,
             rel.schema_name,
             rel.relation_name,
-            rel.pk_column_name,
             pk_comparison_stmt,
             rel.schema_name,
             rel.relation_name
@@ -153,7 +152,7 @@ begin
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
             from delta.db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on -- (#(#) )
-                    (row_id).pk_value is not distinct from x.%I::text and -- catch null = null!
+                    (row_id).pk_value is not distinct from x.%I::text and
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
             commit_id,

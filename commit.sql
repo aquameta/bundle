@@ -9,9 +9,9 @@
 create type _commit_ancestry as( commit_id uuid, position integer );
 create or replace function _commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
     with recursive parent as (
-        select c.id, c.parent_id, 1 as position from commit c where c.id=_commit_id
+        select c.id, c.parent_id, 1 as position from delta.commit c where c.id=_commit_id
         union
-        select c.id, c.parent_id, p.position + 1 from commit c join parent p on c.id = p.parent_id
+        select c.id, c.parent_id, p.position + 1 from delta.commit c join parent p on c.id = p.parent_id
     ) select id, position from parent
 $$ language sql;
 
@@ -92,7 +92,7 @@ create function _commit(
         update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id;
 
         execute format ('refresh materialized view delta.head_commit_row');
-        execute format ('refresh materialized view delta.head_commit_field');
+        -- execute format ('refresh materialized view delta.head_commit_field'); TODO
 
         -- TODO: unset search_path
 
@@ -101,7 +101,7 @@ create function _commit(
 $$ language plpgsql;
 
 
-create function commit(
+create or replace function commit(
     repository_name text,
     message text,
     author_name text,
@@ -109,6 +109,10 @@ create function commit(
     parent_commit_id uuid default null
 )
 returns uuid as $$
-    select delta._commit(id, message, author_name, author_email, parent_commit_id)
-    from delta.repository where name=repository_name;
-$$ language sql;
+begin
+    if not delta.repository_exists(repository_name) then
+        raise exception 'Repository with name % does not exists', repository_name;
+    end if;
+    return delta._commit(repository_id(repository_name), message, author_name, author_email, parent_commit_id);
+end;
+$$ language plpgsql;
