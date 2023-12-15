@@ -17,6 +17,15 @@ $$ language sql;
 
 
 --
+-- _commit_exists()
+--
+
+create function _commit_exists(commit_id uuid) returns boolean as $$
+    select exists (select 1 from delta.commit where id=commit_id);
+$$ language sql;
+
+
+--
 -- commit()
 --
 
@@ -113,6 +122,6 @@ begin
     if not delta.repository_exists(repository_name) then
         raise exception 'Repository with name % does not exists', repository_name;
     end if;
-    return delta._commit(repository_id(repository_name), message, author_name, author_email, parent_commit_id);
+    return delta._commit(delta.repository_id(repository_name), message, author_name, author_email, parent_commit_id);
 end;
 $$ language plpgsql;

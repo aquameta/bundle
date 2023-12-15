@@ -37,16 +37,8 @@ begin
         -- TODO: we can speed this up a lot by checking to see if the supplied commit_id is also the
         -- head_commit_id and, if it is, use the head_commit_row / head_commit_field mat_views.
 
-
         -- generate the pk comparisons line
-        pk_comparisons := array[];
-        i := 1;
-        foreach column_name in array rel.pk_column_names loop
-            -- (row_id).pk_value is not distinct from x.%I::text
-            pk_comparisons[i] := '(row_id).pk_values[' || i || '] = x.' || rel.pk_column_names[i];
-            i := i + 1;
-        end loop;
-        pk_comparison_stmt := array_to_string(pk_comparisons, ' and ');
+        pk_comparison_stmt := meta._pk_stmt('(row_id).pk_values[%3$s] = x.%1$I', rel.pk_column_names, rel.pk_values, ' and ');
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
@@ -55,7 +47,7 @@ begin
                     %s and -- (row_id).pk_value = x.$I::text and
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
-            rel.pk_column_names[1], -- 1 is ok here because we're just checking for exist w/ left join
+            rel.pk_column_names[1], -- 1 is ok here because we're just checking for exist w/ left join & pks cannot be null.  TODO: non-table_rel??
             commit_id,
             rel.schema_name,
             rel.relation_name,
@@ -130,6 +122,7 @@ declare
     rel record;
     stmts text[];
     literals_stmt text;
+    pk_comparison_stmt text;
     stmt text;
 begin
     -- all relations in the head commit
@@ -148,11 +141,13 @@ begin
         -- in this repository, and inner join them with the relation's data,
         -- into one row per field
 
+        -- FIXME: pk_column_names, pk_values
+        pk_comparison_stmt := meta._pk_stmt('(row_id).pk_values[%3$s] = x.%1$I', rel.pk_column_names, rel.pk_values, ' and ');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
             from delta.db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on -- (#(#) )
-                    (row_id).pk_value is not distinct from x.%I::text and
+                    %s
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
             commit_id,
@@ -160,7 +155,7 @@ begin
             rel.relation_name,
             rel.schema_name,
             rel.relation_name,
-            rel.pk_column_name,
+            pk_comparison_stmt,
             rel.schema_name,
             rel.relation_name
         )
@@ -172,7 +167,7 @@ begin
     -- wrap stmt to beautify columns
     literals_stmt := format('
         select
-            meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_name, (row_id).pk_value, (keyval).key),
+            meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
             public.digest((keyval).value, ''sha256'')::text as value_hash
         from (%s) fields;',
         literals_stmt

@@ -132,6 +132,15 @@ $$ stable language sql;
 
 
 --
+-- repository_name()
+--
+
+create or replace function _repository_name( repository_id uuid ) returns text as $$
+    select name from delta.repository where id=repository_id;
+$$ stable language sql;
+
+
+--
 -- head_commit_id()
 --
 
@@ -236,8 +245,8 @@ create or replace function _repository_has_uncommitted_changes( _repository_id u
         if is_checked_out then return false;
         end if;
 
-		-- TODO: check for it
-		return false;
+        -- TODO: check for it
+        return false;
     end;
 $$ language plpgsql;
 
