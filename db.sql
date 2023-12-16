@@ -147,7 +147,7 @@ begin
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
             from delta.db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on -- (#(#) )
-                    %s
+                    %s and
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
             commit_id,

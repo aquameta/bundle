@@ -251,9 +251,6 @@ create or replace function _repository_has_uncommitted_changes( _repository_id u
 $$ language plpgsql;
 
 
-
-
-
 --
 -- commit_rows()
 --

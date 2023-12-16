@@ -231,19 +231,19 @@ $$ language sql;
 --
 
 create or replace view untracked_row as
-select r.row_id /*, r.row_id::meta.relation_id as relation_id */
-from delta.exec((
-    select array_agg (stmt) from delta.not_ignored_row_stmt
-)) r (row_id meta.row_id)
+-- all rows in trackable_relations
+select r.row_id from delta.exec((select array_agg (stmt) from delta.not_ignored_row_stmt)) r (row_id meta.row_id)
 
-where r.row_id::text not in ( -- TODO: yuck
-    select a.row_id::text from delta.stage_row_added a
+except
+
+select * from (
+    select a.row_id from delta.stage_row_added a
     union
-    select t.row_id::text from delta.tracked_row_added t
+    select t.row_id from delta.tracked_row_added t
     union
-    select d.row_id::text from delta.stage_row_deleted d -- TODO: was: join rowset_row rr on d.rowset_row_id=rr.id
+    select d.row_id from delta.stage_row_deleted d
     union
-    select row_id::text from delta.head_commit_row row_id
+    select row_id from delta.head_commit_row row_id
 );
 
 
