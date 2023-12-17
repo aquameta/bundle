@@ -35,10 +35,10 @@ $$ language sql;
 
 
 --
--- track_row()
+-- tracked_row_add()
 --
 
-create or replace function _track_row( repository_id uuid, row_id meta.row_id ) returns uuid as $$
+create or replace function _tracked_row_add( repository_id uuid, row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         exists boolean;
@@ -70,7 +70,7 @@ create or replace function _track_row( repository_id uuid, row_id meta.row_id ) 
 $$ language plpgsql;
 
 
-create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
     declare
         tracked_row_id uuid;
@@ -81,7 +81,7 @@ returns uuid as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._track_row(
+        select delta._tracked_row_add(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
         ) into tracked_row_id;
@@ -92,7 +92,7 @@ $$ language plpgsql;
 
 
 
-create or replace function track_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     declare
         tracked_row_id uuid;
@@ -103,7 +103,7 @@ returns uuid as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._track_row(
+        select delta._tracked_row_add(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
         ) into tracked_row_id;
@@ -114,10 +114,10 @@ $$ language plpgsql;
 
 
 --
--- untrack_row()
+-- tracked_row_remove()
 --
 
-create or replace function _untrack_row( _row_id meta.row_id ) returns uuid as $$
+create or replace function _tracked_row_remove( _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         exists boolean;
@@ -133,34 +133,20 @@ create or replace function _untrack_row( _row_id meta.row_id ) returns uuid as $
     end;
 $$ language plpgsql;
 
-create or replace function untrack_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function tracked_row_remove( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
-    select delta._untrack_row( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
+    select delta._tracked_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
 
-create or replace function untrack_row( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function tracked_row_remove( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
-    select delta._untrack_row( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
+    select delta._tracked_row_remove( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
 $$ language sql;
 
 
 --
 -- trackable relation
 --
-
-/*
--- WIP
-create or replace view trackable_relation as
-    select id, pk_columns from meta.table where array_length(primary_key_column_ids) > 0
-
-    union
-
-    select
-        pk_column_ids[1]::meta.relation_id as relation_id,
-        pk_column_ids as primary_key_column_ids
-    from delta.trackable_nontable_relation
-*/
-
 
 create or replace view trackable_relation as
     select relation_id, primary_key_column_names from (
