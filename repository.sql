@@ -241,9 +241,10 @@ create or replace function _repository_has_uncommitted_changes( _repository_id u
         is_checked_out boolean;
     begin
         -- if it isn't checked out, it doesn't have uncommitted hanges
-        select (checkout_commit_id is not null) from delta.repository where repository_id=_repository_id into is_checked_out;
-        if is_checked_out then return false;
-        end if;
+        select (checkout_commit_id is not null) from delta.repository where id=_repository_id
+        into is_checked_out;
+
+        if is_checked_out then return false; end if;
 
         -- TODO: check for it
         return false;
@@ -266,26 +267,12 @@ recursive cte, traverses commit ancestry, grabbing added rows and removing rows 
     - remove rows deleted
 */
 
-create type commit_row as ( commit_id uuid, row_id meta.row_id );
-/*
-create or replace function commit_rows( _commit_id uuid ) returns setof meta.row_id as $$
-    select added_row_id from (
-        with recursive ancestry as (
-            select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
-            union
-            select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
-        )
-        select min(a.position) as added_commit_position, cra.row_id as added_row_id
-        from ancestry a
-            left join delta.commit_row_added cra on cra.commit_id = a.commit_id
-        group by cra.row_id
-    ) cra
-    left join delta.commit_row_deleted crd on crd.row_id = cra.added_row_id
-    where crd.row_id is null or crd.position > crd.position;
-$$ language sql;
-*/
-
-create or replace function commit_rows( _commit_id uuid ) returns setof meta.row_id as $$
+-- NOTE:
+-- How the heck do I write a function that returns a record with one column whose type is meta.row_id?
+-- If I do table(row_id meta.row_id) it thinks I'm passing in a type and returns all fields of row_id as separate columns.
+-- If I do setof meta.row_id it does the same.
+-- Adding (useless) commit_id to return type to fix
+create or replace function commit_rows( _commit_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
         union
@@ -302,7 +289,8 @@ create or replace function commit_rows( _commit_id uuid ) returns setof meta.row
             join delta.commit_row_deleted crd on crd.commit_id = a.commit_id
     )
     -- WIP
-    select ra.row_id from rows_added ra left join rows_deleted rd on rd.commit_id = ra.commit_id
+    select _commit_id, ra.row_id as row_id from rows_added ra
+        left join rows_deleted rd on rd.commit_id = ra.commit_id
 $$ language sql;
 
 

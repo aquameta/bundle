@@ -64,7 +64,7 @@ create or replace function _staged_row_add( repository_id uuid, _row_id meta.row
 -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
         -- untrack
-        perform delta._untrack_row(_row_id);
+        perform delta._tracked_row_remove(_row_id);
 
         -- stage
         insert into delta.stage_row_added (repository_id, row_id) values ( repository_id, _row_id)

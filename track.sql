@@ -44,28 +44,38 @@ create or replace function _tracked_row_add( repository_id uuid, row_id meta.row
         exists boolean;
     begin
 
+        /*
         -- assert repository exists
         if not delta._repository_exists(repository_id) then
             raise exception 'Repository with id % does not exist.', repository_id;
         end if;
+        */
 
+        /*
         if meta.row_exists(meta.row_id('delta','tracked_row_added', 'row_id', row_id::text)) then
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
+        */
 
         -- assert row exists
+        -- NOTE: slow!  skip this?
         if not meta.row_exists(row_id) then
             raise exception 'Row with row_id % does not exist.', row_id;
         end if;
 
-        -- assert row is not already in a repository or tracked or staged
-        -- NOTE: unclear whether this constraint is desirable.  Can a row be tracked by more than one repository?
+        -- TODO: assert row is not already in a repository's head commit or tracked or staged?
 
         insert into delta.tracked_row_added (repository_id, row_id)
         select id, row_id from delta.repository r where r.id = repository_id
         returning id into tracked_row_id;
 
         return tracked_row_id;
+    exception
+        when unique_violation then
+            raise exception 'Row with row_id % is already tracked.', row_id;
+        when null_value_not_allowed then
+            raise exception 'Repository with id % does not exist.', repository_id;
+        when others then raise;
     end;
 $$ language plpgsql;
 
@@ -133,7 +143,7 @@ create or replace function _tracked_row_remove( _row_id meta.row_id ) returns uu
     end;
 $$ language plpgsql;
 
-create or replace function tracked_row_remove( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function tracked_row_remove( schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     select delta._tracked_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
