@@ -180,6 +180,10 @@ begin
 
     insert into delta.repository (name) values (repository_name) returning id into repository_id;
     return repository_id;
+exception
+    when unique_violation then
+        raise exception 'Repository with name % already exists.', repository_name;
+    when others then raise;
 end
 $$ language plpgsql;
 
@@ -272,7 +276,7 @@ recursive cte, traverses commit ancestry, grabbing added rows and removing rows 
 -- If I do table(row_id meta.row_id) it thinks I'm passing in a type and returns all fields of row_id as separate columns.
 -- If I do setof meta.row_id it does the same.
 -- Adding (useless) commit_id to return type to fix
-create or replace function commit_rows( _commit_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
         union
@@ -291,6 +295,10 @@ create or replace function commit_rows( _commit_id uuid ) returns table(commit_i
     -- WIP
     select _commit_id, ra.row_id as row_id from rows_added ra
         left join rows_deleted rd on rd.commit_id = ra.commit_id
+    where (ra.row_id)::meta.relation_id =
+        case when _relation_id is not null then _relation_id
+        else (ra.row_id)::meta.relation_id
+        end;
 $$ language sql;
 
 

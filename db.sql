@@ -10,13 +10,9 @@ create type row_exists as( row_id meta.row_id, exists boolean );
 create or replace function db_commit_rows( commit_id uuid ) returns setof row_exists as $$
 declare
     rel record;
-    stmts text[];
+    stmts text[] := '{}';
     literals_stmt text;
-    pk_comparisons text[];
     pk_comparison_stmt text;
-    column_name text;
-    stmt text;
-    i integer;
 begin
     -- all relations in the head commit
     for rel in
@@ -24,21 +20,19 @@ begin
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_names as pk_column_names
-        from commit_rows(commit_id, null) row_id
+        from delta.commit_rows(commit_id) row_id
         group by row_id::meta.relation_id, (row_id).pk_column_names
     loop
-
         -- for each relation, select the commit_rows that are in this relation,i and also in this
         -- repository, and inner join them with the relation's data, breaking it out into one row per
         -- field
 
         -- TODO: check that each relation exists and still has the same primary key, else skip it
-
         -- TODO: we can speed this up a lot by checking to see if the supplied commit_id is also the
         -- head_commit_id and, if it is, use the head_commit_row / head_commit_field mat_views.
 
         -- generate the pk comparisons line
-        pk_comparison_stmt := meta._pk_stmt('(row_id).pk_values[%3$s] = x.%1$I', rel.pk_column_names, rel.pk_values, ' and ');
+        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, '(row_id).pk_values[%3$s] = x.%1$I', ' and ');
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
@@ -64,13 +58,21 @@ begin
 
     raise debug 'literals_stmt: %', literals_stmt;
 
-    return query execute literals_stmt;
+    if literals_stmt != '' then
+        return query execute literals_stmt;
+    else
+        return;
+    end if;
 end;
 $$ language plpgsql;
 
 
-create function db_head_commit_row( repository_id uuid ) returns setof row_exists as $$
-    select * from db_commit_rows(_head_commit_id(repository_id))
+--
+-- db_head_commit_rows()
+--
+
+create function db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
+    select * from delta.db_commit_rows(delta._head_commit_id(repository_id))
 $$ language sql;
 
 
@@ -179,3 +181,14 @@ begin
 
 end
 $$ language plpgsql;
+
+
+--
+-- db_head_commit_fields()
+--
+
+/* ??
+create function db_head_commit_fields( repository_id uuid ) returns setof field_exists as $$
+    select * from delta.db_commit_fields(delta._head_commit_id(repository_id))
+$$ language sql;
+*/

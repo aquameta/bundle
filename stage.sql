@@ -54,13 +54,6 @@ create or replace function _staged_row_add( repository_id uuid, _row_id meta.row
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
 
-        /*
-        -- done by untrack()
-        if not meta.row_exists(meta.row_id('delta','tracked_row_added', 'row_id', row_id::text)) then
-            raise exception 'Row with row_id % is not tracked.', row_id;
-        end if;
-        */
-
 -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
         -- untrack
@@ -79,7 +72,6 @@ returns uuid as $$
     declare
         staged_row_added_id uuid;
     begin
-
         -- assert repository exists
         if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
@@ -154,7 +146,7 @@ $$ language sql;
 -- delete row
 --
 
-create or replace function _delete_row( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row_delete( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         stage_row_deleted_id uuid;
@@ -176,7 +168,7 @@ create or replace function _delete_row( repository_id uuid, _row_id meta.row_id 
     end;
 $$ language plpgsql;
 
-create or replace function delete_row( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function stage_row_delete( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
     declare
         stage_row_deleted_id uuid;
@@ -187,7 +179,7 @@ returns uuid as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._delete_row(
+        select delta._stage_row_delete(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
         ) into stage_row_deleted_id;
@@ -212,10 +204,13 @@ $$ language plpgsql;
 -- stage_tracked_rows()
 --
 
-create or replace function stage_tracked_rows( _repository_id uuid ) returns setof uuid as $$
+create or replace function _stage_tracked_rows( _repository_id uuid ) returns setof uuid as $$
     select delta._staged_row_add(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
 $$ language sql;
 
+create or replace function stage_tracked_rows( repository_name text ) returns setof uuid as $$
+    select delta._stage_tracked_rows(repository_id(repository_name))
+$$ language sql;
 
 
 -------------------------------------------------
@@ -243,9 +238,29 @@ select * from (
 );
 
 
-create or replace function tracked_rows( repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _rel_row_template( relation_generator_stmt text, action_stmt text, delimiter text ) returns text as $$
+declare
+    rel meta.relation_id;
+    action_stmts text[];
+    i integer = 0;
+begin
+    for rel in execute relation_generator_stmt loop
+        action_stmts := array_append(action_stmts, format(action_stmt, rel.schema_name, rel.name, i));
+        i = i + 1;
+    end loop;
+
+    return array_to_string(action_stmts, delimiter);
+end
+$$ language plpgsql;
+
+
+--
+-- tracked_rows
+--
+
+create or replace function tracked_rows( _repository_id uuid ) returns setof meta.row_id as $$
     -- head commit rows
-    select row_id from delta.head_commit_row
+    select row_id from delta.head_commit_row where repository_id = _repository_id
 
     -- ...plus newly tracked rows
     union
@@ -270,7 +285,7 @@ $$ language sql;
 create or replace function offstage_row_deleted( _repository_id uuid ) returns setof meta.row_id as
 $$
     select row_id
-    from delta.db_head_commit_row(_repository_id)
+    from delta.db_head_commit_rows(_repository_id)
         where exists = false
 
     except
@@ -288,7 +303,7 @@ create or replace function stage_rows( _repository_id uuid ) returns setof row_e
     select row_id, false as new_row from (
         -- head_commit_row
         select hcr.row_id
-        from repository r
+        from delta.repository r
             join delta.head_commit_row hcr on hcr.repository_id = r.id
         where r.id = _repository_id
 
@@ -297,7 +312,7 @@ create or replace function stage_rows( _repository_id uuid ) returns setof row_e
 
         -- ...minus deleted rows
         select row_id
-        from stage_row_deleted
+        from delta.stage_row_deleted
         where repository_id = _repository_id
     ) remaining_rows
 
