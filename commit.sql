@@ -98,7 +98,7 @@ create function _commit(
     */
 
         -- update head pointer, checkout pointer
-        update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id;
+        update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
 
         execute format ('refresh materialized view delta.head_commit_row');
         -- execute format ('refresh materialized view delta.head_commit_field'); TODO

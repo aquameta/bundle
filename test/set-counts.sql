@@ -27,18 +27,20 @@ begin
         -- custom function calls
         select * from (
             values
-                ('commit_rows',           'delta.commit_rows(delta.head_commit_id(''io.aquadelta.test''))'),
+                ('commit_rows()',           'delta.commit_rows(delta.head_commit_id(''io.aquadelta.test''))'),
 --                ('commit_fields',         'delta.commit_fields(delta.head_commit_id(''io.aquadelta.test''))'),
 
-                ('db_commit_rows',        'delta.db_commit_rows(delta.repository_id(''io.aquadelta.test''))'),
+                ('db_commit_rows()',        'delta.db_commit_rows(delta.head_commit_id(''io.aquadelta.test''))'),
 --                ('db_commit_fields',      'delta.db_commit_rows(delta.repository_id(''io.aquadelta.test''))'),
 
-                ('db_head_commit_row',    'delta.db_head_commit_rows(delta.repository_id(''io.aquadelta.test''))'),
+                ('db_head_commit_rows()',   'delta.db_head_commit_rows(delta.repository_id(''io.aquadelta.test''))'),
 --                ('db_head_commit_fields', 'delta.db_head_commit_fields(delta.repository_id(''io.aquadelta.test''))'),
 
-                ('tracked_rows',          'delta.tracked_rows(delta.repository_id(''io.aquadelta.test''))'),
-                ('stage_rows',            'delta.stage_rows(delta.repository_id(''io.aquadelta.test''))')
---                ('offstage_* TODO',  'delta.offstage_row_deleted(delta.repository_id(''io.aquadelta.test''))'),
+                ('tracked_rows()',          'delta.tracked_rows(delta.repository_id(''io.aquadelta.test''))'),
+                ('stage_rows()',            'delta.stage_rows(delta.repository_id(''io.aquadelta.test''))'),
+
+                ('offstage_row_deleted()',  'delta.offstage_row_deleted(delta.repository_id(''io.aquadelta.test''))')
+                -- ('offstage_field_TODO',  'delta.offstage_row_deleted(delta.repository_id(''io.aquadelta.test''))')
         )
     )
     loop
@@ -127,7 +129,7 @@ select delta.tracked_row_add('io.aquadelta.test','shakespeare','character','id',
 
 select row_eq(
     $$ select delta_test.count_diff() $$,
-    row ('tracked_rows=>2,tracked_row_added=>2'::hstore),
+    row ('tracked_rows()=>2,tracked_row_added=>2'::hstore),
     'New tracked rows'
 );
 
@@ -139,18 +141,18 @@ select delta.staged_row_add('io.aquadelta.test','shakespeare','character','id',i
 
 select row_eq(
     $$ select delta_test.count_diff() $$,
-    row ('stage_row_added=>2,tracked_rows=>2,stage_rows=>2'::hstore),
+    row ('stage_row_added=>2,tracked_rows()=>2,stage_rows()=>2'::hstore),
     'Stage tracked rows'
 );
 
 -------------------------------------------------------------------------------
 -- commit()
 -------------------------------------------------------------------------------
-select delta.commit('io.aquadelta.test','First commit!', 'Testing User','testing@example.com');
+select delta.commit('io.aquadelta.test','First commit!','Testing User','testing@example.com');
 
 select row_eq(
     $$ select delta_test.count_diff() $$,
-    row ('commit=>1,tracked_rows=>2,commit_rows=>2,commit_row_added=>2,db_head_commit_row=>2'::hstore),
+    row ('commit=>1,stage_rows()=>2,commit_rows()=>2,tracked_rows()=>2,commit_row_added=>2,db_commit_rows()=>2,db_head_commit_rows()=>2'::hstore),
     'Commit makes a commit and adds the staged rows'
 );
 
@@ -166,16 +168,41 @@ select row_eq(
 );
 
 ---------------------------------------
--- delete a tracked row
+-- delete a row in a commit
 ---------------------------------------
-delete from shakespeare.character where id='9000';
+delete from shakespeare.character where id='9001';
 
 select row_eq(
     $$ select delta_test.count_diff() $$,
-    row ('offstage_row_deleted=>1'::hstore),
-    'Delete a untracked row'
+    row ('offstage_row_deleted()=>1'::hstore),
+    'Delete a row in a commit'
 );
 
+
+---------------------------------------
+-- stage the delete
+---------------------------------------
+select delta.stage_row_delete('io.aquadelta.test','shakespeare','character','id','9001');
+
+select row_eq(
+    $$ select delta_test.count_diff() $$,
+    row ('stage_row_deleted=>1,stage_rows()=>-1'::hstore),
+    'Stage a row delete'
+);
+
+---------------------------------------
+-- commit
+---------------------------------------
+select delta.commit('io.aquadelta.test','Second commit, delete one row','Testing User','testing@example.com');
+
+select row_eq(
+    $$ select delta_test.count_diff() $$,
+    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    'Commit a row delete'
+);
+
+
+/*
 ---------------------------------------
 -- delete a untracked row
 ---------------------------------------
@@ -183,6 +210,7 @@ delete from shakespeare.character where id='angus';
 
 select row_eq(
     $$ select delta_test.count_diff() $$,
-    row ('offstage_row_deleted=>1,untracked_row=>-1'::hstore),
+    row ('stage_rows()=>-1,offstage_row_deleted()=>1,untracked_row=>-1'::hstore),
     'Delete a untracked row'
 );
+*/

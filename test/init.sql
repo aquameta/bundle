@@ -1,9 +1,16 @@
-begin;
+-- begin;
 create extension if not exists pgtap schema public;
 
 -- sample data via https://github.com/catherinedevlin/opensourceshakespeare
 \i shakespeare.sql
--- delete from meta.table where schema_name='shakespeare' and name in ('paragraph', 'wordform');
+-- nope, deps: delete from meta.table where schema_name='shakespeare' and name not in ('character');
+drop table shakespeare.character_work;
+drop table shakespeare.paragraph;
+drop table shakespeare.chapter;
+drop table shakespeare.work;
+drop table shakespeare.wordform;
+
+delete from shakespeare.character where name not ilike 'an%';
 
 -- test schema
 create schema delta_test;

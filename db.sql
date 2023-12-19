@@ -14,6 +14,11 @@ declare
     literals_stmt text;
     pk_comparison_stmt text;
 begin
+    if not delta._commit_exists( commit_id ) then
+        raise warning 'Commit with id % does not exist.', commit_id;
+        return;
+    end if;
+
     -- all relations in the head commit
     for rel in
         select

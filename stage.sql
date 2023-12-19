@@ -161,7 +161,7 @@ create or replace function _stage_row_delete( repository_id uuid, _row_id meta.r
         -- TODO: make sure the row is in the head commit
 
         -- stage
-        insert into delta.stage_row_deleted (repository_id, row_id) values ( repository_id, _row_id)
+        insert into delta.stage_row_deleted (repository_id, row_id) values (repository_id, _row_id)
         returning id into stage_row_deleted_id;
 
         return stage_row_deleted_id;
@@ -282,8 +282,7 @@ $$ language sql;
 -- offstage_row_deleted
 --
 
-create or replace function offstage_row_deleted( _repository_id uuid ) returns setof meta.row_id as
-$$
+create or replace function offstage_row_deleted( _repository_id uuid ) returns setof meta.row_id as $$
     select row_id
     from delta.db_head_commit_rows(_repository_id)
         where exists = false

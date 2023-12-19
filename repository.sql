@@ -70,6 +70,8 @@ alter table repository add checkout_commit_id uuid references commit(id) on dele
 alter table repository alter constraint repository_checkout_commit_id_fkey deferrable initially
 deferred;
 alter table repository alter constraint repository_head_commit_id_fkey deferrable initially deferred;
+alter table repository add constraint repository_head_commit_id_unique unique(head_commit_id);
+alter table repository add constraint repository_checkout_commit_id_unique unique(checkout_commit_id);
 
 
 --
@@ -295,10 +297,14 @@ create or replace function commit_rows( _commit_id uuid, _relation_id meta.relat
     -- WIP
     select _commit_id, ra.row_id as row_id from rows_added ra
         left join rows_deleted rd on rd.commit_id = ra.commit_id
-    where (ra.row_id)::meta.relation_id =
-        case when _relation_id is not null then _relation_id
-        else (ra.row_id)::meta.relation_id
-        end;
+    where
+        -- ... smart stuff here
+        -- relation filter, if passed in
+        (ra.row_id)::meta.relation_id =
+            case
+                when _relation_id is not null then _relation_id
+                else (ra.row_id)::meta.relation_id
+            end;
 $$ language sql;
 
 
