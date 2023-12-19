@@ -200,19 +200,6 @@ $$ language plpgsql;
 
 
 
---
--- stage_tracked_rows()
---
-
-create or replace function _stage_tracked_rows( _repository_id uuid ) returns setof uuid as $$
-    select delta._staged_row_add(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
-$$ language sql;
-
-create or replace function stage_tracked_rows( repository_name text ) returns setof uuid as $$
-    select delta._stage_tracked_rows(repository_id(repository_name))
-$$ language sql;
-
-
 -------------------------------------------------
 -- Set Views / Functions
 -------------------------------------------------
@@ -333,3 +320,47 @@ $$ language sql;
 --
 -- get_stage_rows_exist
 --
+
+
+
+
+-------------------------------------------------
+-- Macro-ops
+-------------------------------------------------
+
+--
+-- track_relation_rows
+--
+
+create or replace function _track_relation_rows( repository_id uuid, relation_id meta.relation_id ) returns setof uuid as $$
+    insert into delta.tracked_row_added(repository_id, row_id)
+    select repository_id, row_id
+    from delta.untracked_row where row_id::meta.relation_id = relation_id
+    returning id
+$$ language sql;
+
+create or replace function track_relation_rows( repository_name text, schema_name text, relation_name text ) returns setof uuid as $$
+    select delta._track_relation_rows(delta.repository_id(repository_name), meta.relation_id(schema_name, relation_name));
+$$ language sql;
+
+
+--
+-- stage_tracked_rows()
+--
+
+create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
+   --  select delta._staged_row_add(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
+   -- ^^ SLOW!  bypass row_exists etc.
+
+   insert into delta.stage_row_added(repository_id, row_id)
+   select repository_id, row_id from delta.tracked_row_added
+   where repository_id = _repository_id;
+
+   delete from delta.tracked_row_added
+   where repository_id = _repository_id;
+
+$$ language sql;
+
+create or replace function stage_tracked_rows( repository_name text ) returns void as $$
+    select delta._stage_tracked_rows(delta.repository_id(repository_name))
+$$ language sql;

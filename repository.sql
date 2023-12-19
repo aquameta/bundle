@@ -82,14 +82,16 @@ create table commit_row_added (
     id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     row_id meta.row_id not null,
-    position integer not null
+    position integer not null,
+    unique(commit_id,row_id)
 );
 
 create table commit_row_deleted (
     id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     row_id meta.row_id not null,
-    position integer not null
+    position integer not null,
+    unique(commit_id,row_id)
 );
 
 
@@ -284,21 +286,38 @@ create or replace function commit_rows( _commit_id uuid, _relation_id meta.relat
         union
         select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
     ),
+    -- every added row, with its position in the ancestry tree
     rows_added as (
-        select a.commit_id, a.position, cra.row_id
+        select min(a.position) as newest_position, cra.row_id
         from ancestry a
             join delta.commit_row_added cra on cra.commit_id = a.commit_id
+        group by cra.row_id
     ),
+    -- every row deleted, with its position in the ancestry tree
     rows_deleted as (
-        select a.commit_id, a.position, crd.row_id
+        select min(a.position) as newest_position, crd.row_id
         from ancestry a
             join delta.commit_row_deleted crd on crd.commit_id = a.commit_id
+            group by crd.row_id
     )
     -- WIP
-    select _commit_id, ra.row_id as row_id from rows_added ra
-        left join rows_deleted rd on rd.commit_id = ra.commit_id
-    where
-        -- ... smart stuff here
+    select
+        _commit_id,
+        ra.row_id /* as added_row_id,
+        ra.newest_position as added_position,
+        rd.row_id as deleted_row_id,
+        rd.newest_position */
+    from rows_added ra
+        left join rows_deleted rd on rd.row_id = ra.row_id
+    where (
+        -- never deleted
+        rd.row_id is null 
+        or
+        -- deleted and re-added
+        rd.newest_position >= ra.newest_position
+    )
+
+    and
         -- relation filter, if passed in
         (ra.row_id)::meta.relation_id =
             case

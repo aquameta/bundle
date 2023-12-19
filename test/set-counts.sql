@@ -201,16 +201,36 @@ select row_eq(
     'Commit a row delete'
 );
 
-
-/*
 ---------------------------------------
--- delete a untracked row
+-- track all of shakespeare
 ---------------------------------------
-delete from shakespeare.character where id='angus';
+select delta_test.refresh_counters();
+select delta.track_relation_rows('io.aquadelta.test', schema_name, name) from meta.table where schema_name='shakespeare';
 
 select row_eq(
     $$ select delta_test.count_diff() $$,
-    row ('stage_rows()=>-1,offstage_row_deleted()=>1,untracked_row=>-1'::hstore),
-    'Delete a untracked row'
+    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    'Track shakespeare'
 );
-*/
+
+---------------------------------------
+-- stage_tracked_rows
+---------------------------------------
+select delta.stage_tracked_rows('io.aquadelta.test');
+
+select row_eq(
+    $$ select delta_test.count_diff() $$,
+    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    'Stage shakespeare'
+);
+
+---------------------------------------
+-- commit
+---------------------------------------
+select delta.commit('io.aquadelta.test','Third commit, add all of shakespeare','Testing User','testing@example.com');
+
+select row_eq(
+    $$ select delta_test.count_diff() $$,
+    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    'Commit shakespeare'
+);

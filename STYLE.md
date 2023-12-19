@@ -9,6 +9,8 @@ Style Guide
 - Use `raise exception`, not `assert`.  Using `assert` would be nice, but "ASSERT is meant for
   detecting program bugs, not for reporting ordinary error conditions", and can be disabled via
   `plpgsql.check_asserts`.
+- Whe possible, use a `begin ... exceptions` block to catch and re-raise exceptions, instead of
+  checking for things that constraints already enforce, for much speed.
 
 ## Tables
 - Use singular names

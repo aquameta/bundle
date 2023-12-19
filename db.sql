@@ -37,7 +37,7 @@ begin
         -- head_commit_id and, if it is, use the head_commit_row / head_commit_field mat_views.
 
         -- generate the pk comparisons line
-        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, '(row_id).pk_values[%3$s] = x.%1$I', ' and ');
+        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
