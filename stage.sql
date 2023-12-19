@@ -38,7 +38,7 @@ create table stage_field_changed (
 -- staged_row_add()
 --
 
-create or replace function _staged_row_add( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
+create or replace function _staged_row_add( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         stage_row_added_id uuid;
@@ -46,8 +46,8 @@ create or replace function _staged_row_add( repository_id uuid, _row_id meta.row
     begin
 
         -- assert repository exists
-        if not delta._repository_exists(repository_id) then
-            raise exception 'Repository with id % does not exist.', repository_id;
+        if not delta._repository_exists(_repository_id) then
+            raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
 
         if meta.row_exists(meta.row_id('delta','stage_row_added', 'row_id', _row_id::text)) then
@@ -60,8 +60,18 @@ create or replace function _staged_row_add( repository_id uuid, _row_id meta.row
         perform delta._tracked_row_remove(_row_id);
 
         -- stage
-        insert into delta.stage_row_added (repository_id, row_id) values ( repository_id, _row_id)
-        returning id into stage_row_added_id;
+        execute format('
+            insert into delta.stage_row_added (repository_id, row_id, value)
+            select %L, %L, to_jsonb(x)
+            from %I.%I x where %s
+            returning id',
+            _repository_id,
+            _row_id,
+            _row_id.schema_name,
+            _row_id.relation_name,
+            meta._pk_stmt(_row_id, '%1$I = %2$L')
+        ) into stage_row_added_id;
+
 
         return stage_row_added_id;
     end;
@@ -225,6 +235,28 @@ select * from (
 );
 
 
+create function untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
+select r.row_id
+from delta.exec((
+    select array_agg (stmt)
+    from delta.not_ignored_row_stmt
+    where relation_id = coalesce(_relation_id, relation_id)
+)) r (row_id meta.row_id)
+
+except
+
+select * from (
+    select a.row_id from delta.stage_row_added a -- where relation_id=....?
+    union
+    select t.row_id from delta.tracked_row_added t
+    union
+    select d.row_id from delta.stage_row_deleted d
+    union
+    select row_id from delta.head_commit_row row_id
+);
+$$ language sql;
+
+
 create or replace function _rel_row_template( relation_generator_stmt text, action_stmt text, delimiter text ) returns text as $$
 declare
     rel meta.relation_id;
@@ -332,10 +364,10 @@ $$ language sql;
 -- track_relation_rows
 --
 
-create or replace function _track_relation_rows( repository_id uuid, relation_id meta.relation_id ) returns setof uuid as $$
+create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns setof uuid as $$
     insert into delta.tracked_row_added(repository_id, row_id)
     select repository_id, row_id
-    from delta.untracked_row where row_id::meta.relation_id = relation_id
+    from delta.untracked_rows(_relation_id) row_id
     returning id
 $$ language sql;
 
@@ -349,17 +381,51 @@ $$ language sql;
 --
 
 create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
+declare
+    rel record;
+    stmt text;
+begin
    --  select delta._staged_row_add(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
-   -- ^^ SLOW!  bypass row_exists etc.
+   -- ^^ SLOW! Speed up by: bypass row_exists, one insert stmt per relation
 
-   insert into delta.stage_row_added(repository_id, row_id)
-   select repository_id, row_id from delta.tracked_row_added
-   where repository_id = _repository_id;
+    -- all relations in tracked_row_added
+    for rel in
+        select distinct
+            (tra.row_id).schema_name,
+            (tra.row_id).relation_name,
+            (tra.row_id).pk_column_names
+        from delta.tracked_row_added tra
+        where repository_id = _repository_id
+    loop
+        -- insert the row with its current value into stage_row_added
+        stmt := format('
+        insert into delta.stage_row_added(repository_id, row_id, value)
+        select repository_id, row_id, to_jsonb(x)
+        from delta.tracked_row_added tra
+			join %1$I.%2$I x on %4$s
+		where
+            (tra.row_id).schema_name = %1$L and
+            (tra.row_id).relation_name = %2$L and
+            tra.repository_id=%L',
+            rel.schema_name,
+            rel.relation_name,
+            _repository_id,
+            meta._pk_stmt(
+                rel.pk_column_names,
+                rel.pk_column_names, -- no values, not needed
+                'x.%1$I::text = (tra.row_id).pk_values[%3$s]', ' and '
+            )
+        );
 
-   delete from delta.tracked_row_added
-   where repository_id = _repository_id;
+        raise debug 'stmt: %', stmt;
+        execute stmt;
+    end loop;
 
-$$ language sql;
+    -- delete all tracked rows for this repo
+    delete from delta.tracked_row_added
+    where repository_id = _repository_id;
+end;
+$$ language plpgsql;
 
 create or replace function stage_tracked_rows( repository_name text ) returns void as $$
     select delta._stage_tracked_rows(delta.repository_id(repository_name))

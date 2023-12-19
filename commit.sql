@@ -79,8 +79,8 @@ create function _commit(
         returning id into new_commit_id;
 
         -- commit_row_added
-        insert into delta.commit_row_added (commit_id, row_id, position)
-        select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
+        insert into delta.commit_row_added (commit_id, row_id, value, position)
+        select new_commit_id, row_id, value, 0 from delta.stage_row_added where repository_id = _repository_id;
 
         delete from delta.stage_row_added where repository_id = _repository_id;
 

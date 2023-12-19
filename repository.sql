@@ -82,6 +82,7 @@ create table commit_row_added (
     id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     row_id meta.row_id not null,
+    value jsonb not null,
     position integer not null,
     unique(commit_id,row_id)
 );
@@ -371,6 +372,8 @@ $$ language sql;
 create materialized view head_commit_row as
 select r.id as repository_id, row_id
 from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
+create index head_commit_row_pkey on head_commit_row(row_id);
+
 
 /*
 create materialized view head_commit_field as

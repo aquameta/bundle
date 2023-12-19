@@ -13,9 +13,13 @@ Style Guide
   checking for things that constraints already enforce, for much speed.
 
 ## Tables
-- Use singular names
+- Singular names
+- Lowercase
+- Underscores
 
 ## Functions
+- Use plural names for set-returning functions
+- Prefer `returns setof` to `returns table`, setof is inlinable where table is not?
 - "public" functions (ones the user might call from the psql prompt or their code) typically take
   human-readable text arguments, e.g. repository name instead of repository id
 - "private" functions begin with a underscore, and typically take ids where applicable
