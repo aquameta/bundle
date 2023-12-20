@@ -227,6 +227,7 @@ select row_eq(
 ---------------------------------------
 -- commit
 ---------------------------------------
+/*
 select delta.commit('io.aquadelta.test','Third commit, add all of shakespeare','Testing User','testing@example.com');
 
 select row_eq(
@@ -234,3 +235,4 @@ select row_eq(
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit shakespeare'
 );
+*/

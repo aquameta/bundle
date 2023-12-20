@@ -21,8 +21,11 @@ create table repository (
 
 create table blob (
     hash text primary key not null,
-    value text
+    value text,
+    unique(hash, value)
 );
+create index blob_hash_hash_index on blob using hash (hash);
+
 
 create or replace function blob_hash_gen_trigger() returns trigger as $$
     begin
@@ -368,7 +371,7 @@ $$ language sql;
 
 
 create materialized view head_commit_row as
-select row_id, r.id as repository_id
+select r.id as repository_id, row_id
 from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
 
 create index head_commit_row_pkey on head_commit_row(row_id);
@@ -379,7 +382,7 @@ create unique index head_commit_row_row_id_unique on head_commit_row(row_id);
 --
 
 create materialized view head_commit_field as
-select cf.field_id, cf.value_hash, r.id as repository_id
+select r.id as repository_id, cf.field_id, cf.value_hash
 from delta.repository r, delta.commit_fields(r.head_commit_id) cf;
 
 create index head_commit_field_pkey on head_commit_field(field_id);

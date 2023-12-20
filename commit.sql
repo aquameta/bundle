@@ -40,7 +40,10 @@ create function _commit(
         new_commit_id uuid;
         parent_commit_id uuid;
         first_commit boolean := false;
+        start_time timestamp;
     begin
+        start_time := clock_timestamp();
+
         -- repository exists
         if not delta._repository_exists(_repository_id) then
             raise exception 'Repository with id % does not exist.', _repository_id;
@@ -62,6 +65,8 @@ create function _commit(
             end if;
         end if;
 
+        raise notice 'commit()';
+
         -- create the commit
         insert into delta.commit (
             repository_id,
@@ -78,11 +83,14 @@ create function _commit(
         )
         returning id into new_commit_id;
 
+        raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
+
         -- blob
         insert into delta.blob (value)
-        select (jsonb_each(value)).value as v from delta.stage_row_added;
+        select distinct (jsonb_each(value)).value as v from delta.stage_row_added;
 
         -- commit_field_added
+        raise notice '  - Inserting commit_fields @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_field_added (commit_id, field_id, value_hash)
         select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash
         from (
@@ -90,11 +98,13 @@ create function _commit(
         ) fields;
 
         -- commit_row_added
+        raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_added (commit_id, row_id, position)
         select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
         delete from delta.stage_row_added where repository_id = _repository_id;
 
         -- commit_row_deleted
+        raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, 0 from delta.stage_row_deleted where repository_id = _repository_id;
         delete from delta.stage_row_deleted where repository_id = _repository_id;
@@ -109,11 +119,15 @@ create function _commit(
         -- update head pointer, checkout pointer
         update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
 
-        execute format ('refresh materialized view concurrently delta.head_commit_row');
-        execute format ('refresh materialized view concurrently delta.head_commit_field');
+        raise notice '  - Refreshing head_commit_row @ % ...', clock_timestamp() - start_time;
+        execute format ('refresh materialized view delta.head_commit_row');
+
+        raise notice '  - Refreshing head_commit_field @ % ...', clock_timestamp() - start_time;
+        execute format ('refresh materialized view delta.head_commit_field');
 
         -- TODO: unset search_path
 
+        raise notice '  - Done @ %', clock_timestamp() - start_time;
         return new_commit_id;
     end;
 $$ language plpgsql;
