@@ -28,10 +28,10 @@ begin
         select * from (
             values
                 ('commit_rows()',           'delta.commit_rows(delta.head_commit_id(''io.aquadelta.test''))'),
---                ('commit_fields',         'delta.commit_fields(delta.head_commit_id(''io.aquadelta.test''))'),
+                ('commit_fields()',         'delta.commit_fields(delta.head_commit_id(''io.aquadelta.test''))'),
 
                 ('db_commit_rows()',        'delta.db_commit_rows(delta.head_commit_id(''io.aquadelta.test''))'),
---                ('db_commit_fields',      'delta.db_commit_rows(delta.repository_id(''io.aquadelta.test''))'),
+                ('db_commit_fields',        'delta.db_commit_fields(delta.repository_id(''io.aquadelta.test''))'),
 
                 ('db_head_commit_rows()',   'delta.db_head_commit_rows(delta.repository_id(''io.aquadelta.test''))'),
 --                ('db_head_commit_fields', 'delta.db_head_commit_fields(delta.repository_id(''io.aquadelta.test''))'),

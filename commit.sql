@@ -78,16 +78,25 @@ create function _commit(
         )
         returning id into new_commit_id;
 
-        -- commit_row_added
-        insert into delta.commit_row_added (commit_id, row_id, value, position)
-        select new_commit_id, row_id, value, 0 from delta.stage_row_added where repository_id = _repository_id;
+        -- blob
+        insert into delta.blob (value)
+        select (jsonb_each(value)).value as v from delta.stage_row_added;
 
+        -- commit_field_added
+        insert into delta.commit_field_added (commit_id, field_id, value_hash)
+        select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash
+        from (
+            select row_id, (jsonb_each(value)).*, public.digest((jsonb_each(value)).value::text, 'sha256') as hash from delta.stage_row_added
+        ) fields;
+
+        -- commit_row_added
+        insert into delta.commit_row_added (commit_id, row_id, position)
+        select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
         delete from delta.stage_row_added where repository_id = _repository_id;
 
         -- commit_row_deleted
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, 0 from delta.stage_row_deleted where repository_id = _repository_id;
-
         delete from delta.stage_row_deleted where repository_id = _repository_id;
 
     /*
@@ -100,8 +109,8 @@ create function _commit(
         -- update head pointer, checkout pointer
         update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
 
-        execute format ('refresh materialized view delta.head_commit_row');
-        -- execute format ('refresh materialized view delta.head_commit_field'); TODO
+        execute format ('refresh materialized view concurrently delta.head_commit_row');
+        execute format ('refresh materialized view concurrently delta.head_commit_field');
 
         -- TODO: unset search_path
 
@@ -125,3 +134,58 @@ begin
     return delta._commit(delta.repository_id(repository_name), message, author_name, author_email, parent_commit_id);
 end;
 $$ language plpgsql;
+
+
+--
+-- topological_sort
+-- ganked from https://wiki.postgresql.org/wiki/Topological_sort
+--
+
+CREATE OR REPLACE FUNCTION topological_sort(_nodes int[], _edges public.hstore)
+RETURNS int[]
+LANGUAGE plpgsql
+AS $$
+DECLARE
+_L int[];
+_S int[];
+_n int;
+_all_ms text[];
+_m text;
+_n_m_edges int[];
+BEGIN
+_L := '{}';
+_S := ARRAY(
+    SELECT u.node
+    FROM unnest(_nodes) u(node)
+    WHERE (_edges->(u.node::text)) IS NULL
+);
+IF array_length(_S, 1) IS NULL THEN
+    RAISE EXCEPTION 'no nodes with no incoming edges in input';
+END IF;
+
+WHILE array_length(_S, 1) IS NOT NULL LOOP
+    _n := _S[1];
+    _S := _S[2:];
+
+    _L := array_append(_L, _n);
+    _all_ms := ARRAY(
+        SELECT each.key
+        FROM each(_edges)
+        WHERE (each.value)::int[] @> ARRAY[_n]
+    );
+    FOREACH _m IN ARRAY _all_ms LOOP
+        _n_m_edges := (_edges->_m)::int[];
+        IF _n_m_edges = ARRAY[_n] THEN
+            _S := array_append(_s, _m::int);
+            _edges := _edges - _m;
+        ELSE
+            _edges := _edges || public.hstore(_m, array_remove(_n_m_edges, _n)::text);
+        END IF;
+    END LOOP;
+END LOOP;
+IF _edges <> '' THEN
+    RAISE EXCEPTION 'input graph contains cycles';
+END IF;
+RETURN _L;
+END
+$$;

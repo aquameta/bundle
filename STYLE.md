@@ -3,6 +3,7 @@ Style Guide
 
 ## General
 - Lowercase SQL (e.g. `select count(*) from foo`)
+- Spaces (4) not tabs
 - textwidth = 100
 
 ## Error Handling
@@ -26,3 +27,11 @@ Style Guide
 - `create or replace function foo( x int, y int, z decimal ) returns x as $$`
 - When arguments collide with column names (e.g. `repository_id`), prefix the argument with a
   underscore (e.g. `_repository_id`)
+
+## File Structure
+- Each "section" of the project is broken out into it's own file. Drawing clean section lines is
+  hard because the project is deeply intertwingled.  Do your best.
+- Tests for each section are in `test/$section.sql`, and generally cover basic unit tests like
+  calling every function.  Each test file runs it's own pgtap plan (TODO), not complex stories that
+  span multiple sections
+- The `test/set-counters.sql` script the place for complex, multi-section stories

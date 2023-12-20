@@ -127,19 +127,18 @@ JOIN, it'll pick up new fields (from new columns presumably).
 create or replace function db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
 declare
     rel record;
-    stmts text[];
+    stmts text[] = '{}';
     literals_stmt text;
     pk_comparison_stmt text;
     stmt text;
 begin
     -- all relations in the head commit
     for rel in
-        select
+        select distinct
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
-            (row_id).pk_column_name as pk_column_name
+            (row_id).pk_column_names as pk_column_names
         from delta.commit_rows(commit_id) row_id
-        group by row_id::meta.relation_id, (row_id).pk_column_name
     loop
         -- TODO: check that each relation exists and has not been deleted.
         -- currently, when that happens, this function will fail.
@@ -170,6 +169,8 @@ begin
     end loop;
 
     literals_stmt := array_to_string(stmts,E'\nunion\n');
+
+    if literals_stmt = '' then return; end if;
 
     -- wrap stmt to beautify columns
     literals_stmt := format('

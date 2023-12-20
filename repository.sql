@@ -82,7 +82,6 @@ create table commit_row_added (
     id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     row_id meta.row_id not null,
-    value jsonb not null,
     position integer not null,
     unique(commit_id,row_id)
 );
@@ -357,28 +356,34 @@ create or replace function commit_fields(_commit_id uuid) returns setof field_ha
             join delta.commit_field_changed cfc on cfc.commit_id = a.commit_id
     )
     --WIP
-    select fa.field_id, fa.value_hash from fields_added fa join fields_deleted fd on fa.commit_id = fd.commit_id join fields_changed fc on fc.commit_id = fd.commit_id
+    select fa.field_id, fa.value_hash from fields_added fa left join fields_deleted fd on fa.commit_id = fd.commit_id; -- join fields_changed fc on fc.commit_id = fd.commit_id
 $$ language sql;
 
 
 --
--- head
+-- head_commit_row
 --
 
 -- NOTE: split these up into separate views per-repository, somehow?
--- NOTE: index these?
--- NOTE: convert these to functions?
+
 
 create materialized view head_commit_row as
-select r.id as repository_id, row_id
+select row_id, r.id as repository_id
 from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
+
 create index head_commit_row_pkey on head_commit_row(row_id);
+create unique index head_commit_row_row_id_unique on head_commit_row(row_id);
 
+--
+-- head_commit_field
+--
 
-/*
 create materialized view head_commit_field as
-select id as repository_id, delta.commit_fields(head_commit_id) from delta.repository;
-*/
+select cf.field_id, cf.value_hash, r.id as repository_id
+from delta.repository r, delta.commit_fields(r.head_commit_id) cf;
+
+create index head_commit_field_pkey on head_commit_field(field_id);
+create unique index head_commit_field_field_id_unique on head_commit_field(field_id);
 
 
 --
