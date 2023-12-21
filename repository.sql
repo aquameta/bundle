@@ -325,7 +325,8 @@ $$ language sql;
 -- a field and it's value hash
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
-create or replace function commit_fields(_commit_id uuid) returns setof field_hash as $$
+create or replace function commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+returns setof field_hash as $$
     -- ancestry
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position
@@ -341,6 +342,13 @@ create or replace function commit_fields(_commit_id uuid) returns setof field_ha
         select distinct on (fc.field_id) fc.field_id, fc.change_type, fc.value_hash
         from delta.commit_field_changed fc
             join ancestry a on fc.commit_id = a.commit_id
+        where fc.field_id::meta.relation_id =
+            case
+                -- no op
+                when _relation_id_filter is null then fc.field_id::meta.relation_id
+                -- filter
+                else _relation_id_filter
+            end
         order by fc.field_id, a.position
     ) where change_type != 'delete';
 $$ language sql;

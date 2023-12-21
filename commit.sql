@@ -94,7 +94,7 @@ create function _commit(
         insert into delta.commit_field_changed (commit_id, field_id, value_hash, change_type)
         select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash, 'add'
         from (
-            select row_id, (jsonb_each(value)).*, public.digest((jsonb_each(value)).value::text, 'sha256') as hash from delta.stage_row_added
+            select row_id, (jsonb_each_text(value)).*, public.digest((jsonb_each_text(value)).value::text, 'sha256') as hash from delta.stage_row_added
         ) fields;
 
         -- commit_row_added
