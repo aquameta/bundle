@@ -255,6 +255,35 @@ $$ language plpgsql;
 -- commit_rows()
 --
 
+
+-- cache checker, divert to head_commit_row mat view if possible
+create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+returns table(commit_id uuid, row_id meta.row_id) as $$
+declare
+    is_cached boolean;
+begin
+    select into is_cached exists (select 1 from delta.head_commit_row hcr where hcr.commit_id = _commit_id limit 1);
+
+    raise notice 'commit_rows(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
+
+    if not is_cached then
+        return query select * from delta._commit_rows(_commit_id, _relation_id_filter);
+    else
+        return query select hcr.commit_id, hcr.row_id
+        from delta.head_commit_row hcr
+        where hcr.row_id::meta.relation_id =
+            case
+                -- no op
+                when _relation_id_filter is null then hcr.row_id::meta.relation_id
+                -- filter
+                else _relation_id_filter
+            end;
+    end if;
+end
+$$ language plpgsql;
+
+
+
 /*
 recursive cte, traverses commit ancestry, grabbing added rows and removing rows deleted
 
@@ -271,7 +300,7 @@ recursive cte, traverses commit ancestry, grabbing added rows and removing rows 
 -- If I do table(row_id meta.row_id) it thinks I'm passing in a type and returns all fields of row_id as separate columns.
 -- If I do setof meta.row_id it does the same.
 -- Adding (useless) commit_id to return type to fix
-create or replace function commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
         union
@@ -302,7 +331,7 @@ create or replace function commit_rows( _commit_id uuid, _relation_id meta.relat
         left join rows_deleted rd on rd.row_id = ra.row_id
     where (
         -- never deleted
-        rd.row_id is null 
+        rd.row_id is null
         or
         -- deleted and re-added
         rd.newest_position >= ra.newest_position
@@ -325,7 +354,29 @@ $$ language sql;
 -- a field and it's value hash
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
+-- cache checker, divert to head_commit_field mat view if possible
 create or replace function commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+returns setof field_hash as $$
+declare
+    is_cached boolean;
+begin
+    select into is_cached exists (select 1 from delta.head_commit_field hcf where commit_id = _commit_id limit 1);
+
+    raise notice 'commit_fields(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
+
+    if not is_cached then
+        return query select * from delta._commit_fields(_commit_id, _relation_id_filter);
+    else
+        return query select field_id, value_hash from delta.head_commit_field;
+    end if;
+end
+$$ language plpgsql;
+
+
+
+
+-- naive SQL function, no check on mat views
+create or replace function _commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
     -- ancestry
     with recursive ancestry as (
@@ -362,7 +413,7 @@ $$ language sql;
 
 
 create materialized view head_commit_row as
-select r.id as repository_id, row_id
+select r.id as repository_id, r.head_commit_id as commit_id, row_id
 from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
 
 -- create index head_commit_row_pkey on head_commit_row(row_id);
@@ -373,7 +424,7 @@ from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
 --
 
 create materialized view head_commit_field as
-select r.id as repository_id, cf.field_id, cf.value_hash
+select r.id as repository_id, r.head_commit_id as commit_id, cf.field_id, cf.value_hash
 from delta.repository r, delta.commit_fields(r.head_commit_id) cf;
 
 -- create index head_commit_field_pkey on head_commit_field(field_id);
