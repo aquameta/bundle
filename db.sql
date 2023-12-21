@@ -44,7 +44,7 @@ begin
         where row_id::meta.relation_id =
             case
                 when _relation_id is null then row_id::meta.relation_id
-                else _relation_id 
+                else _relation_id
             end
         group by row_id::meta.relation_id, (row_id).pk_column_names
     loop
@@ -207,13 +207,23 @@ begin
 end
 $$ language plpgsql;
 
+/*
+big diff queries:
 
---
--- db_head_commit_fields()
---
+select *
+from db_commit_fields(head_commit_id('io.aquadelta.test')) dbcf
+full outer join commit_fields(head_commit_id('io.aquadelta.test')) cf on dbcf.field_id = cf.field_id
+where
+    dbcf.value_hash != cf.value_hash or
+    dbcf.field_id is null
+    or cf.field_id is null;
 
-/* ??
-create function db_head_commit_fields( repository_id uuid ) returns setof field_exists as $$
-    select * from delta.db_commit_fields(delta._head_commit_id(repository_id))
-$$ language sql;
+
+
+select * from db_commit_rows(head_commit_id('io.aquadelta.test')) dbcr
+full outer join commit_rows(head_commit_id('io.aquadelta.test')) cr on dbcr.row_id = cr.row_id
+where
+    dbcr.row_id is null
+    or cr.row_id is null
+    or dbcr.exists = false;
 */

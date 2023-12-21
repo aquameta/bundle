@@ -264,9 +264,9 @@ declare
 begin
     select into is_cached exists (select 1 from delta.head_commit_row hcr where hcr.commit_id = _commit_id limit 1);
 
-    raise notice 'commit_rows(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
+    raise debug 'commit_rows(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
 
-    if not is_cached then
+    if not is_cached or false then
         return query select * from delta._commit_rows(_commit_id, _relation_id_filter);
     else
         return query select hcr.commit_id, hcr.row_id
@@ -277,7 +277,8 @@ begin
                 when _relation_id_filter is null then hcr.row_id::meta.relation_id
                 -- filter
                 else _relation_id_filter
-            end;
+            end
+        and hcr.commit_id = _commit_id;
     end if;
 end
 $$ language plpgsql;
@@ -362,12 +363,12 @@ declare
 begin
     select into is_cached exists (select 1 from delta.head_commit_field hcf where commit_id = _commit_id limit 1);
 
-    raise notice 'commit_fields(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
+    raise debug 'commit_fields(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
 
-    if not is_cached then
+    if not is_cached or false then
         return query select * from delta._commit_fields(_commit_id, _relation_id_filter);
     else
-        return query select field_id, value_hash from delta.head_commit_field;
+        return query select field_id, value_hash from delta.head_commit_field where commit_id = _commit_id;
     end if;
 end
 $$ language plpgsql;
@@ -414,10 +415,11 @@ $$ language sql;
 
 create materialized view head_commit_row as
 select r.id as repository_id, r.head_commit_id as commit_id, row_id
-from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
+from delta.repository r, delta._commit_rows(r.head_commit_id) row_id;
 
 -- create index head_commit_row_pkey on head_commit_row(row_id);
 -- create unique index head_commit_row_row_id_unique on head_commit_row(row_id);
+create index head_commit_row_commit_id on head_commit_row(commit_id);
 
 --
 -- head_commit_field
@@ -425,8 +427,9 @@ from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
 
 create materialized view head_commit_field as
 select r.id as repository_id, r.head_commit_id as commit_id, cf.field_id, cf.value_hash
-from delta.repository r, delta.commit_fields(r.head_commit_id) cf;
+from delta.repository r, delta._commit_fields(r.head_commit_id) cf;
 
+create index head_commit_field_commit_id on head_commit_field(commit_id);
 -- create index head_commit_field_pkey on head_commit_field(field_id);
 -- create unique index head_commit_field_field_id_unique on head_commit_field(field_id);
 
