@@ -87,12 +87,12 @@ create function _commit(
 
         -- blob
         insert into delta.blob (value)
-        select distinct (jsonb_each(value)).value as v from delta.stage_row_added;
+        select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra;
 
-        -- commit_field_added
+        -- commit_field_changed
         raise notice '  - Inserting commit_fields @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_field_added (commit_id, field_id, value_hash)
-        select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash
+        insert into delta.commit_field_changed (commit_id, field_id, value_hash, change_type)
+        select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash, 'add'
         from (
             select row_id, (jsonb_each(value)).*, public.digest((jsonb_each(value)).value::text, 'sha256') as hash from delta.stage_row_added
         ) fields;

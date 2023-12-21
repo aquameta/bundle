@@ -102,28 +102,16 @@ create table commit_row_deleted (
 -- commit_field
 --
 
+create type field_change_type as enum ('add','delete','change');
 create table commit_field_changed (
     id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
     field_id meta.field_id not null,
+    change_type field_change_type not null,
     value_hash text
 );
-
-create table commit_field_added (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    commit_id uuid not null references commit(id),
-    field_id meta.field_id not null,
-    value_hash text
-);
-
-create table commit_field_deleted (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    commit_id uuid not null references commit(id),
-    field_id meta.field_id not null,
-    value_hash text
-);
-
-
+-- create index commit_field_changed_field_id_hash_index on commit_field_changed using hash(field_id);
+-- create index commit_field_changed_field_id_hash_index on commit_field_changed(field_id);
 
 ------------------------------------------------------------------------------
 -- FUNCTIONS
@@ -338,28 +326,23 @@ $$ language sql;
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
 create or replace function commit_fields(_commit_id uuid) returns setof field_hash as $$
+    -- ancestry
     with recursive ancestry as (
-        select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
+        select c.id as commit_id, c.parent_id, 0 as position
+        from delta.commit c where c.id=_commit_id
+
         union
-        select c.id as commit_id, c.parent_id, p.position + 1 from delta.commit c join ancestry p on c.id = p.parent_id
-    ),
-    fields_added as (
-        select a.commit_id, a.position, cfa.field_id, cfa.value_hash
-        from ancestry a
-            join delta.commit_field_added cfa on cfa.commit_id = a.commit_id
-    ),
-    fields_deleted as (
-        select a.commit_id, a.position, cfd.field_id, cfd.value_hash
-        from ancestry a
-            join delta.commit_field_deleted cfd on cfd.commit_id = a.commit_id
-    ),
-    fields_changed as (
-        select a.commit_id, a.position, cfc.field_id, cfc.value_hash
-        from ancestry a
-            join delta.commit_field_changed cfc on cfc.commit_id = a.commit_id
+
+        select c.id as commit_id, c.parent_id, p.position + 1
+        from delta.commit c join ancestry p on c.id = p.parent_id
     )
-    --WIP
-    select fa.field_id, fa.value_hash from fields_added fa left join fields_deleted fd on fa.commit_id = fd.commit_id; -- join fields_changed fc on fc.commit_id = fd.commit_id
+
+    select field_id, value_hash from (
+        select distinct on (fc.field_id) fc.field_id, fc.change_type, fc.value_hash
+        from delta.commit_field_changed fc
+            join ancestry a on fc.commit_id = a.commit_id
+        order by fc.field_id, a.position
+    ) where change_type != 'delete';
 $$ language sql;
 
 
@@ -374,8 +357,8 @@ create materialized view head_commit_row as
 select r.id as repository_id, row_id
 from delta.repository r, delta.commit_rows(r.head_commit_id) row_id;
 
-create index head_commit_row_pkey on head_commit_row(row_id);
-create unique index head_commit_row_row_id_unique on head_commit_row(row_id);
+-- create index head_commit_row_pkey on head_commit_row(row_id);
+-- create unique index head_commit_row_row_id_unique on head_commit_row(row_id);
 
 --
 -- head_commit_field
@@ -385,22 +368,23 @@ create materialized view head_commit_field as
 select r.id as repository_id, cf.field_id, cf.value_hash
 from delta.repository r, delta.commit_fields(r.head_commit_id) cf;
 
-create index head_commit_field_pkey on head_commit_field(field_id);
-create unique index head_commit_field_field_id_unique on head_commit_field(field_id);
+-- create index head_commit_field_pkey on head_commit_field(field_id);
+-- create unique index head_commit_field_field_id_unique on head_commit_field(field_id);
 
 
 --
 -- garbage_collect()
 --
 
-create or replace function garbage_collect() returns void as $$
-    with hashes as (
-        select distinct cfa.value_hash from delta.commit_field_added cfa
-        union
-        select distinct cfd.value_hash from delta.commit_field_deleted cfd
+create or replace function garbage_collect() returns setof text as $$
+    delete from delta.blob
+    using (
+        select b.hash as bad_hash from delta.blob b
+            left join delta.commit_field_changed cfc on cfc.value_hash = b.hash
+        where  cfc.value_hash is null
     )
-    delete from delta.blob b
-    where b.hash not in (select distinct value_hash from hashes)
+    where hash = bad_hash
+    returning bad_hash
 $$ language sql;
 
 
