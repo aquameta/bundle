@@ -7,34 +7,53 @@
 --
 
 create type row_exists as( row_id meta.row_id, exists boolean );
-create or replace function db_commit_rows( commit_id uuid ) returns setof row_exists as $$
+create or replace function db_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns setof row_exists as $$
 declare
     rel record;
     stmts text[] := '{}';
     literals_stmt text;
     pk_comparison_stmt text;
+    _repository_id uuid;
+    commit_rows_stmt text;
 begin
-    if not delta._commit_exists( commit_id ) then
-        raise warning 'Commit with id % does not exist.', commit_id;
+    if not delta._commit_exists( _commit_id ) then
+        raise warning 'db_commit_rows(): Commit with id % does not exist.', _commit_id;
         return;
     end if;
 
-    -- all relations in the head commit
+/*
+    WIP:
+
+    -- is the supplied commit the head commit?  if so, use head_commit_row mat view instead of
+    -- commit_rows() for much speed
+    select repository_id from delta.commit where commit_id = _commit_id into _repository_id;
+    if _commit_id = delta._head_commit_id(repository_id) then
+        commit_rows_stmt := 'delta.head_commit_rows';
+    else
+        commit_rows_stmt := 'delta.commit_rows(_commit_id) row_id'
+    end if;
+*/
+
+    -- for each relation in this commit
     for rel in
         select
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_names as pk_column_names
-        from delta.commit_rows(commit_id) row_id
+        from delta.commit_rows(_commit_id) row_id
+        where row_id::meta.relation_id =
+            case
+                when _relation_id is null then row_id::meta.relation_id
+                else _relation_id 
+            end
         group by row_id::meta.relation_id, (row_id).pk_column_names
     loop
-        -- for each relation, select the commit_rows that are in this relation,i and also in this
-        -- repository, and inner join them with the relation's data, breaking it out into one row per
-        -- field
 
-        -- TODO: check that each relation exists and still has the same primary key, else skip it
-        -- TODO: we can speed this up a lot by checking to see if the supplied commit_id is also the
-        -- head_commit_id and, if it is, use the head_commit_row / head_commit_field mat_views.
+        -- for this relation, select the commit_rows that are in this relation, and also in this
+        -- repository, and inner join them with the relation's data, breaking it out into one row per
+        -- field.
+
+        -- TODO: check that each relation exists and still has the same primary key
 
         -- generate the pk comparisons line
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
@@ -43,11 +62,11 @@ begin
             select row_id, x.%I is not null as exists
             from delta.commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
-                    %s and -- (row_id).pk_value = x.$I::text and
+                    %s and
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
             rel.pk_column_names[1], -- 1 is ok here because we're just checking for exist w/ left join & pks cannot be null.  TODO: non-table_rel??
-            commit_id,
+            _commit_id,
             rel.schema_name,
             rel.relation_name,
             rel.schema_name,
@@ -148,11 +167,11 @@ begin
         -- into one row per field
 
         -- FIXME: pk_column_names, pk_values
-        pk_comparison_stmt := meta._pk_stmt('(row_id).pk_values[%3$s] = x.%1$I', rel.pk_column_names, rel.pk_values, ' and ');
+        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
             from delta.db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
-                left join %I.%I x on -- (#(#) )
+                left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
                     (row_id).relation_name = %L',
@@ -181,7 +200,7 @@ begin
         literals_stmt
     );
 
-    raise notice 'literals_stmt: %', literals_stmt;
+    raise debug 'literals_stmt: %', literals_stmt;
 
     return query execute literals_stmt;
 
