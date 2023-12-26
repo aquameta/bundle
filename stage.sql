@@ -13,6 +13,9 @@ create table stage_row_added (
     value jsonb,
     unique (repository_id, row_id)
 );
+create index stage_row_added_row_id_schema_name on stage_row_added using hash(((row_id).schema_name));
+create index stage_row_added_row_id_relation_name on stage_row_added using hash(((row_id).relation_name));
+
 
 create table stage_row_deleted (
     id uuid not null default public.uuid_generate_v7() primary key,
@@ -20,6 +23,9 @@ create table stage_row_deleted (
     row_id meta.row_id not null,
     unique (repository_id, row_id)
 );
+create index stage_row_deleted_row_id_schema_name on stage_row_deleted using hash (((row_id).schema_name));
+create index stage_row_deleted_row_id_relation_name on stage_row_deleted using hash (((row_id).relation_name));
+
 
 create table stage_field_changed (
     id uuid not null default public.uuid_generate_v7() primary key,
@@ -28,6 +34,10 @@ create table stage_field_changed (
     value text,
     unique (repository_id, field_id)
 );
+create index stage_field_changed_field_id_schema_name on stage_field_changed using hash (((field_id).schema_name));
+create index stage_field_changed_field_id_relation_name on stage_field_changed using hash (((field_id).relation_name));
+create index stage_field_changed_field_id_column_name on stage_field_changed using hash (((field_id).column_name));
+
 
 
 -------------------------------------------------
@@ -402,8 +412,8 @@ begin
         insert into delta.stage_row_added(repository_id, row_id, value)
         select repository_id, row_id, to_jsonb(x)
         from delta.tracked_row_added tra
-			join %1$I.%2$I x on %4$s
-		where
+            join %1$I.%2$I x on %4$s
+        where
             (tra.row_id).schema_name = %1$L and
             (tra.row_id).relation_name = %2$L and
             tra.repository_id=%L',
