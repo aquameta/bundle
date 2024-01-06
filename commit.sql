@@ -41,6 +41,7 @@ create function _commit(
         parent_commit_id uuid;
         first_commit boolean := false;
         start_time timestamp;
+        stage_row_relations meta.relation_id[];
     begin
         start_time := clock_timestamp();
 
@@ -83,11 +84,12 @@ create function _commit(
         )
         returning id into new_commit_id;
 
-        raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
 
         -- blob
+        raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
         select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra;
+
 
         -- commit_field_changed
         raise notice '  - Inserting commit_fields @ % ...', clock_timestamp() - start_time;
@@ -97,17 +99,25 @@ create function _commit(
             select row_id, (jsonb_each_text(value)).*, public.digest((jsonb_each_text(value)).value::text, 'sha256') as hash from delta.stage_row_added
         ) fields;
 
+
+        -- compute topo sort on commit's relations
+        raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
+        stage_row_relations := delta.topological_sort_stage(_repository_id);
+
+
         -- commit_row_added
         raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_added (commit_id, row_id, position)
         select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
         delete from delta.stage_row_added where repository_id = _repository_id;
 
+
         -- commit_row_deleted
         raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, 0 from delta.stage_row_deleted where repository_id = _repository_id;
         delete from delta.stage_row_deleted where repository_id = _repository_id;
+
 
     /*
         insert into commit_row_deleted
@@ -150,56 +160,180 @@ end;
 $$ language plpgsql;
 
 
---
--- topological_sort
--- ganked from https://wiki.postgresql.org/wiki/Topological_sort
---
 
-CREATE OR REPLACE FUNCTION topological_sort(_nodes int[], _edges public.hstore)
-RETURNS int[]
-LANGUAGE plpgsql
-AS $$
-DECLARE
-_L int[];
-_S int[];
-_n int;
-_all_ms text[];
-_m text;
-_n_m_edges int[];
-BEGIN
-_L := '{}';
-_S := ARRAY(
-    SELECT u.node
-    FROM unnest(_nodes) u(node)
-    WHERE (_edges->(u.node::text)) IS NULL
-);
-IF array_length(_S, 1) IS NULL THEN
-    RAISE EXCEPTION 'no nodes with no incoming edges in input';
-END IF;
+/*
+Objective:
 
-WHILE array_length(_S, 1) IS NOT NULL LOOP
-    _n := _S[1];
-    _S := _S[2:];
+- row-order for checkout
+- external dependencies and the rows/bundles that satisfy them if any
 
-    _L := array_append(_L, _n);
-    _all_ms := ARRAY(
-        SELECT each.key
-        FROM each(_edges)
-        WHERE (each.value)::int[] @> ARRAY[_n]
-    );
-    FOREACH _m IN ARRAY _all_ms LOOP
-        _n_m_edges := (_edges->_m)::int[];
-        IF _n_m_edges = ARRAY[_n] THEN
-            _S := array_append(_s, _m::int);
-            _edges := _edges - _m;
-        ELSE
-            _edges := _edges || public.hstore(_m, array_remove(_n_m_edges, _n)::text);
-        END IF;
-    END LOOP;
-END LOOP;
-IF _edges <> '' THEN
-    RAISE EXCEPTION 'input graph contains cycles';
-END IF;
-RETURN _L;
-END
-$$;
+
+Approach:
+- for each row:
+    - if is_meta(row_id)
+        - Use pg_depend to get the list of objects this object depends on
+        - Are those rows in this bundle?
+    - else (it's data)
+        - containing table, columns, and foreign keys
+            - tables: select distinct row_id::meta.relation_id
+            - columns: select .....?
+        - fk_dependency_rows:  What rows does it foreign key to?
+            - boolean external: Are those rows in this bundle?
+                - internal: affects order
+                - external: affects commit dependencies
+            - boolean deferrable: Is the foreign key deferrable?
+            - on_delete: casacade, set null, set default, do nothing
+1. Get the full list of dependant rows that rows on the stage have.  That could include:
+  - data: rows that these rows foreign key to
+  - data-tables: the tables and columns that the rows are in
+  - objects: for any meta stuff, the pg_depend object(s) that it depends on
+
+2. Determine whether or not this is an external dependency
+  - is the dependency in this bundle?
+    - no:
+      - data: row forien-keys to row not in this bundle
+      - data-tables: this row is in a table created by some other bundle, if any.  Which bundle?
+      - objects: a DDL object (non-table?) that
+    - yes
+
+*/
+
+create type delta.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
+create or replace function delta.topological_sort_stage( _repository_id uuid ) returns meta.relation_id[] as $$
+declare
+    start_time timestamp := clock_timestamp();
+    stage_row_relations meta.relation_id[];
+    edges delta.schema_edge[];
+    s meta.relation_id[];
+    l meta.relation_id[] = '{}';
+    n meta.relation_id;
+    m meta.relation_id;
+    m_edge delta.schema_edge;
+begin
+    -- stage_row_relations
+    raise debug '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
+    select array_agg(distinct row_id::meta.relation_id)
+        from delta.stage_row_added
+        where repository_id =  _repository_id
+    into stage_row_relations;
+
+
+    -- edges
+    raise debug '  - Building edges @ % ...', clock_timestamp() - start_time;
+    select array_agg(distinct row(srr,meta.relation_id(fk.to_schema_name, fk.to_table_name))::delta.schema_edge)
+    from meta.foreign_key fk
+        join unnest(stage_row_relations) srr on srr.schema_name = fk.schema_name and srr.name = fk.table_name
+    into edges;
+
+
+    -- s
+    raise debug '  - Building s @ % ...', clock_timestamp() - start_time;
+    select array_agg(distinct srr)
+    from unnest(stage_row_relations) as srr
+       left join unnest(edges) as edge on srr = edge.to_relation_id
+    where edge.to_relation_id is null
+    into s;
+    raise notice 's: %', s;
+
+
+    -- topo sort
+    raise debug '  - Topological sort @ % ...', clock_timestamp() - start_time;
+    raise notice E'\n----------\nl: %\ns: %\nn: %\nm: %,\nedges: %\n------------', l,s,n,m,edges;
+    while array_length(s, 1) > 0 loop
+        n := s[1];
+        s := s[2:];
+        l := array_append(l, n);
+        raise notice '  == removed n % from s', n;
+        raise notice '  == added n % to l %', n, l;
+
+        -- for each node m that n points to
+        for m_edge in ( select * from unnest(edges) e where e.from_relation_id = n )
+        loop
+            raise notice '  == loop m_edge %', m_edge;
+            m := m_edge.to_relation_id;
+            raise notice '  == m = %', m;
+            edges := array_remove(edges, m_edge);
+            raise notice '      ## removed edge % from edges %', m_edge, edges;
+            if (select count(*) from unnest(edges) edge where edge.to_relation_id = m) < 1 then
+                raise notice '      ## adding m % to s %', m, s;
+                s := array_append(s, m);
+            end if;
+        end loop;
+    raise notice E'----------\nl: %\ns: %\nn: %\nm: %,\nedges: %\n------------', l,s,n,m,edges;
+    end loop;
+    if array_length(edges, 1) > 0 then
+        raise exception 'Input graph contains cycles: %', edges;
+    end if;
+    return l;
+end
+$$ language plpgsql;
+
+
+
+
+/*
+
+failed attempt #20:
+
+create or replace function analyze_stage_deps( _repository_id uuid ) returns void as $$
+declare
+    start_time timestamp := clock_timestamp();
+
+    stage_row_relations jsonb;
+    r record;
+
+    s jsonb = '[]';
+    key text;
+    value jsonb;
+begin
+    -- stage_row relations as jsonb object keys, value is empty array
+    raise notice '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
+    select distinct jsonb_object_agg(row_id::meta.relation_id::text, '[]'::jsonb)
+        from delta.stage_row_added
+        where repository_id =  _repository_id
+    into stage_row_relations;
+
+    -- Add a foreign key object to the value array of stage_row_relations
+    raise notice '  - Building stage_row_fts @ % ...', clock_timestamp() - start_time;
+    for r in
+    select u.rel_key as rel_key, fk.from_column_ids, fk.to_column_ids
+        from jsonb_object_keys(stage_row_relations) u(rel_key)
+        left join meta.foreign_key fk on u.rel_key = fk.table_id::text
+    loop
+        -- if this relation doesn't foreign key to anything
+        if r.from_column_ids is null then
+            raise notice '% fks to NOTHING.', r.rel_key;
+
+        -- otherwise add the key to the stage_row_relations obj
+        else
+            stage_row_relations := jsonb_set(
+                stage_row_relations,
+                array[r.rel_key],
+                stage_row_relations->(r.rel_key) || jsonb_build_object(
+                    'relation_id', r.rel_key,
+                    'from_column_ids', r.from_column_ids,
+                    'to_column_ids', r.to_column_ids,
+                    'to_relation_id', (r.to_column_ids[1])::meta.relation_id::text
+                )
+            );
+        end if;
+    end loop;
+
+    raise notice 'stage_row_relations: %', jsonb_pretty(stage_row_relations);
+
+    -- build s
+    for r in
+        select srr.relation_id as from_relation_id, to_cols.props->>relation_id as to_relation_id
+        from jsonb_object_keys(stage_row_relations) srr(relation_id)
+            join jsonb_path_query(stage_row_relations,'$.*.*') to_cols(props)
+                on to_cols.props->>'relation_id' = (srr.relation_id)
+    loop
+        raise notice 'r: %', r;
+        raise notice 'r.from_relation_id: %', r.from_relation_id;
+        raise notice 'r.to_relation_id: %', r.to_relation_id;
+
+    end loop;
+
+end
+$$ language plpgsql;
+*/
