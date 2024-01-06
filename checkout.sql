@@ -70,13 +70,14 @@ begin
     -- TODO: single insert stmt per relation, smart dependency traversing etc
 
     for commit_row in
-        select commit_id, row_id from delta.commit_rows(_commit_id) r
-            -- join delta.commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
-        -- group by r.row_id, commit_id
+        select r.row_id, jsonb_object_agg((f.field_id).column_name, b.value) as fields
+        from delta.commit_rows(_commit_id) r
+            join delta.commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
+            join delta.blob on f.value_hash = b.hash
+        group by r.row_id
     loop
-        -- raise notice 'CHECKING OUT ROW: %', commit_row;
-        -- raise notice 'CHECKING OUT ROW_ID: %', commit_row.row_id;
-        perform delta._checkout_row(commit_row.row_id);
+        raise notice 'CHECKING OUT ROW: %', commit_row;
+        perform delta._checkout_row(commit_row.row_id, rel.fields);
     end loop;
 
     return format('Commit %s was checked out.', _commit_id);
@@ -84,11 +85,11 @@ end
 $$ language plpgsql;
 
 
-create function _checkout_row( row_id meta.row_id) returns void as $$
+create function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
 declare
     insert_stmt text;
 begin
-    raise notice '_checkout_row( % )', row_id;
+    raise notice '_checkout_row( %, % )', row_id, fields;
     return;
 end
 $$ language plpgsql;

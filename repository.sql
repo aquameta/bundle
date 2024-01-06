@@ -429,6 +429,7 @@ create materialized view head_commit_field as
 select r.id as repository_id, r.head_commit_id as commit_id, cf.field_id, cf.value_hash
 from delta.repository r, delta._commit_fields(r.head_commit_id) cf;
 
+
 create index head_commit_field_commit_id on head_commit_field(commit_id);
 -- create index head_commit_field_pkey on head_commit_field(field_id);
 -- create unique index head_commit_field_field_id_unique on head_commit_field(field_id);

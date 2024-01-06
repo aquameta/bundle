@@ -3,7 +3,7 @@ insert into delta.blob(value) values('hi mom');
 select results_eq(
     $$ select hash from delta.blob where value='hi mom' $$,
     $$ select digest('hi mom', 'sha256')::text; $$,
-	'Blob hash equals digest() output.'
+    'Blob hash equals digest() output.'
 );
 
 -----------------------------------------------------------
