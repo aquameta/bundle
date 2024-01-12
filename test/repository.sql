@@ -51,7 +51,7 @@ select ok(
 -----------------------------------------------------------
 
 select throws_ok(
-    'select delta.repository_delete(''org.example.parrot'')',
+    'perform delta.repository_delete(''org.example.parrot'')',
     'Repository with name org.example.parrot does not exist.',
     'repository_delete() fails when deleting non-existant repository'
 );

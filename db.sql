@@ -17,7 +17,7 @@ declare
     commit_rows_stmt text;
 begin
     if not delta._commit_exists( _commit_id ) then
-        raise warning 'db_commit_rows(): Commit with id % does not exist.', _commit_id;
+        -- raise warning 'db_commit_rows(): Commit with id % does not exist.', _commit_id;
         return;
     end if;
 

@@ -324,7 +324,7 @@ $$ language sql;
 
 
 --
--- stage_row
+-- stage_rows
 --
 
 create or replace function stage_rows( _repository_id uuid ) returns setof row_exists as $$
@@ -374,14 +374,14 @@ $$ language sql;
 -- track_relation_rows
 --
 
-create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns setof uuid as $$
+create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns void /* setof uuid */ as $$
     insert into delta.tracked_row_added(repository_id, row_id)
     select repository_id, row_id
     from delta.untracked_rows(_relation_id) row_id
-    returning id
+--    returning id
 $$ language sql;
 
-create or replace function track_relation_rows( repository_name text, schema_name text, relation_name text ) returns setof uuid as $$
+create or replace function track_relation_rows( repository_name text, schema_name text, relation_name text ) returns void /* setof uuid */ as $$
     select delta._track_relation_rows(delta.repository_id(repository_name), meta.relation_id(schema_name, relation_name));
 $$ language sql;
 

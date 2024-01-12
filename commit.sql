@@ -39,6 +39,7 @@ create function _commit(
     declare
         new_commit_id uuid;
         parent_commit_id uuid;
+        manifest jsonb := '{}';
         first_commit boolean := false;
         start_time timestamp;
         stage_row_relations meta.relation_id[];
@@ -68,19 +69,34 @@ create function _commit(
 
         raise notice 'commit()';
 
+
+/*
+        manifest := select jsonb_agg(
+            jsonb_build_object(
+                'schema_name', (s.row_id).schema_name,
+                'relation_name', (s.row_id).relation_name,
+                'pk_column_name', (s.row_id).pk_column_names,
+                'columns', (s.row_id).schema_name,
+        ) from delta.stage_rows(_repository_id) s;
+*/
+
+
         -- create the commit
         insert into delta.commit (
             repository_id,
+            parent_id,
+            manifest,
             message,
             author_name,
-            author_email,
-            parent_id
+            author_email
         ) values (
             _repository_id,
+            parent_commit_id,
+            manifest,
             message,
             author_name,
-            author_email,
-            parent_commit_id
+            author_email
+
         )
         returning id into new_commit_id;
 
@@ -100,7 +116,7 @@ create function _commit(
         ) fields;
 
 
-        -- compute topo sort on commit's relations
+        -- topo sort
         raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
         stage_row_relations := delta.topological_sort_stage(_repository_id);
 
@@ -108,22 +124,26 @@ create function _commit(
         -- commit_row_added
         raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_added (commit_id, row_id, position)
-        select new_commit_id, row_id, 0 from delta.stage_row_added where repository_id = _repository_id;
+        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
+        from delta.stage_row_added
+        where repository_id = _repository_id;
+
         delete from delta.stage_row_added where repository_id = _repository_id;
 
 
         -- commit_row_deleted
         raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
-        select new_commit_id, row_id, 0 from delta.stage_row_deleted where repository_id = _repository_id;
+        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
+        from delta.stage_row_deleted
+        where repository_id = _repository_id;
+
         delete from delta.stage_row_deleted where repository_id = _repository_id;
 
 
     /*
-        insert into commit_row_deleted
         insert into commit_field_changed
         insert into commit_field_*
-        insert into blob
     */
 
         -- update head pointer, checkout pointer
@@ -233,36 +253,28 @@ begin
        left join unnest(edges) as edge on srr = edge.to_relation_id
     where edge.to_relation_id is null
     into s;
-    raise notice 's: %', s;
 
 
     -- topo sort
     raise debug '  - Topological sort @ % ...', clock_timestamp() - start_time;
-    raise notice E'\n----------\nl: %\ns: %\nn: %\nm: %,\nedges: %\n------------', l,s,n,m,edges;
     while array_length(s, 1) > 0 loop
         n := s[1];
         s := s[2:];
         l := array_append(l, n);
-        raise notice '  == removed n % from s', n;
-        raise notice '  == added n % to l %', n, l;
 
         -- for each node m that n points to
         for m_edge in ( select * from unnest(edges) e where e.from_relation_id = n )
         loop
-            raise notice '  == loop m_edge %', m_edge;
             m := m_edge.to_relation_id;
-            raise notice '  == m = %', m;
             edges := array_remove(edges, m_edge);
-            raise notice '      ## removed edge % from edges %', m_edge, edges;
             if (select count(*) from unnest(edges) edge where edge.to_relation_id = m) < 1 then
-                raise notice '      ## adding m % to s %', m, s;
                 s := array_append(s, m);
             end if;
         end loop;
-    raise notice E'----------\nl: %\ns: %\nn: %\nm: %,\nedges: %\n------------', l,s,n,m,edges;
     end loop;
     if array_length(edges, 1) > 0 then
         raise exception 'Input graph contains cycles: %', edges;
+        -- TODO: break cycles if possible w/ deferrable fks?
     end if;
     return l;
 end
