@@ -3,19 +3,6 @@
 ------------------------------------------------------------------------------
 
 --
--- repository
---
-
-create table repository (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    name text not null check(name != ''),
-    -- head_commit_id uuid, -- (circular, added later)
-    -- checkout_commit_id uuid, -- (circular, added later)
-    unique(name)
-);
-
-
---
 -- blob
 --
 
@@ -54,27 +41,14 @@ create trigger blob_hash_update
 
 create table commit (
     id uuid not null default public.uuid_generate_v7() primary key,
-    repository_id uuid not null references repository(id),
     parent_id uuid references commit(id), --null means first commit
+    manifest jsonb not null,
     author_name text not null default '',
     author_email text not null default '',
     message text not null default ''
 );
 -- TODO: check constraint for only one null parent_id per repo
 -- TODO: i am not my own grandpa
-
---
--- add circular dependencies
---
-
-alter table repository add head_commit_id uuid references commit(id) on delete set null;
-alter table repository add checkout_commit_id uuid references commit(id) on delete set null;
--- deferred, so circular data can be loaded within a transaction
-alter table repository alter constraint repository_checkout_commit_id_fkey deferrable initially
-deferred;
-alter table repository alter constraint repository_head_commit_id_fkey deferrable initially deferred;
-alter table repository add constraint repository_head_commit_id_unique unique(head_commit_id);
-alter table repository add constraint repository_checkout_commit_id_unique unique(checkout_commit_id);
 
 
 --
@@ -112,6 +86,21 @@ create table commit_field_changed (
 );
 -- create index commit_field_changed_field_id_hash_index on commit_field_changed using hash(field_id);
 -- create index commit_field_changed_field_id_hash_index on commit_field_changed(field_id);
+
+--
+-- repository
+--
+
+create table repository (
+    id uuid not null default public.uuid_generate_v7() primary key,
+    name text not null unique check(name != ''),
+    head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
+    checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred
+);
+
+-- circular fk
+alter table commit add column repository_id uuid not null references repository(id);
+
 
 ------------------------------------------------------------------------------
 -- FUNCTIONS
@@ -203,7 +192,8 @@ create or replace function repository_delete( repository_name text ) returns voi
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        delete from delta.repository where name = repository_name;
+        perform delta._repository_delete(delta.repository_id(repository_name));
+
     end;
 $$ language plpgsql;
 
@@ -269,7 +259,7 @@ begin
     if not is_cached or false then
         return query select * from delta._commit_rows(_commit_id, _relation_id_filter);
     else
-        return query select hcr.commit_id, hcr.row_id
+        return query select hcr.commit_id, hcr.row_id --, position
         from delta.head_commit_row hcr
         where hcr.row_id::meta.relation_id =
             case
