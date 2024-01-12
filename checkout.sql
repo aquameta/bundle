@@ -75,6 +75,7 @@ begin
             join delta.commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
             join delta.blob on f.value_hash = b.hash
         group by r.row_id
+        order by r.position
     loop
         raise notice 'CHECKING OUT ROW: %', commit_row;
         perform delta._checkout_row(commit_row.row_id, rel.fields);
@@ -84,6 +85,34 @@ begin
 end
 $$ language plpgsql;
 
+
+create or replace function checkout( repository_name text ) returns void as $$
+declare
+    _head_commit_id uuid;
+    _repository_id uuid;
+begin
+    _repository_id := delta.repository_id(repository_name);
+    if _repository_id is null then
+        raise notice 'Repository % does not exist.', repository_name;
+    end if;
+
+    if not delta._repository_has_commits(_repository_id) then
+        raise notice 'Repsitory % has no commits.', repository_name;
+    end if;
+
+    _head_commit_id = delta._head_commit_id(_repository_id);
+    if _repository_id is null then
+        raise notice 'Repository with name % has no head_commit_id.', repository_name;
+    end if;
+
+    select delta._checkout(_head_commit_id);
+end
+$$ language plpgsql;
+
+
+/*
+ * _checkout_row()
+ */
 
 create function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
 declare
