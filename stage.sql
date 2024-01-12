@@ -10,7 +10,6 @@ create table stage_row_added (
     id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id) on delete cascade,
     row_id meta.row_id, -- TODO: check row_id.pk_values contains no nulls
-    value jsonb,
     unique (repository_id, row_id)
 );
 create index stage_row_added_row_id_schema_name on stage_row_added using hash(((row_id).schema_name));
@@ -31,7 +30,6 @@ create table stage_field_changed (
     id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id),
     field_id meta.field_id,
-    value text,
     unique (repository_id, field_id)
 );
 create index stage_field_changed_field_id_schema_name on stage_field_changed using hash (((field_id).schema_name));
@@ -60,52 +58,23 @@ create or replace function _staged_row_add( _repository_id uuid, _row_id meta.ro
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
 
+        -- check that it's not already staged
         if meta.row_exists(meta.row_id('delta','stage_row_added', 'row_id', _row_id::text)) then
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
 
--- TODO: make sure the row is not already in the repository, or tracked by any other repo
+        -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
         -- untrack
         perform delta._tracked_row_remove(_row_id);
 
         -- stage
-        execute format('
-            insert into delta.stage_row_added (repository_id, row_id, value)
-            select %L, %L, to_jsonb(x)
-            from %I.%I x where %s
-            returning id',
-            _repository_id,
-            _row_id,
-            _row_id.schema_name,
-            _row_id.relation_name,
-            meta._pk_stmt(_row_id, '%1$I = %2$L')
-        ) into stage_row_added_id;
-
+        insert into delta.stage_row_added(repository_id, row_id) values (_repository_id, _row_id)
+        returning id into stage_row_added_id;
 
         return stage_row_added_id;
     end;
 $$ language plpgsql;
-
-create or replace function staged_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns uuid as $$
-    declare
-        staged_row_added_id uuid;
-    begin
-        -- assert repository exists
-        if not delta.repository_exists(repository_name) then
-            raise exception 'Repository with name % does not exist.', repository_name;
-        end if;
-
-        select delta._staged_row_add(
-            delta.repository_id(repository_name),
-            meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
-        ) into staged_row_added_id;
-
-        return staged_row_added_id;
-    end;
-$$ language plpgsql;
-
 
 create or replace function staged_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
@@ -126,6 +95,13 @@ returns uuid as $$
         return staged_row_added_id;
     end;
 $$ language plpgsql;
+
+-- helper for single column pks
+create or replace function staged_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+returns uuid as $$
+    select delta.staged_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
+$$ language sql;
+
 
 
 --
@@ -267,22 +243,6 @@ select * from (
 $$ language sql;
 
 
-create or replace function _rel_row_template( relation_generator_stmt text, action_stmt text, delimiter text ) returns text as $$
-declare
-    rel meta.relation_id;
-    action_stmts text[];
-    i integer = 0;
-begin
-    for rel in execute relation_generator_stmt loop
-        action_stmts := array_append(action_stmts, format(action_stmt, rel.schema_name, rel.name, i));
-        i = i + 1;
-    end loop;
-
-    return array_to_string(action_stmts, delimiter);
-end
-$$ language plpgsql;
-
-
 --
 -- tracked_rows
 --
@@ -327,7 +287,8 @@ $$ language sql;
 -- stage_rows
 --
 
-create or replace function stage_rows( _repository_id uuid ) returns setof row_exists as $$
+create type stage_row as (row_id meta.row_id, new_row boolean);
+create or replace function stage_rows( _repository_id uuid ) returns setof stage_row as $$
     select row_id, false as new_row from (
         -- head_commit_row
         select hcr.row_id
@@ -395,41 +356,9 @@ declare
     rel record;
     stmt text;
 begin
-   --  select delta._staged_row_add(repository_id, row_id) from delta.tracked_row_added tra where tra.repository_id = _repository_id;
-   -- ^^ SLOW! Speed up by: bypass row_exists, one insert stmt per relation
-
-    -- all relations in tracked_row_added
-    for rel in
-        select distinct
-            (tra.row_id).schema_name,
-            (tra.row_id).relation_name,
-            (tra.row_id).pk_column_names
-        from delta.tracked_row_added tra
-        where repository_id = _repository_id
-    loop
-        -- insert the row with its current value into stage_row_added
-        stmt := format('
-        insert into delta.stage_row_added(repository_id, row_id, value)
-        select repository_id, row_id, to_jsonb(x)
-        from delta.tracked_row_added tra
-            join %1$I.%2$I x on %4$s
-        where
-            (tra.row_id).schema_name = %1$L and
-            (tra.row_id).relation_name = %2$L and
-            tra.repository_id=%L',
-            rel.schema_name,
-            rel.relation_name,
-            _repository_id,
-            meta._pk_stmt(
-                rel.pk_column_names,
-                rel.pk_column_names, -- no values, not needed
-                'x.%1$I::text = (tra.row_id).pk_values[%3$s]', ' and '
-            )
-        );
-
-        raise debug 'stmt: %', stmt;
-        execute stmt;
-    end loop;
+    insert into delta.stage_row_added (repository_id, row_id)
+    select repository_id, row_id from delta.tracked_row_added
+    where repository_id = _repository_id;
 
     -- delete all tracked rows for this repo
     delete from delta.tracked_row_added
