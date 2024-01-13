@@ -11,7 +11,7 @@ declare
         r record;
         pk_comparison_stmt text;
 begin
-    -- TODO: check for uncommited changes?
+    -- TODO: check for uncommitted changes?
     -- TODO: there's a whole dependency chain to follow here.
     -- TODO: speed this up by grouping by relation, one delete stmt per relation
     -- TODO: set repo.checkout_commit_id to null?  probably.
@@ -57,7 +57,7 @@ begin
 
     -- repo has no uncommitted changes
     if delta._repository_has_uncommitted_changes(_repository_id) then
-        raise exception 'Repository % has uncommited changes, checkout() cannot be performed.', delta.repository_name(_repository_id);
+        raise exception 'Repository % has uncommitted changes, checkout() cannot be performed.', delta.repository_name(_repository_id);
     end if;
 
     -- if repo is already checked out, then delete it
@@ -97,7 +97,7 @@ begin
     end if;
 
     if not delta._repository_has_commits(_repository_id) then
-        raise notice 'Repsitory % has no commits.', repository_name;
+        raise notice 'Repository % has no commits.', repository_name;
     end if;
 
     _head_commit_id = delta._head_commit_id(_repository_id);

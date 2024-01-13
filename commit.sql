@@ -202,7 +202,7 @@ Approach:
                 - internal: affects order
                 - external: affects commit dependencies
             - boolean deferrable: Is the foreign key deferrable?
-            - on_delete: casacade, set null, set default, do nothing
+            - on_delete: cascade, set null, set default, do nothing
 1. Get the full list of dependant rows that rows on the stage have.  That could include:
   - data: rows that these rows foreign key to
   - data-tables: the tables and columns that the rows are in
@@ -211,7 +211,7 @@ Approach:
 2. Determine whether or not this is an external dependency
   - is the dependency in this bundle?
     - no:
-      - data: row forien-keys to row not in this bundle
+      - data: row foreign-keys to row not in this bundle
       - data-tables: this row is in a table created by some other bundle, if any.  Which bundle?
       - objects: a DDL object (non-table?) that
     - yes

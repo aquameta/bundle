@@ -137,7 +137,7 @@ select row_eq(
 ---------------------------------------
 -- stage track rows
 ---------------------------------------
-select delta.staged_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
+select delta.stage_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
     $$ select delta_test.count_diff() $$,

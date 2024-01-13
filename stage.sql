@@ -43,10 +43,10 @@ create index stage_field_changed_field_id_column_name on stage_field_changed usi
 -------------------------------------------------
 
 --
--- staged_row_add()
+-- stage_row_add()
 --
 
-create or replace function _staged_row_add( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         stage_row_added_id uuid;
@@ -76,10 +76,10 @@ create or replace function _staged_row_add( _repository_id uuid, _row_id meta.ro
     end;
 $$ language plpgsql;
 
-create or replace function staged_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
     declare
-        staged_row_added_id uuid;
+        stage_row_added_id uuid;
     begin
 
         -- assert repository exists
@@ -87,30 +87,30 @@ returns uuid as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._staged_row_add(
+        select delta._stage_row_add(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
-        ) into staged_row_added_id;
+        ) into stage_row_added_id;
 
-        return staged_row_added_id;
+        return stage_row_added_id;
     end;
 $$ language plpgsql;
 
 -- helper for single column pks
-create or replace function staged_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
-    select delta.staged_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
+    select delta.stage_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
 $$ language sql;
 
 
 
 --
--- staged_row_remove()
+-- stage_row_remove()
 --
 
-create or replace function _staged_row_remove( _row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row_remove( _row_id meta.row_id ) returns uuid as $$
     declare
-        staged_row_added_id uuid;
+        stage_row_added_id uuid;
         row_exists boolean;
     begin
 
@@ -121,20 +121,20 @@ create or replace function _staged_row_remove( _row_id meta.row_id ) returns uui
         end if;
 
         delete from delta.stage_row_added sra where sra.row_id = _row_id
-        returning id into staged_row_added_id;
+        returning id into stage_row_added_id;
 
-        return staged_row_added_id;
+        return stage_row_added_id;
     end;
 $$ language plpgsql;
 
-create or replace function staged_row_remove( schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function stage_row_remove( schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
-    select delta._staged_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
+    select delta._stage_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
 
-create or replace function staged_row_remove( schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function stage_row_remove( schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
-    select delta._staged_row_remove( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
+    select delta._stage_row_remove( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
 $$ language sql;
 
 

@@ -35,7 +35,7 @@ select isa_ok(
 select delta.tracked_row_add('org.opensourceshakespeare.db', 'shakespeare', 'character', 'id', id::text)
 from shakespeare.character where name ilike 'b%' order by name limit 1;
 
-select delta.staged_row_add('org.opensourceshakespeare.db', 'shakespeare', 'character', 'id', id::text)
+select delta.stage_row_add('org.opensourceshakespeare.db', 'shakespeare', 'character', 'id', id::text)
 from shakespeare.character where name ilike 'b%' order by name limit 1;
 
 select delta.commit('org.opensourceshakespeare.db', 'Second commit', 'Joe User', 'joe@example.com');
