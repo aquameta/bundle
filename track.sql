@@ -129,7 +129,6 @@ $$ language plpgsql;
 create or replace function _tracked_row_remove( _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
-        exists boolean;
     begin
         delete from delta.tracked_row_added tra where tra.row_id = _row_id
         returning id into tracked_row_id;

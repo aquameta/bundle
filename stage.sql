@@ -235,7 +235,7 @@ select * from (
     select d.row_id from delta.stage_row_deleted d
     union
     select row_id from delta.head_commit_row row_id
-);
+) r;
 $$ language sql;
 
 

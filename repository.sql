@@ -392,7 +392,7 @@ returns setof field_hash as $$
                 else _relation_id_filter
             end
         order by fc.field_id, a.position
-    ) where change_type != 'delete';
+    ) c where change_type != 'delete';
 $$ language sql;
 
 

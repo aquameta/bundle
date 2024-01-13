@@ -64,8 +64,6 @@ declare
     old_count integer;
     _count integer;
     rel record;
-    diff_rel text[];
-    diff_count integer[];
     diff public.hstore := ''::public.hstore;
 begin
     for rel in

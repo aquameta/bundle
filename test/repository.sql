@@ -45,7 +45,7 @@ select ok(
 
 select ok(
     not delta.repository_exists('org.example.banana'),
-    'repository_exists() does not find a non-existant repository'
+    'repository_exists() does not find a non-existent repository'
 );
 
 -----------------------------------------------------------
@@ -53,7 +53,7 @@ select ok(
 select throws_ok(
     'perform delta.repository_delete(''org.example.parrot'')',
     'Repository with name org.example.parrot does not exist.',
-    'repository_delete() fails when deleting non-existant repository'
+    'repository_delete() fails when deleting non-existent repository'
 );
 
 select delta.repository_delete('org.example.test');
