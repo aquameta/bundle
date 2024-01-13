@@ -48,9 +48,7 @@ create index stage_field_changed_field_id_column_name on stage_field_changed usi
 
 create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
-        tracked_row_id uuid;
         stage_row_added_id uuid;
-        is_tracked boolean;
     begin
 
         -- assert repository exists
@@ -144,9 +142,7 @@ $$ language sql;
 
 create or replace function _stage_row_delete( repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
-        tracked_row_id uuid;
         stage_row_deleted_id uuid;
-        is_tracked boolean;
     begin
 
         -- assert repository exists
@@ -352,9 +348,6 @@ $$ language sql;
 --
 
 create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
-declare
-    rel record;
-    stmt text;
 begin
     insert into delta.stage_row_added (repository_id, row_id)
     select repository_id, row_id from delta.tracked_row_added

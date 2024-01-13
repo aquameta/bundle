@@ -57,7 +57,7 @@ begin
 
     -- repo has no uncommitted changes
     if delta._repository_has_uncommitted_changes(_repository_id) then
-        raise exception 'Repository % has uncommitted changes, checkout() cannot be performed.', delta.repository_name(_repository_id);
+        raise exception 'Repository % has uncommitted changes, checkout() cannot be performed.', delta._repository_name(_repository_id);
     end if;
 
     -- if repo is already checked out, then delete it

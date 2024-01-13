@@ -41,7 +41,6 @@ $$ language sql;
 create or replace function _tracked_row_add( repository_id uuid, row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
-        exists boolean;
     begin
 
         /*
@@ -148,7 +147,7 @@ returns uuid as $$
     select delta._tracked_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
 
-create or replace function tracked_row_remove( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function tracked_row_remove( schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
     select delta._tracked_row_remove( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
 $$ language sql;

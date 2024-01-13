@@ -229,7 +229,7 @@ create or replace function _repository_has_uncommitted_changes( _repository_id u
         changes_count integer;
         is_checked_out boolean;
     begin
-        -- if it isn't checked out, it doesn't have uncommitted hanges
+        -- if it isn't checked out, it doesn't have uncommitted changes
         select (checkout_commit_id is not null) from delta.repository where id=_repository_id
         into is_checked_out;
 
@@ -252,7 +252,7 @@ returns table(commit_id uuid, row_id meta.row_id) as $$
 declare
     is_cached boolean;
 begin
-    select into is_cached exists (select 1 from delta.head_commit_row hcr where hcr.commit_id = _commit_id limit 1);
+    select into is_cached exists (select 1 from delta.head_commit_row hcr where hcr.commit_id = _commit_id);
 
     raise debug 'commit_rows(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
 
@@ -351,7 +351,7 @@ returns setof field_hash as $$
 declare
     is_cached boolean;
 begin
-    select into is_cached exists (select 1 from delta.head_commit_field hcf where commit_id = _commit_id limit 1);
+    select into is_cached exists (select 1 from delta.head_commit_field hcf where commit_id = _commit_id);
 
     raise debug 'commit_fields(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
 
