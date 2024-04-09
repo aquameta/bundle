@@ -94,12 +94,14 @@ create table commit_field_changed (
 create table repository (
     id uuid not null default public.uuid_generate_v7() primary key,
     name text not null unique check(name != ''),
+    stage_commit_id uuid not null unique references commit(id) deferrable initially deferred, -- there is always a stage, but because the ref is circular we make it deferrable
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred
 );
+-- TODO: stage_commit can't be checkout_commit or head_commit
 
 -- circular fk
-alter table commit add column repository_id uuid not null references repository(id);
+alter table commit add column repository_id uuid /* not null FIXME why is deferrable not working?? */ references repository(id) deferrable initially deferred;
 
 
 ------------------------------------------------------------------------------
@@ -125,6 +127,19 @@ $$ stable language sql;
 
 
 --
+-- stage_commit_id()
+--
+
+create or replace function _stage_commit_id( repository_id uuid ) returns uuid as $$
+    select stage_commit_id from delta.repository where id=repository_id;
+$$ stable language sql;
+
+create or replace function stage_commit_id( repository_name text ) returns uuid as $$
+    select stage_commit_id from delta.repository where name=repository_name;
+$$ stable language sql;
+
+
+--
 -- head_commit_id()
 --
 
@@ -137,12 +152,17 @@ create or replace function head_commit_id( repository_name text ) returns uuid a
 $$ stable language sql;
 
 
+
 --
--- _checkout_commit_id()
+-- checkout_commit_id()
 --
 
-create or replace function _checkout_commit_id( repository_name text ) returns uuid as $$
-    select head_commit_id from delta.repository where name=repository_name;
+create or replace function _checkout_commit_id( repository_id uuid ) returns uuid as $$
+    select checkout_commit_id from delta.repository where id=repository_id;
+$$ stable language sql;
+
+create or replace function checkout_commit_id( repository_name text ) returns uuid as $$
+    select checkout_commit_id from delta.repository where name=repository_name;
 $$ stable language sql;
 
 
@@ -152,7 +172,8 @@ $$ stable language sql;
 
 create or replace function repository_create( repository_name text ) returns uuid as $$
 declare
-    repository_id uuid;
+    _repository_id uuid;
+    _stage_commit_id uuid;
 begin
     if repository_name = '' then
         raise exception 'Repository name cannot be empty string.';
@@ -162,8 +183,16 @@ begin
         raise exception 'Repository name cannot be null.';
     end if;
 
-    insert into delta.repository (name) values (repository_name) returning id into repository_id;
-    return repository_id;
+    -- create the repo's stage_commit
+    insert into delta.commit (manifest) values ('{}'::jsonb) returning id into _stage_commit_id;
+
+    -- create repository
+    insert into delta.repository (name, stage_commit_id) values (repository_name, _stage_commit_id) returning id into _repository_id;
+
+    -- point stage_commit at repository
+    update delta.commit set repository_id=_repository_id where id=_stage_commit_id;
+
+    return _repository_id;
 exception
     when unique_violation then
         raise exception 'Repository with name % already exists.', repository_name;
