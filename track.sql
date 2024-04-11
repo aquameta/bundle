@@ -38,15 +38,16 @@ $$ language sql;
 -- tracked_row_add()
 --
 
-create or replace function _tracked_row_add( repository_id uuid, row_id meta.row_id ) returns uuid as $$
+create or replace function _tracked_row_add( _repository_id uuid, row_id meta.row_id ) returns void as $$
     declare
         tracked_row_id uuid;
+        _stage_commit_id uuid;
     begin
 
         /*
         -- assert repository exists
-        if not delta._repository_exists(repository_id) then
-            raise exception 'Repository with id % does not exist.', repository_id;
+        if not delta._repository_exists(_repository_id) then
+            raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
         */
 
@@ -64,14 +65,10 @@ create or replace function _tracked_row_add( repository_id uuid, row_id meta.row
 
         -- TODO: assert row is not already in a repository's head commit or tracked or staged?
 
-        insert into delta.tracked_row_added (repository_id, row_id)
-        select id, row_id from delta.repository r where r.id = repository_id
-        returning id into tracked_row_id;
+        select delta._stage_commit_id(_repository_id) into _stage_commit_id;
 
-        return tracked_row_id;
+        update delta.commit set manifest ['tracked_rows_added'] = manifest['tracked_rows_added'] || to_jsonb(row_id::text) where id = _stage_commit_id;
     exception
-        when unique_violation then
-            raise exception 'Row with row_id % is already tracked.', row_id;
         when null_value_not_allowed then
             raise exception 'Repository with id % does not exist.', repository_id;
         when others then raise;
@@ -80,7 +77,7 @@ $$ language plpgsql;
 
 
 create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-returns uuid as $$
+returns void as $$
     declare
         tracked_row_id uuid;
     begin
@@ -90,21 +87,17 @@ returns uuid as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._tracked_row_add(
+        perform delta._tracked_row_add(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
-        ) into tracked_row_id;
-
-        return tracked_row_id;
+        );
     end;
 $$ language plpgsql;
 
 
 
 create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns uuid as $$
-    declare
-        tracked_row_id uuid;
+returns void as $$
     begin
 
         -- assert repository exists
@@ -112,12 +105,10 @@ returns uuid as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._tracked_row_add(
+        perform delta._tracked_row_add(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
-        ) into tracked_row_id;
-
-        return tracked_row_id;
+        );
     end;
 $$ language plpgsql;
 

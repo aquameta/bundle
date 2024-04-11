@@ -101,7 +101,7 @@ create table repository (
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
 -- circular fk
-alter table commit add column repository_id uuid /* not null FIXME why is deferrable not working?? */ references repository(id) deferrable initially deferred;
+alter table commit add column repository_id uuid /* not null FIXME why is deferrable not working?? */ references repository(id) on delete cascade deferrable initially deferred;
 
 
 ------------------------------------------------------------------------------
@@ -184,7 +184,16 @@ begin
     end if;
 
     -- create the repo's stage_commit
-    insert into delta.commit (manifest) values ('{}'::jsonb) returning id into _stage_commit_id;
+    insert into delta.commit (manifest) values
+    ('{
+        "tracked_rows_added": [
+        ],
+        "stage_rows_added": [
+        ],
+        "commit_rows": [
+        ]
+    }')
+    returning id into _stage_commit_id;
 
     -- create repository
     insert into delta.repository (name, stage_commit_id) values (repository_name, _stage_commit_id) returning id into _repository_id;

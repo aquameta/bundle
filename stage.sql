@@ -46,7 +46,7 @@ create index stage_field_changed_field_id_column_name on stage_field_changed usi
 -- stage_row_add()
 --
 
-create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
         stage_row_added_id uuid;
     begin
@@ -67,15 +67,13 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
         perform delta._tracked_row_remove(_row_id);
 
         -- stage
-        insert into delta.stage_row_added(repository_id, row_id) values (_repository_id, _row_id)
-        returning id into stage_row_added_id;
-
-        return stage_row_added_id;
+        update delta.commit set manifest ['staged_rows_added'] = manifest['staged_rows_added'] || to_jsonb(row_id::text)
+        where id = _stage_commit_id;
     end;
 $$ language plpgsql;
 
 create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-returns uuid as $$
+returns void as $$
     declare
         stage_row_added_id uuid;
     begin
@@ -89,14 +87,11 @@ returns uuid as $$
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
         ) into stage_row_added_id;
-
-        return stage_row_added_id;
     end;
 $$ language plpgsql;
 
 -- helper for single column pks
-create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns uuid as $$
+create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text ) returns void as $$
     select delta.stage_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
 $$ language sql;
 
@@ -106,7 +101,7 @@ $$ language sql;
 -- stage_row_remove()
 --
 
-create or replace function _stage_row_remove( _row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row_remove( _row_id meta.row_id ) returns void as $$
     declare
         stage_row_added_id uuid;
         row_exists boolean;
@@ -120,18 +115,16 @@ create or replace function _stage_row_remove( _row_id meta.row_id ) returns uuid
 
         delete from delta.stage_row_added sra where sra.row_id = _row_id
         returning id into stage_row_added_id;
-
-        return stage_row_added_id;
     end;
 $$ language plpgsql;
 
 create or replace function stage_row_remove( schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns uuid as $$
+returns void as $$
     select delta._stage_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
 
 create or replace function stage_row_remove( schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-returns uuid as $$
+returns void as $$
     select delta._stage_row_remove( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
 $$ language sql;
 
