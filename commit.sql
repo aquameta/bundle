@@ -40,9 +40,10 @@ create function _commit(
         new_commit_id uuid;
         parent_commit_id uuid;
         manifest jsonb := '{}';
+        stage_row_relations meta.relation_id[];
+
         first_commit boolean := false;
         start_time timestamp;
-        stage_row_relations meta.relation_id[];
     begin
         start_time := clock_timestamp();
 

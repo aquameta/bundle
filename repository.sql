@@ -55,6 +55,9 @@ create table commit (
 -- commit_row
 --
 
+/*
+moved to JSONB
+
 create table commit_row_added (
     id uuid not null default public.uuid_generate_v7() primary key,
     commit_id uuid not null references commit(id),
@@ -86,6 +89,7 @@ create table commit_field_changed (
 );
 -- create index commit_field_changed_field_id_hash_index on commit_field_changed using hash(field_id);
 -- create index commit_field_changed_field_id_hash_index on commit_field_changed(field_id);
+*/
 
 --
 -- repository
@@ -247,6 +251,7 @@ $$ language plpgsql;
 
 
 -- cache checker, divert to head_commit_row mat view if possible
+/*
 create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns table(commit_id uuid, row_id meta.row_id) as $$
 declare
@@ -272,6 +277,7 @@ begin
     end if;
 end
 $$ language plpgsql;
+*/
 
 
 
@@ -291,6 +297,8 @@ recursive cte, traverses commit ancestry, grabbing added rows and removing rows 
 -- If I do table(row_id meta.row_id) it thinks I'm passing in a type and returns all fields of row_id as separate columns.
 -- If I do setof meta.row_id it does the same.
 -- Adding (useless) commit_id to return type to fix
+
+/*
 create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
@@ -314,10 +322,10 @@ create or replace function _commit_rows( _commit_id uuid, _relation_id meta.rela
     -- WIP
     select
         _commit_id,
-        ra.row_id /* as added_row_id,
+        ra.row_id / * as added_row_id,
         ra.newest_position as added_position,
         rd.row_id as deleted_row_id,
-        rd.newest_position */
+        rd.newest_position * /
     from rows_added ra
         left join rows_deleted rd on rd.row_id = ra.row_id
     where (
@@ -335,7 +343,9 @@ create or replace function _commit_rows( _commit_id uuid, _relation_id meta.rela
                 when _relation_id is not null then _relation_id
                 else (ra.row_id)::meta.relation_id
             end;
-$$ language sql;
+    return;
+$$ language plpgsql;
+*/
 
 
 --
@@ -345,6 +355,9 @@ $$ language sql;
 -- a field and it's value hash
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
+
+/*
+-- TODO: disabling, don't use mat views for now
 -- cache checker, divert to head_commit_field mat view if possible
 create or replace function commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
@@ -362,9 +375,13 @@ begin
     end if;
 end
 $$ language plpgsql;
+*/
 
 
 
+
+/*
+REFACTOR THIS
 
 -- naive SQL function, no check on mat views
 create or replace function _commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
@@ -394,6 +411,7 @@ returns setof field_hash as $$
         order by fc.field_id, a.position
     ) c where change_type != 'delete';
 $$ language sql;
+*/
 
 
 --
@@ -402,7 +420,8 @@ $$ language sql;
 
 -- NOTE: split these up into separate views per-repository, somehow?
 
-
+/*
+moved to JSONB
 create materialized view head_commit_row as
 select r.id as repository_id, r.head_commit_id as commit_id, row_id
 from delta.repository r, delta._commit_rows(r.head_commit_id) row_id;
@@ -423,22 +442,25 @@ from delta.repository r, delta._commit_fields(r.head_commit_id) cf;
 create index head_commit_field_commit_id on head_commit_field(commit_id);
 -- create index head_commit_field_pkey on head_commit_field(field_id);
 -- create unique index head_commit_field_field_id_unique on head_commit_field(field_id);
+*/
 
 
 --
 -- garbage_collect()
 --
 
+/*
 create or replace function garbage_collect() returns setof text as $$
     delete from delta.blob
     using (
         select b.hash as bad_hash from delta.blob b
-            left join delta.commit_field_changed cfc on cfc.value_hash = b.hash
+            left join GONE: delta.commit_field_changed cfc on cfc.value_hash = b.hash
         where  cfc.value_hash is null
     )
     where hash = bad_hash
     returning bad_hash
 $$ language sql;
+*/
 
 
 /*

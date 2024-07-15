@@ -26,6 +26,16 @@ create index stage_row_deleted_row_id_schema_name on stage_row_deleted using has
 create index stage_row_deleted_row_id_relation_name on stage_row_deleted using hash (((row_id).relation_name));
 
 
+create table stage_row_untracked (
+    id uuid not null default public.uuid_generate_v7() primary key,
+    repository_id uuid not null references repository(id) on delete cascade,
+    row_id meta.row_id not null,
+    unique (repository_id, row_id)
+);
+create index stage_row_untracked_row_id_schema_name on stage_row_untracked using hash (((row_id).schema_name));
+create index stage_row_untracked_row_id_relation_name on stage_row_untracked using hash (((row_id).relation_name));
+
+
 create table stage_field_changed (
     id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id),
@@ -64,7 +74,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
         -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
         -- untrack
-        perform delta._tracked_row_remove(_row_id);
+        perform delta._tracked_row_delete(_row_id);
 
         -- stage
         insert into delta.stage_row_added(repository_id, row_id) values (_repository_id, _row_id)
@@ -103,10 +113,10 @@ $$ language sql;
 
 
 --
--- stage_row_remove()
+-- stage_row_delete()
 --
 
-create or replace function _stage_row_remove( _row_id meta.row_id ) returns uuid as $$
+create or replace function _stage_row_delete( _row_id meta.row_id ) returns uuid as $$
     declare
         stage_row_added_id uuid;
         row_exists boolean;
@@ -125,14 +135,14 @@ create or replace function _stage_row_remove( _row_id meta.row_id ) returns uuid
     end;
 $$ language plpgsql;
 
-create or replace function stage_row_remove( schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function stage_row_delete( schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
-    select delta._stage_row_remove( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
+    select delta._stage_row_delete( meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
 
-create or replace function stage_row_remove( schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function stage_row_delete( schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
-    select delta._stage_row_remove( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
+    select delta._stage_row_delete( meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
 $$ language sql;
 
 
@@ -313,11 +323,6 @@ $$ language sql;
 
 --
 -- stage_row_field
---
-
-
---
--- get_stage_rows_exist
 --
 
 
