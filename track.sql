@@ -6,6 +6,7 @@
 -- tracked_row_added
 --
 
+/*
 create table tracked_row_added (
     id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id) on delete cascade,
@@ -32,6 +33,7 @@ create table trackable_nontable_relation(
 create or replace function _track_nontable_relation(_relation_id meta.relation_id, _pk_column_names text[]) returns void as $$
     insert into delta.trackable_nontable_relation (relation_id, pk_column_names) values (_relation_id, _pk_column_names);
 $$ language sql;
+*/
 
 
 --

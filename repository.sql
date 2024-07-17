@@ -98,9 +98,10 @@ create table commit_field_changed (
 create table repository (
     id uuid not null default public.uuid_generate_v7() primary key,
     name text not null unique check(name != ''),
-    stage_commit_id uuid not null unique references commit(id) deferrable initially deferred, -- there is always a stage, but because the ref is circular we make it deferrable
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
-    checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred
+    checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
+    tracked_rows jsonb not null default '{}',
+    stage jsonb not null default '{}'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
@@ -134,6 +135,8 @@ $$ stable language sql;
 -- stage_commit_id()
 --
 
+/*
+MOVED TO repo.stage
 create or replace function _stage_commit_id( repository_id uuid ) returns uuid as $$
     select stage_commit_id from delta.repository where id=repository_id;
 $$ stable language sql;
@@ -141,6 +144,7 @@ $$ stable language sql;
 create or replace function stage_commit_id( repository_name text ) returns uuid as $$
     select stage_commit_id from delta.repository where name=repository_name;
 $$ stable language sql;
+*/
 
 
 --
@@ -177,7 +181,7 @@ $$ stable language sql;
 create or replace function repository_create( repository_name text ) returns uuid as $$
 declare
     _repository_id uuid;
-    _stage_commit_id uuid;
+--     _stage_commit_id uuid;
 begin
     if repository_name = '' then
         raise exception 'Repository name cannot be empty string.';
@@ -187,6 +191,7 @@ begin
         raise exception 'Repository name cannot be null.';
     end if;
 
+/*
     -- create the repo's stage_commit
     insert into delta.commit (manifest) values
     ('{
@@ -198,12 +203,15 @@ begin
         ]
     }')
     returning id into _stage_commit_id;
+*/
 
     -- create repository
-    insert into delta.repository (name, stage_commit_id) values (repository_name, _stage_commit_id) returning id into _repository_id;
+    insert into delta.repository (name) values (repository_name) returning id into _repository_id;
 
+    /*
     -- point stage_commit at repository
     update delta.commit set repository_id=_repository_id where id=_stage_commit_id;
+    */
 
     return _repository_id;
 exception
