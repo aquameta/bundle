@@ -102,7 +102,7 @@ create table repository (
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     tracked_rows_added jsonb not null default '[]',
-    stage jsonb not null default '{}'
+    stage jsonb not null default '{"rows_added": [], "rows_deleted": [], "fields_changed": []}'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
@@ -301,13 +301,14 @@ create function _commit_exists(commit_id uuid) returns boolean as $$
 $$ language sql;
 
 
+/*
 --
 -- commit_rows()
 --
 
 
 -- cache checker, divert to head_commit_row mat view if possible
-/*
+TRASH:
 create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns table(commit_id uuid, row_id meta.row_id) as $$
 declare
@@ -346,7 +347,6 @@ recursive cte, traverses commit ancestry, grabbing added rows and removing rows 
 - for each commit
     - add rows added
     - remove rows deleted
-*/
 
 -- NOTE:
 -- How the heck do I write a function that returns a record with one column whose type is meta.row_id?
@@ -354,7 +354,8 @@ recursive cte, traverses commit ancestry, grabbing added rows and removing rows 
 -- If I do setof meta.row_id it does the same.
 -- Adding (useless) commit_id to return type to fix
 
-/*
+TRASH.  Now commits are not additive, the manifest holds the whole thing so no CTE.
+
 create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position from delta.commit c where c.id=_commit_id
@@ -403,6 +404,30 @@ create or replace function _commit_rows( _commit_id uuid, _relation_id meta.rela
 $$ language plpgsql;
 */
 
+
+--
+-- _commit_rows()
+--
+
+create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_array_elements_text(manifest->'contents')::meta.row_id
+    from delta.commit
+    where id = _commit_id /* and something something _relation_id optimization */;
+$$ language sql;
+
+
+
+--
+-- commit_rows()
+--
+
+-- why is this necessary -- was here before for cache diversion
+create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+returns table(commit_id uuid, row_id meta.row_id) as $$
+    select * from delta._commit_rows(_commit_id, _relation_id_filter);
+
+
+$$ language sql;
 
 --
 -- commit_fields()
@@ -471,8 +496,15 @@ $$ language sql;
 
 
 --
--- head_commit_row
+-- head_commit_rows()
 --
+
+
+create function head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
+    select * from delta._commit_rows((
+        select head_commit_id from repository r where r.id = _repository_id
+    )); 
+$$ language sql;
 
 -- NOTE: split these up into separate views per-repository, somehow?
 
