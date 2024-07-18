@@ -17,15 +17,6 @@ $$ language sql;
 
 
 --
--- _commit_exists()
---
-
-create function _commit_exists(commit_id uuid) returns boolean as $$
-    select exists (select 1 from delta.commit where id=commit_id);
-$$ language sql;
-
-
---
 -- commit()
 --
 

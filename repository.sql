@@ -42,6 +42,7 @@ create trigger blob_hash_update
 create table commit (
     id uuid not null default public.uuid_generate_v7() primary key,
     parent_id uuid references commit(id), --null means first commit
+    merge_parent_id uuid references commit(id),
     manifest jsonb not null,
     author_name text not null default '',
     author_email text not null default '',
@@ -100,7 +101,7 @@ create table repository (
     name text not null unique check(name != ''),
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
-    tracked_rows jsonb not null default '{}',
+    tracked_rows_added jsonb not null default '[]',
     stage jsonb not null default '{}'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
@@ -289,6 +290,15 @@ create or replace function _repository_has_uncommitted_changes( _repository_id u
         return false;
     end;
 $$ language plpgsql;
+
+
+--
+-- _commit_exists()
+--
+
+create function _commit_exists(commit_id uuid) returns boolean as $$
+    select exists (select 1 from delta.commit where id=commit_id);
+$$ language sql;
 
 
 --
