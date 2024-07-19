@@ -113,10 +113,10 @@ create or replace function _tracked_row_remove( _repository_id uuid, _row_id met
         
         select count(*) into c from repository where id = _repository_id and tracked_rows_added ? _row_id::text;
         if c < 1 then
-            raise exception 'Row with row_id % cannot be untracked because it is not tracked.', _row_id;
+            raise exception 'Row with row_id % cannot be untracked because it is not tracked, count is %', _row_id, c;
         end if;
 
-        update repository set tracked_row_added = tracked_row_added - _row_id::text where id = _repository_id;
+        update repository set tracked_rows_added = tracked_rows_added - _row_id::text where id = _repository_id;
 
         return tracked_row_id;
     end;

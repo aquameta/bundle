@@ -3,20 +3,27 @@
 ------------------------------------------------------------------------------
 
 --
--- tables
+-- views
 --
 
+create view stage_row_added as
+select id as repository_id, jsonb_array_elements(stage->'rows_added')::meta.row_id as row_id
+from delta.repository;
+
+create view stage_row_deleted as
+select id as repository_id, jsonb_array_elements(stage->'rows_deleted')::meta.row_id as row_id
+from delta.repository;
+
+create view stage_field_changed as
+select id as repository_id, jsonb_array_elements(stage->'field_changed')::meta.field_id as field_id
+from delta.repository;
+
+
+
+
+
+
 /*
-create table stage_row_added (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id, -- TODO: check row_id.pk_values contains no nulls
-    unique (repository_id, row_id)
-);
-create index stage_row_added_row_id_schema_name on stage_row_added using hash(((row_id).schema_name));
-create index stage_row_added_row_id_relation_name on stage_row_added using hash(((row_id).relation_name));
-
-
 create table stage_row_deleted (
     id uuid not null default public.uuid_generate_v7() primary key,
     repository_id uuid not null references repository(id) on delete cascade,
@@ -78,29 +85,26 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
         -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
         -- untrack
-        perform delta._tracked_row_delete(_row_id);
+        perform delta._tracked_row_remove(_repository_id, _row_id);
 
         -- stage
-        update delta.repository set stage = stage || '{"rows_added": "' || row_id::text || '"}'::jsonb
+        update delta.repository set stage = jsonb_set(stage, '{rows_added}', stage->'rows_added' || _row_id::jsonb)
         where id = _repository_id;
     end;
 $$ language plpgsql;
 
 create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns void as $$
-    declare
-        stage_row_added_id uuid;
     begin
-
         -- assert repository exists
         if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._stage_row_add(
+        perform delta._stage_row_add(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
-        ) into stage_row_added_id;
+        );
     end;
 $$ language plpgsql;
 
@@ -112,10 +116,10 @@ $$ language sql;
 
 
 --
--- stage_row_delete()
+-- stage_row_remove()
 --
 
-create or replace function _stage_row_remove( _row_id meta.row_id ) returns void as $$
+create or replace function _stage_row_remove( _repository_id, _row_id meta.row_id ) returns void as $$
     declare
         stage_row_added_id uuid;
         row_exists boolean;
@@ -127,7 +131,8 @@ create or replace function _stage_row_remove( _row_id meta.row_id ) returns void
             raise exception 'Row with row_id % is not staged.', _row_id;
         end if;
 
-        delete from delta.stage_row_added sra where sra.row_id = _row_id
+        -- FIXME: update delta.repository set stage = jsonb_set(stage, --
+
         returning id into stage_row_added_id;
     end;
 $$ language plpgsql;
@@ -298,7 +303,7 @@ $$ language sql;
 
 
 --
--- stage_rows
+-- stage_rows()
 --
 
 create type stage_row as (row_id meta.row_id, new_row boolean);

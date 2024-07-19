@@ -502,8 +502,8 @@ $$ language sql;
 
 create function head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
     select * from delta._commit_rows((
-        select head_commit_id from repository r where r.id = _repository_id
-    )); 
+        select head_commit_id from delta.repository r where r.id = _repository_id
+    ));
 $$ language sql;
 
 -- NOTE: split these up into separate views per-repository, somehow?

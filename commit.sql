@@ -62,17 +62,21 @@ create function _commit(
         raise notice 'commit()';
 
 
-/*
-        manifest := select jsonb_agg(
+        select jsonb_agg(
             jsonb_build_object(
                 'schema_name', (s.row_id).schema_name,
                 'relation_name', (s.row_id).relation_name,
                 'pk_column_name', (s.row_id).pk_column_names,
-                'columns', (s.row_id).schema_name,
-        ) from delta.stage_rows(_repository_id) s;
-*/
+                'columns', (s.row_id).schema_name
+            )
+        )
+        into manifest
+        from delta.stage_rows(_repository_id) s;
+
+        raise notice 'manifest: %', manifest::text;
 
 
+        /*
         -- create the commit
         insert into delta.commit (
             repository_id,
@@ -91,6 +95,7 @@ create function _commit(
 
         )
         returning id into new_commit_id;
+        */
 
 
         -- blob
@@ -121,7 +126,7 @@ create function _commit(
         raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_added (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_added
+        from delta.stage_row_added -- FIXME
         where repository_id = _repository_id;
 
         delete from delta.stage_row_added where repository_id = _repository_id;
