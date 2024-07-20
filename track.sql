@@ -52,7 +52,6 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
 
         -- TODO: assert row is not already in a repository's head commit or tracked or staged
 
-        -- FIXME
         update delta.repository set tracked_rows_added = tracked_rows_added || to_jsonb(row_id::text) where id = _repository_id;
     /*
     exception

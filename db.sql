@@ -204,6 +204,32 @@ begin
 end
 $$ language plpgsql;
 
+
+--
+-- db_row_fields_obj()
+--
+-- returns a jsonb object whose keys are column names and values are live db values
+
+create or replace function db_row_fields_obj(_row_id meta.row_id) returns jsonb as $$
+declare
+    stmt text;
+    obj jsonb;
+begin
+    stmt := format('select to_json(xx) from %I.%I xx where %s',
+        _row_id.schema_name,
+        _row_id.relation_name,
+        meta._pk_stmt(_row_id, '%1$I = %2$L')
+    );
+
+    execute stmt into obj;
+    return obj;
+end;
+$$ language plpgsql;
+
+
+
+
+
 /*
 big diff queries:
 

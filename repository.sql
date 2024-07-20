@@ -43,10 +43,13 @@ create table commit (
     id uuid not null default public.uuid_generate_v7() primary key,
     parent_id uuid references commit(id), --null means first commit
     merge_parent_id uuid references commit(id),
+
     manifest jsonb not null,
+
     author_name text not null default '',
     author_email text not null default '',
-    message text not null default ''
+    message text not null default '',
+    commit_time timestamptz not null default now()
 );
 -- TODO: check constraint for only one null parent_id per repo
 -- TODO: i am not my own grandpa
@@ -101,10 +104,12 @@ create table repository (
     name text not null unique check(name != ''),
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
+
     tracked_rows_added jsonb not null default '[]',
-    stage_rows_added jsonb not null default '[]',
-    stage_rows_deleted jsonb not null default '[]',
-    stage_fields_changed jsonb not null default '[]'
+
+    stage_rows_added jsonb not null default '{}',
+    stage_rows_deleted jsonb not null default '{}',
+    stage_fields_changed jsonb not null default '{}'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
@@ -507,6 +512,15 @@ create function head_commit_rows( _repository_id uuid ) returns table(commit_id 
         select head_commit_id from delta.repository r where r.id = _repository_id
     ));
 $$ language sql;
+
+--
+-- get_commit_manifest()
+--
+
+create function get_commit_manifest( _commit_id uuid ) returns jsonb as $$
+    select manifest from delta.commit where id = _commit_id;
+$$ language sql;
+
 
 -- NOTE: split these up into separate views per-repository, somehow?
 

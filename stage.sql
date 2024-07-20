@@ -7,15 +7,15 @@
 --
 
 create view stage_row_added as
-select id as repository_id, jsonb_array_elements_text(stage_rows_added)::meta.row_id as row_id
+select id as repository_id, jsonb_object_keys(stage_rows_added)::meta.row_id as row_id
 from delta.repository;
 
 create view stage_row_deleted as
-select id as repository_id, jsonb_array_elements_text(stage_rows_deleted)::meta.row_id as row_id
+select id as repository_id, jsonb_object_keys(stage_rows_deleted)::meta.row_id as row_id
 from delta.repository;
 
 create view stage_field_changed as
-select id as repository_id, jsonb_array_elements_text(stage_fields_changed)::meta.field_id as field_id
+select id as repository_id, jsonb_object_keys(stage_fields_changed)::meta.field_id as field_id
 from delta.repository;
 
 
@@ -82,7 +82,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
 
         -- stage
         update delta.repository
-        set stage_rows_added = stage_rows_added || to_jsonb(_row_id::text) -- = jsonb_set(stage, '{rows_added}', stage->'rows_added' || _row_id::jsonb)
+        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta.db_row_fields_obj(_row_id))
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -268,7 +268,7 @@ create or replace function tracked_rows( _repository_id uuid ) returns setof met
     -- plus staged rows
     union
 
-    select jsonb_array_elements_text(r.stage_rows_added)::meta.row_id
+    select jsonb_object_keys(r.stage_rows_added)::meta.row_id
     from delta.repository r
     where r.id = _repository_id
 $$ language sql;

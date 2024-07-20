@@ -22,9 +22,9 @@ $$ language sql;
 
 create function _commit(
     _repository_id uuid,
-    message text,
-    author_name text,
-    author_email text,
+    _message text,
+    _author_name text,
+    _author_email text,
     parent_commit_id uuid default null
 ) returns uuid as $$
     declare
@@ -60,7 +60,7 @@ create function _commit(
         end if;
 
         raise notice 'commit()';
-        raise notice ' - parent_commit_id: %', parent_commit_id;
+        raise notice '  - parent_commit_id: %', parent_commit_id;
 
         /*
         select jsonb_agg(
@@ -103,31 +103,37 @@ create function _commit(
 
 
         -- create _manifest
-        _manifest := '{}'::jsonb;
-        -- metadata
-        _manifest := jsonb_set(_manifest, array['commit_time'],  to_jsonb(now()), true);
-        _manifest := jsonb_set(_manifest, array['message'],      to_jsonb(message), true);
-        _manifest := jsonb_set(_manifest, array['author_name'],  to_jsonb(author_name), true);
-        _manifest := jsonb_set(_manifest, array['author_email'], to_jsonb(author_email), true);
+        if parent_commit_id is null then
+            -- first commit
+            _manifest := '{}'::jsonb;
+        else
+            -- modify parent commit
+            _manifest := delta.get_commit_manifest(parent_commit_id);
+        end if;
+
+        select (repository.stage_rows_added || _manifest)-- - array(select jsonb_array_elements_text(repository.stage_rows_deleted))
+        into _manifest
+        from delta.repository
+        where id = _repository_id;
 
         raise notice '  - Manifest: %', _manifest;
 
-/*
-        -- contents
-        manifest := jsonb_set(manifest, array
 
-        if parent_commit_id is null then
-            manifest := format('{
-				"commit_time": %s
-				"message": %s
-				"author_name": %s
-				"author_email" %s
-			}',
-				to_jsonb('
-*/
+        -- create commit
+        insert into delta.commit (
+            -- commit_time, default now(), also not in function sig
+            message,
+            author_name,
+            author_email,
+            manifest
+        ) values (
+            _message,
+            _author_name,
+            _author_email,
+            _manifest
+        ) returning id into new_commit_id;
 
-        insert into delta.commit (manifest) values (_manifest) returning id into new_commit_id;
-
+        raise notice '  - New commit with id %', new_commit_id;
 
         /*
         -- commit_row_added
@@ -138,10 +144,8 @@ create function _commit(
         where repository_id = _repository_id;
         */
 
-/*
-
+        /*
         delete from delta.stage_row_added where repository_id = _repository_id;
-
 
         -- commit_row_deleted
         raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
