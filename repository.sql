@@ -102,9 +102,9 @@ create table repository (
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     tracked_rows_added jsonb not null default '[]',
-    stage_rows_added jsonb not null default '{}',
-    stage_rows_deleted jsonb not null default '{}',
-    stage_fields_changed jsonb not null default '{}'
+    stage_rows_added jsonb not null default '[]',
+    stage_rows_deleted jsonb not null default '[]',
+    stage_fields_changed jsonb not null default '[]'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 

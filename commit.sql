@@ -30,7 +30,7 @@ create function _commit(
     declare
         new_commit_id uuid;
         parent_commit_id uuid;
-        manifest jsonb := '{}';
+        _manifest jsonb := '{}';
         stage_row_relations meta.relation_id[];
 
         first_commit boolean := false;
@@ -60,8 +60,9 @@ create function _commit(
         end if;
 
         raise notice 'commit()';
+        raise notice ' - parent_commit_id: %', parent_commit_id;
 
-
+        /*
         select jsonb_agg(
             jsonb_build_object(
                 'schema_name', (s.row_id).schema_name,
@@ -70,31 +71,10 @@ create function _commit(
                 'columns', (s.row_id).schema_name
             )
         )
-        into manifest
+        into _manifest
         from delta.stage_rows(_repository_id) s;
 
-        raise notice 'manifest: %', manifest::text;
-
-
-        /*
-        -- create the commit
-        insert into delta.commit (
-            repository_id,
-            parent_id,
-            manifest,
-            message,
-            author_name,
-            author_email
-        ) values (
-            _repository_id,
-            parent_commit_id,
-            manifest,
-            message,
-            author_name,
-            author_email
-
-        )
-        returning id into new_commit_id;
+        raise notice '_manifest: %', _manifest::text;
         */
 
 
@@ -122,12 +102,43 @@ create function _commit(
         stage_row_relations := delta.topological_sort_stage(_repository_id);
 
 
+        -- create _manifest
+        _manifest := '{}'::jsonb;
+        -- metadata
+        _manifest := jsonb_set(_manifest, array['commit_time'],  to_jsonb(now()), true);
+        _manifest := jsonb_set(_manifest, array['message'],      to_jsonb(message), true);
+        _manifest := jsonb_set(_manifest, array['author_name'],  to_jsonb(author_name), true);
+        _manifest := jsonb_set(_manifest, array['author_email'], to_jsonb(author_email), true);
+
+        raise notice '  - Manifest: %', _manifest;
+
+/*
+        -- contents
+        manifest := jsonb_set(manifest, array
+
+        if parent_commit_id is null then
+            manifest := format('{
+				"commit_time": %s
+				"message": %s
+				"author_name": %s
+				"author_email" %s
+			}',
+				to_jsonb('
+*/
+
+        insert into delta.commit (manifest) values (_manifest) returning id into new_commit_id;
+
+
+        /*
         -- commit_row_added
         raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_added (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
         from delta.stage_row_added -- FIXME
         where repository_id = _repository_id;
+        */
+
+/*
 
         delete from delta.stage_row_added where repository_id = _repository_id;
 
@@ -142,7 +153,6 @@ create function _commit(
         delete from delta.stage_row_deleted where repository_id = _repository_id;
 
 
-    /*
         insert into commit_field_changed
         insert into commit_field_*
     */
@@ -150,11 +160,13 @@ create function _commit(
         -- update head pointer, checkout pointer
         update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
 
+/*
         raise notice '  - Refreshing head_commit_row @ % ...', clock_timestamp() - start_time;
         execute format ('refresh materialized view delta.head_commit_row');
 
         raise notice '  - Refreshing head_commit_field @ % ...', clock_timestamp() - start_time;
         execute format ('refresh materialized view delta.head_commit_field');
+*/
 
         -- TODO: unset search_path
 
