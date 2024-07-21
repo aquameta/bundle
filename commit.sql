@@ -62,22 +62,6 @@ create function _commit(
         raise notice 'commit()';
         raise notice '  - parent_commit_id: %', parent_commit_id;
 
-        /*
-        select jsonb_agg(
-            jsonb_build_object(
-                'schema_name', (s.row_id).schema_name,
-                'relation_name', (s.row_id).relation_name,
-                'pk_column_name', (s.row_id).pk_column_names,
-                'columns', (s.row_id).schema_name
-            )
-        )
-        into _manifest
-        from delta.stage_rows(_repository_id) s;
-
-        raise notice '_manifest: %', _manifest::text;
-        */
-
-
         -- blob
         /*
         raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
@@ -85,8 +69,6 @@ create function _commit(
         select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra;
         */
 
-
-        -- commit_field_changed
         /*
         raise notice '  - Inserting commit_fields @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_field_changed (commit_id, field_id, value_hash, change_type)
@@ -111,12 +93,41 @@ create function _commit(
             _manifest := delta.get_commit_manifest(parent_commit_id);
         end if;
 
-        select (repository.stage_rows_added || _manifest)-- - array(select jsonb_array_elements_text(repository.stage_rows_deleted))
-        into _manifest
-        from delta.repository
-        where id = _repository_id;
 
-        raise notice '  - Manifest: %', _manifest;
+
+        -- stage rows added
+
+        -- add stage_rows_added to _manifest
+        select (repository.stage_rows_added || _manifest) into _manifest
+        from delta.repository where id = _repository_id;
+        -- clear this repo's stage (TODO: function)
+        update delta.repository set stage_rows_added = '{}' where id = _repository_id;
+
+
+        -- stage_rows_deleted
+
+        /*
+        -- add stage_fields_changed to _manifest
+        TODO
+        select (repository.stage_rows_added || _manifest) into _manifest
+        from delta.repository where id = _repository_id;
+        -- cleare this repo's staged field changes
+        TODO
+        -- OLD:
+        raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
+        insert into delta.commit_row_deleted (commit_id, row_id, position)
+        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
+        from delta.stage_row_deleted
+        where repository_id = _repository_id;
+        */
+
+
+        -- stage_fields_changed
+
+        -- TODO
+
+
+        raise notice '  - Manifest: %', substring(_manifest::text,1,80);
 
 
         -- create commit
@@ -139,42 +150,9 @@ create function _commit(
 
         raise notice '  - New commit with id %', new_commit_id;
 
-        /*
-        -- commit_row_added
-        raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_row_added (commit_id, row_id, position)
-        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_added -- FIXME
-        where repository_id = _repository_id;
-        */
-
-        /*
-        delete from delta.stage_row_added where repository_id = _repository_id;
-
-        -- commit_row_deleted
-        raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_row_deleted (commit_id, row_id, position)
-        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_deleted
-        where repository_id = _repository_id;
-
-        delete from delta.stage_row_deleted where repository_id = _repository_id;
-
-
-        insert into commit_field_changed
-        insert into commit_field_*
-    */
 
         -- update head pointer, checkout pointer
         update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
-
-/*
-        raise notice '  - Refreshing head_commit_row @ % ...', clock_timestamp() - start_time;
-        execute format ('refresh materialized view delta.head_commit_row');
-
-        raise notice '  - Refreshing head_commit_field @ % ...', clock_timestamp() - start_time;
-        execute format ('refresh materialized view delta.head_commit_field');
-*/
 
         -- TODO: unset search_path
 

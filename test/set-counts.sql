@@ -222,7 +222,6 @@ select row_eq(
     'Stage shakespeare'
 );
 
-/*
 ---------------------------------------
 -- commit
 ---------------------------------------
@@ -233,4 +232,3 @@ select row_eq(
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit shakespeare'
 );
-*/

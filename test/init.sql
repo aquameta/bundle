@@ -1,4 +1,5 @@
 -- begin;
+\timing
 create extension if not exists pgtap schema public;
 
 -- sample data via https://github.com/catherinedevlin/opensourceshakespeare
