@@ -1,8 +1,6 @@
-
-
-/*
 -- neither of these work.
 
+/*
 do $$
 declare returned_commit_id uuid;
 begin

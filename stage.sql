@@ -7,13 +7,8 @@
 --
 
 create view stage_row_added as
-select id as repository_id, jsonb_array_elements(stage_rows_added)::meta.row_id as row_id
+select id as repository_id, jsonb_object_keys(stage_rows_added)::meta.row_id as row_id
 from delta.repository;
-
-/*
-[{"(shakespeare,character,{id},{9001})": {"id": "9001", "name": "Zonker", "abbrev": null, "description": null, "speech_count": 0}, "(shakespeare,character,{id},{9002})": {"id": "9002", "name": "Pluto", "abbrev": null, "description": null, "speech_count": 0}}, ["(shakespeare,chapter,{id},{19219})", "(shakespeare,chapter,{id},{18855})", "(shakespeare,chapter,{id},{19155})", "(shakespeare,chapter,{id},{19049})", "(shakespeare,chapter,{id},{18921})", "(shakespeare,chapter,{id},{19006})", "(shakespeare,chapter,{id},{18738})", "(shakespeare,chapter,{id},{18879})", "(shakespeare,chapter,{id},{19452})", "(shakespeare,chapter,{id},{19291})", "(shakespeare,chapter,{id},{19238})", "(shakespeare,chapter,{id},{19217})", "(shakespeare,chapter,{id},{19135})", "(shakespeare,chapter,{id},{19254})", "(shakespeare,chapter,{id},{19051})", "(shakespeare,chapter,{id},{19405})", "(shakespeare,chapter,{id},{19379})", "(shakespeare,chapter,{id},{18800})", "(shakespeare,chapter,{id},{19050})", "(shakespeare,cha
-*/
-
 
 create view stage_row_deleted as
 select id as repository_id, jsonb_array_elements(stage_rows_deleted)::meta.row_id as row_id
@@ -374,27 +369,35 @@ $$ language sql;
 -- stage_tracked_rows()
 --
 
+-- TODO: this can probably be optimized by combining calls to db_row_fields_obj()
 create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
+declare
+    _tracked_rows_obj jsonb;
 begin
-    -- TODO: this is wrong
-    update delta.repository set stage_rows_added = stage_rows_added || (
-        select jsonb_agg(tracked_rows_added) from delta.repository
-        where id = _repository_id
+/*
+select jsonb_object_agg(row_id, db_row_fields_obj(row_id::meta.row_id)) from (
+    select jsonb_array_elements_text('["(shakespeare,chapter,{id},{19219})", "(shakespeare,chapter,{id},{18855})", "(shakespeare,chapter,{id},{19155})", "(shakespeare,chapter,{id},{19049})", "(shakespeare,chapter,{id},{18921})"]'::jsonb) row_id
+    );
+*/
+
+    -- create _tracked_rows_obj
+    select jsonb_object_agg(row_id, delta.db_row_fields_obj(row_id::meta.row_id))
+    into _tracked_rows_obj
+    from (
+        select jsonb_array_elements_text(tracked_rows_added) row_id
+        from delta.repository where id = _repository_id
     );
 
+    -- append _tracked_rows_obj to stage_rows_added
+    update delta.repository
+    set stage_rows_added = stage_rows_added || _tracked_rows_obj
+    where id = _repository_id;
+
+    -- clear repository.tracked_rows_added
+    -- TODO: function for this
     update delta.repository set tracked_rows_added = '[]'::jsonb
     where id = _repository_id;
 
-        
-    /*
-    insert into delta.stage_row_added (repository_id, row_id)
-    select repository_id, row_id from delta.tracked_row_added
-    where repository_id = _repository_id;
-
-    -- delete all tracked rows for this repo
-    delete from delta.tracked_row_added
-    where repository_id = _repository_id;
-    */
 end;
 $$ language plpgsql;
 

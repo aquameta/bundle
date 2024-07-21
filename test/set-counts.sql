@@ -133,7 +133,7 @@ select row_eq(
 
 
 ---------------------------------------
--- stage track rows
+-- stage_row_add()
 ---------------------------------------
 select delta.stage_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
 
@@ -222,10 +222,10 @@ select row_eq(
     'Stage shakespeare'
 );
 
+/*
 ---------------------------------------
 -- commit
 ---------------------------------------
-/*
 select delta.commit('io.aquadelta.test','Third commit, add all of shakespeare','Testing User','testing@example.com');
 
 select row_eq(

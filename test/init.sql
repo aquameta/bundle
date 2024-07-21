@@ -2,7 +2,7 @@
 create extension if not exists pgtap schema public;
 
 -- sample data via https://github.com/catherinedevlin/opensourceshakespeare
-\i shakespeare.sql
+\i data/shakespeare.sql
 -- nope, deps: delete from meta.table where schema_name='shakespeare' and name not in ('character');
 
 /*
