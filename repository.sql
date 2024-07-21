@@ -108,7 +108,7 @@ create table repository (
     tracked_rows_added jsonb not null default '[]',
 
     stage_rows_added jsonb not null default '{}',
-    stage_rows_deleted jsonb not null default '{}',
+    stage_rows_deleted jsonb not null default '[]',
     stage_fields_changed jsonb not null default '{}'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
@@ -468,12 +468,20 @@ $$ language plpgsql;
 
 
 
-/*
-REFACTOR THIS
-
 -- naive SQL function, no check on mat views
-create or replace function _commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+create or replace function commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
+    select meta.field_id(
+        key::meta.row_id,
+        (jsonb_each(value)).key
+    ), -- field_id
+    (jsonb_each(value)).value -- value_hash
+
+    from jsonb_each((
+        select manifest from delta.commit where id = _commit_id
+    ));
+
+    /*
     -- ancestry
     with recursive ancestry as (
         select c.id as commit_id, c.parent_id, 0 as position
@@ -484,11 +492,12 @@ returns setof field_hash as $$
         select c.id as commit_id, c.parent_id, p.position + 1
         from delta.commit c join ancestry p on c.id = p.parent_id
     )
+    */
 
-    select field_id, value_hash from (
-        select distinct on (fc.field_id) fc.field_id, fc.change_type, fc.value_hash
-        from delta.commit_field_changed fc
-            join ancestry a on fc.commit_id = a.commit_id
+    
+    /*
+    select meta.field_id(, value_hash
+    from delta.commit
         where fc.field_id::meta.relation_id =
             case
                 -- no op
@@ -498,8 +507,8 @@ returns setof field_hash as $$
             end
         order by fc.field_id, a.position
     ) c where change_type != 'delete';
+    */
 $$ language sql;
-*/
 
 
 --

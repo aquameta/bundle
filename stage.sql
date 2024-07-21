@@ -7,11 +7,16 @@
 --
 
 create view stage_row_added as
-select id as repository_id, jsonb_object_keys(stage_rows_added)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_added)::meta.row_id as row_id
 from delta.repository;
 
+/*
+[{"(shakespeare,character,{id},{9001})": {"id": "9001", "name": "Zonker", "abbrev": null, "description": null, "speech_count": 0}, "(shakespeare,character,{id},{9002})": {"id": "9002", "name": "Pluto", "abbrev": null, "description": null, "speech_count": 0}}, ["(shakespeare,chapter,{id},{19219})", "(shakespeare,chapter,{id},{18855})", "(shakespeare,chapter,{id},{19155})", "(shakespeare,chapter,{id},{19049})", "(shakespeare,chapter,{id},{18921})", "(shakespeare,chapter,{id},{19006})", "(shakespeare,chapter,{id},{18738})", "(shakespeare,chapter,{id},{18879})", "(shakespeare,chapter,{id},{19452})", "(shakespeare,chapter,{id},{19291})", "(shakespeare,chapter,{id},{19238})", "(shakespeare,chapter,{id},{19217})", "(shakespeare,chapter,{id},{19135})", "(shakespeare,chapter,{id},{19254})", "(shakespeare,chapter,{id},{19051})", "(shakespeare,chapter,{id},{19405})", "(shakespeare,chapter,{id},{19379})", "(shakespeare,chapter,{id},{18800})", "(shakespeare,chapter,{id},{19050})", "(shakespeare,cha
+*/
+
+
 create view stage_row_deleted as
-select id as repository_id, jsonb_object_keys(stage_rows_deleted)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_deleted)::meta.row_id as row_id
 from delta.repository;
 
 create view stage_field_changed as
@@ -126,7 +131,7 @@ create or replace function _stage_row_delete( _repository_id uuid, _row_id meta.
         -- TODO: make sure the row is in the head commit
 
         -- stage
-        update delta.repository set stage_row_deleted = stage_row_delete || to_jsonb(_row_id::text)
+        update delta.repository set stage_rows_deleted = stage_rows_deleted || to_jsonb(_row_id::text)
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -140,7 +145,7 @@ returns void as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        select delta._stage_row_delete(
+        perform delta._stage_row_delete(
             delta.repository_id(repository_name),
             meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
         );
@@ -232,7 +237,7 @@ from delta.exec((
 except
 
 select * from (
-    select jsonb_array_elements_text(r.stage_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
+    select jsonb_object_keys(r.stage_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
     union
     -- select t.row_id from delta.tracked_row_added t
     select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
@@ -245,6 +250,11 @@ select * from (
     union
     select row_id from delta.head_commit_row row_id
     */
+
+    union
+
+    select hcr.row_id as row_id
+    from delta.repository r, delta.commit_rows(r.head_commit_id) hcr
 ) r;
 $$ language sql;
 
@@ -255,13 +265,12 @@ $$ language sql;
 
 create or replace function tracked_rows( _repository_id uuid ) returns setof meta.row_id as $$
     -- head commit rows
-    select /* TO RESURRECT: row_id from delta.head_commit_row
-    where repository_id = _repository_id
+    select row_id from delta.head_commit_rows(_repository_id)
 
     -- ...plus newly tracked rows
     union
 
-    select */ jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id
+    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id
     from delta.repository r
     where r.id = _repository_id
 
@@ -300,14 +309,16 @@ create type stage_row as (row_id meta.row_id, new_row boolean);
 create or replace function stage_rows( _repository_id uuid ) returns setof stage_row as $$
     select row_id, false as new_row from (
 
+/*
         -- head_commit_row
-        select hcr.row_id
+        select hcr.row_id as row_id
         from delta.head_commit_rows(_repository_id) hcr 
 
         except
+        */
 
         -- ...minus deleted rows
-        select jsonb_array_elements_text(stage_rows_deleted)::meta.row_id
+        select jsonb_array_elements_text(stage_rows_deleted)::meta.row_id as row_id
         from delta.repository r
         where r.id = _repository_id
 
@@ -316,7 +327,7 @@ create or replace function stage_rows( _repository_id uuid ) returns setof stage
     union
 
     -- ...plus staged rows
-    select jsonb_array_elements_text(r.stage_rows_added)::meta.row_id, true as new_row
+    select jsonb_object_keys(r.stage_rows_added)::meta.row_id, true as new_row
     from delta.repository r
     where r.id = _repository_id
 
@@ -338,14 +349,20 @@ $$ language sql;
 -- track_relation_rows
 --
 
-/*
-TO RESURRECT:
-
 create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns void as $$ -- returns setof uuid?
+/*
     insert into delta.tracked_row_added(repository_id, row_id)
     select repository_id, row_id
     from delta.untracked_rows(_relation_id) row_id
 --    returning id
+*/
+
+
+    update delta.repository
+    set tracked_rows_added = tracked_rows_added || (
+        select jsonb_agg(row_id::text)
+        from delta.untracked_rows(_relation_id) row_id
+    ) where id = repository_id;
 $$ language sql;
 
 create or replace function track_relation_rows( repository_name text, schema_name text, relation_name text ) returns void as $$ -- setof uuid?
@@ -359,6 +376,17 @@ $$ language sql;
 
 create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
 begin
+    -- TODO: this is wrong
+    update delta.repository set stage_rows_added = stage_rows_added || (
+        select jsonb_agg(tracked_rows_added) from delta.repository
+        where id = _repository_id
+    );
+
+    update delta.repository set tracked_rows_added = '[]'::jsonb
+    where id = _repository_id;
+
+        
+    /*
     insert into delta.stage_row_added (repository_id, row_id)
     select repository_id, row_id from delta.tracked_row_added
     where repository_id = _repository_id;
@@ -366,10 +394,10 @@ begin
     -- delete all tracked rows for this repo
     delete from delta.tracked_row_added
     where repository_id = _repository_id;
+    */
 end;
 $$ language plpgsql;
 
 create or replace function stage_tracked_rows( repository_name text ) returns void as $$
     select delta._stage_tracked_rows(delta.repository_id(repository_name))
 $$ language sql;
-*/

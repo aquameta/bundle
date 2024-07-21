@@ -121,12 +121,16 @@ create function _commit(
 
         -- create commit
         insert into delta.commit (
+            repository_id,
+            parent_id,
             -- commit_time, default now(), also not in function sig
             message,
             author_name,
             author_email,
             manifest
         ) values (
+            _repository_id,
+            parent_commit_id,
             _message,
             _author_name,
             _author_email,
