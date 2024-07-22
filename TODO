@@ -1,0 +1,17 @@
+track_relation_rows() should say how many were tracked, a nice summary would be nice
+stage_tracked_rows() should show count - https://stackoverflow.com/a/4047976/368635
+create views for everything, even if we don't use them internally
+audit pg_catalog and delta need to be ignored?
+tracked_rows() function takes id but has pub-style sig
+tracked_rows(repo_id)?  why repo_id, or is it optional?
+move delta_test schema to test_count schema
+set-counts not picking up tracked_rows_added -- create it
+track_relation_rows() ^^
+make count-diff repo-agnistic?
+stage_rows() -> repository_stage_rows()
+^^ repeat for anythign that takes a repo_id ? - commit_fields()
+create repo_commit_fields(uuid default null) pulls from head commit by default
+offstage_row_deleted() -> offstage_rows_deleted()
+create stage_rows_deleted()
+rename basically all functions to use {op}_ nomenclature, where {op} = { get | set | stage | track | add | remove | ... }
+finish commit, to support deletes and changed fields

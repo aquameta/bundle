@@ -19,40 +19,6 @@ select id as repository_id, jsonb_object_keys(stage_fields_changed)::meta.field_
 from delta.repository;
 
 
-/*
-create table stage_row_deleted (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id not null,
-    unique (repository_id, row_id)
-);
-create index stage_row_deleted_row_id_schema_name on stage_row_deleted using hash (((row_id).schema_name));
-create index stage_row_deleted_row_id_relation_name on stage_row_deleted using hash (((row_id).relation_name));
-
-
-create table stage_row_untracked (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    repository_id uuid not null references repository(id) on delete cascade,
-    row_id meta.row_id not null,
-    unique (repository_id, row_id)
-);
-create index stage_row_untracked_row_id_schema_name on stage_row_untracked using hash (((row_id).schema_name));
-create index stage_row_untracked_row_id_relation_name on stage_row_untracked using hash (((row_id).relation_name));
-
-
-create table stage_field_changed (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    repository_id uuid not null references repository(id),
-    field_id meta.field_id,
-    unique (repository_id, field_id)
-);
-create index stage_field_changed_field_id_schema_name on stage_field_changed using hash (((field_id).schema_name));
-create index stage_field_changed_field_id_relation_name on stage_field_changed using hash (((field_id).relation_name));
-create index stage_field_changed_field_id_column_name on stage_field_changed using hash (((field_id).column_name));
-*/
-
-
-
 -------------------------------------------------
 -- Staging / Unstaging Functions
 -------------------------------------------------
@@ -345,14 +311,6 @@ $$ language sql;
 --
 
 create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns void as $$ -- returns setof uuid?
-/*
-    insert into delta.tracked_row_added(repository_id, row_id)
-    select repository_id, row_id
-    from delta.untracked_rows(_relation_id) row_id
---    returning id
-*/
-
-
     update delta.repository
     set tracked_rows_added = tracked_rows_added || (
         select jsonb_agg(row_id::text)
@@ -374,12 +332,6 @@ create or replace function _stage_tracked_rows( _repository_id uuid ) returns vo
 declare
     _tracked_rows_obj jsonb;
 begin
-/*
-select jsonb_object_agg(row_id, db_row_fields_obj(row_id::meta.row_id)) from (
-    select jsonb_array_elements_text('["(shakespeare,chapter,{id},{19219})", "(shakespeare,chapter,{id},{18855})", "(shakespeare,chapter,{id},{19155})", "(shakespeare,chapter,{id},{19049})", "(shakespeare,chapter,{id},{18921})"]'::jsonb) row_id
-    );
-*/
-
     -- create _tracked_rows_obj
     select jsonb_object_agg(row_id, delta.db_row_fields_obj(row_id::meta.row_id))
     into _tracked_rows_obj

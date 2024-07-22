@@ -2,6 +2,7 @@
 -- ignore self, system catalogs, internal schemas, public
 --
 
+/*
 do $$
     declare r record;
     begin
@@ -34,3 +35,4 @@ select delta.stage_tracked_rows('io.aquadelta.core.repository');
 select delta.commit('io.aquadelta.core.repository', 'Ignore rules.', 'Eric Hanson', 'eric@aquameta.com');
 
 commit;
+*/

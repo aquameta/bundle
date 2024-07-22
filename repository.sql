@@ -531,33 +531,6 @@ create function get_commit_manifest( _commit_id uuid ) returns jsonb as $$
 $$ language sql;
 
 
--- NOTE: split these up into separate views per-repository, somehow?
-
-/*
-moved to JSONB
-create materialized view head_commit_row as
-select r.id as repository_id, r.head_commit_id as commit_id, row_id
-from delta.repository r, delta._commit_rows(r.head_commit_id) row_id;
-
--- create index head_commit_row_pkey on head_commit_row(row_id);
--- create unique index head_commit_row_row_id_unique on head_commit_row(row_id);
-create index head_commit_row_commit_id on head_commit_row(commit_id);
-
---
--- head_commit_field
---
-
-create materialized view head_commit_field as
-select r.id as repository_id, r.head_commit_id as commit_id, cf.field_id, cf.value_hash
-from delta.repository r, delta._commit_fields(r.head_commit_id) cf;
-
-
-create index head_commit_field_commit_id on head_commit_field(commit_id);
--- create index head_commit_field_pkey on head_commit_field(field_id);
--- create unique index head_commit_field_field_id_unique on head_commit_field(field_id);
-*/
-
-
 --
 -- garbage_collect()
 --

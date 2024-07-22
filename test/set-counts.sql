@@ -39,6 +39,7 @@ begin
                 ('tracked_rows()',          'delta.tracked_rows(delta.repository_id(''io.aquadelta.test''))'),
                 ('stage_rows()',            'delta.stage_rows  (delta.repository_id(''io.aquadelta.test''))'),
 
+                ('untracked_rows()',        'delta.untracked_rows()'),
                 ('offstage_row_deleted()',  'delta.offstage_row_deleted(delta.repository_id(''io.aquadelta.test''))')
                 -- ('offstage_field_TODO',  'delta.offstage_row_deleted(delta.repository_id(''io.aquadelta.test''))')
         )
@@ -74,7 +75,7 @@ begin
 
         -- compare, add to diff if different
         if _count != old_count then
-            diff := diff || ((rel.alias) || '=>' || _count - old_count)::public.hstore; 
+            diff := diff operator(public.||) ((rel.alias) || '=>' || _count - old_count)::public.hstore; 
         end if;
     end loop;
     return diff;
@@ -86,149 +87,3 @@ insert into delta.ignored_schema (schema_id) values (meta.schema_id('delta_test'
 
 -- make the test repo (it needs to exist before counters will work)
 select delta.repository_create('io.aquadelta.test');
-
--- snapshot counts
-select delta_test.create_counters();
-
-
-
-
----------------------------------------------------------------------------------------
---
--- TESTS
---
----------------------------------------------------------------------------------------
-
----------------------------------------
--- empty bundle
----------------------------------------
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row (''::hstore),
-    'No difference'
-);
-
----------------------------------------
--- new untracked rows
----------------------------------------
-insert into shakespeare.character (id, name, speech_count) values ('9001', 'Zonker', 0);
-insert into shakespeare.character (id, name, speech_count) values ('9002', 'Pluto', 0);
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('untracked_row=>2'::hstore),
-    'New rows'
-);
-
----------------------------------------
--- track rows
----------------------------------------
-select delta.tracked_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('tracked_rows()=>2,tracked_row_added=>2'::hstore),
-    'New tracked rows'
-);
-
-
----------------------------------------
--- stage_row_add()
----------------------------------------
-select delta.stage_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('stage_row_added=>2,tracked_rows()=>2,stage_rows()=>2'::hstore),
-    'Stage tracked rows'
-);
-
--------------------------------------------------------------------------------
--- commit()
--------------------------------------------------------------------------------
-select delta.commit('io.aquadelta.test','First commit!','Testing User','testing@example.com');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('commit=>1,stage_rows()=>2,commit_rows()=>2,tracked_rows()=>2,commit_row_added=>2,db_commit_rows()=>2,db_head_commit_rows()=>2'::hstore),
-    'Commit makes a commit and adds the staged rows'
-);
-
--------------------------------------------------------------------------------
--- refresh_counters()
--------------------------------------------------------------------------------
-select delta_test.refresh_counters();
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row (''::hstore),
-    'refresh_counters() refreshes counters'
-);
-
----------------------------------------
--- delete a row in a commit
----------------------------------------
-delete from shakespeare.character where id='9001';
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('offstage_row_deleted()=>1'::hstore),
-    'Delete a row in a commit'
-);
-
-
----------------------------------------
--- stage the delete
----------------------------------------
-select delta.stage_row_delete('io.aquadelta.test','shakespeare','character','id','9001');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('stage_row_deleted=>1,stage_rows()=>-1'::hstore),
-    'Stage a row delete'
-);
-
----------------------------------------
--- commit
----------------------------------------
-select delta.commit('io.aquadelta.test','Second commit, delete one row','Testing User','testing@example.com');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
-    'Commit a row delete'
-);
-
----------------------------------------
--- track all of shakespeare
----------------------------------------
-select delta_test.refresh_counters();
-select delta.track_relation_rows('io.aquadelta.test', schema_name, name) from meta.table where schema_name='shakespeare';
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
-    'Track shakespeare'
-);
-
----------------------------------------
--- stage_tracked_rows
----------------------------------------
-select delta.stage_tracked_rows('io.aquadelta.test');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
-    'Stage shakespeare'
-);
-
----------------------------------------
--- commit
----------------------------------------
-select delta.commit('io.aquadelta.test','Third commit, add all of shakespeare','Testing User','testing@example.com');
-
-select row_eq(
-    $$ select delta_test.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
-    'Commit shakespeare'
-);

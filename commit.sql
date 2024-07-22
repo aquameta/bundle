@@ -62,22 +62,12 @@ create function _commit(
         raise notice 'commit()';
         raise notice '  - parent_commit_id: %', parent_commit_id;
 
-        -- blob
         /*
+        -- blob
         raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
-        select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra;
+        select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra where repository_id = _repository_id;
         */
-
-        /*
-        raise notice '  - Inserting commit_fields @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_field_changed (commit_id, field_id, value_hash, change_type)
-        select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash, 'add'
-        from (
-            select row_id, (jsonb_each_text(value)).*, public.digest((jsonb_each_text(value)).value::text, 'sha256') as hash from delta.stage_row_added
-        ) fields;
-        */
-
 
         -- topo sort
         raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
