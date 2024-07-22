@@ -4,7 +4,8 @@
 --
 ---------------------------------------------------------------------------------------
 -- snapshot counts
-select delta_test.create_counters();
+select set_counts.create_counters();
+select no_plan();
 
 
 
@@ -18,7 +19,7 @@ select delta_test.create_counters();
 -- empty bundle
 ---------------------------------------
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row (''::hstore),
     'No difference'
 );
@@ -30,7 +31,7 @@ insert into shakespeare.character (id, name, speech_count) values ('9001', 'Zonk
 insert into shakespeare.character (id, name, speech_count) values ('9002', 'Pluto', 0);
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('untracked_row=>2'::hstore),
     'New rows'
 );
@@ -38,10 +39,10 @@ select row_eq(
 ---------------------------------------
 -- track rows
 ---------------------------------------
-select delta.tracked_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
+select delta.tracked_row_add('io.pgdelta.set_counts','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('tracked_rows()=>2,tracked_row_added=>2'::hstore),
     'New tracked rows'
 );
@@ -50,10 +51,10 @@ select row_eq(
 ---------------------------------------
 -- stage_row_add()
 ---------------------------------------
-select delta.stage_row_add('io.aquadelta.test','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
+select delta.stage_row_add('io.pgdelta.set_counts','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('stage_row_added=>2,tracked_rows()=>2,stage_rows()=>2'::hstore),
     'Stage tracked rows'
 );
@@ -61,10 +62,10 @@ select row_eq(
 -------------------------------------------------------------------------------
 -- commit()
 -------------------------------------------------------------------------------
-select delta.commit('io.aquadelta.test','First commit!','Testing User','testing@example.com');
+select delta.commit('io.pgdelta.set_counts','First commit!','Testing User','testing@example.com');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('commit=>1,stage_rows()=>2,commit_rows()=>2,tracked_rows()=>2,commit_row_added=>2,db_commit_rows()=>2,db_head_commit_rows()=>2'::hstore),
     'Commit makes a commit and adds the staged rows'
 );
@@ -72,10 +73,10 @@ select row_eq(
 -------------------------------------------------------------------------------
 -- refresh_counters()
 -------------------------------------------------------------------------------
-select delta_test.refresh_counters();
+select set_counts.refresh_counters();
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row (''::hstore),
     'refresh_counters() refreshes counters'
 );
@@ -86,7 +87,7 @@ select row_eq(
 delete from shakespeare.character where id='9001';
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('offstage_row_deleted()=>1'::hstore),
     'Delete a row in a commit'
 );
@@ -95,10 +96,10 @@ select row_eq(
 ---------------------------------------
 -- stage the delete
 ---------------------------------------
-select delta.stage_row_delete('io.aquadelta.test','shakespeare','character','id','9001');
+select delta.stage_row_delete('io.pgdelta.set_counts','shakespeare','character','id','9001');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('stage_row_deleted=>1,stage_rows()=>-1'::hstore),
     'Stage a row delete'
 );
@@ -106,10 +107,10 @@ select row_eq(
 ---------------------------------------
 -- commit
 ---------------------------------------
-select delta.commit('io.aquadelta.test','Second commit, delete one row','Testing User','testing@example.com');
+select delta.commit('io.pgdelta.set_counts','Second commit, delete one row','Testing User','testing@example.com');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit a row delete'
 );
@@ -117,11 +118,11 @@ select row_eq(
 ---------------------------------------
 -- track all of shakespeare
 ---------------------------------------
-select delta_test.refresh_counters();
-select delta.track_relation_rows('io.aquadelta.test', schema_name, name) from meta.table where schema_name='shakespeare';
+select set_counts.refresh_counters();
+select delta.track_relation_rows('io.pgdelta.set_counts', schema_name, name) from meta.table where schema_name='shakespeare';
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Track shakespeare'
 );
@@ -129,10 +130,10 @@ select row_eq(
 ---------------------------------------
 -- stage_tracked_rows
 ---------------------------------------
-select delta.stage_tracked_rows('io.aquadelta.test');
+select delta.stage_tracked_rows('io.pgdelta.set_counts');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Stage shakespeare'
 );
@@ -140,10 +141,10 @@ select row_eq(
 ---------------------------------------
 -- commit
 ---------------------------------------
-select delta.commit('io.aquadelta.test','Third commit, add all of shakespeare','Testing User','testing@example.com');
+select delta.commit('io.pgdelta.set_counts','Third commit, add all of shakespeare','Testing User','testing@example.com');
 
 select row_eq(
-    $$ select delta_test.count_diff() $$,
+    $$ select set_counts.count_diff() $$,
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit shakespeare'
 );
