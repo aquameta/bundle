@@ -23,6 +23,24 @@ $$ language sql;
 
 
 --
+-- _is_tracked()
+--
+
+create or replace function _is_tracked( row_id meta.row_id ) returns boolean as $$
+declare
+    row_count integer;
+begin
+    select count(*) into row_count from delta.repository where tracked_rows_added ? row_id::text;
+    if row_count > 0 then
+        return true;
+    else
+        return false;
+    end if;
+end;
+$$ language plpgsql;
+
+
+--
 -- tracked_row_add()
 --
 
@@ -31,12 +49,10 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
         tracked_row_id uuid;
     begin
 
-        /*
         -- assert repository exists
         if not delta._repository_exists(_repository_id) then
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
-        */
 
         /*
         if meta.row_exists(meta.row_id('delta','tracked_row_added', 'row_id', row_id::text)) then
@@ -45,12 +61,14 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
         */
 
         -- assert row exists
-        -- NOTE: slow!  skip this?
         if not meta.row_exists(row_id) then
             raise exception 'Row with row_id % does not exist.', row_id;
         end if;
 
-        -- TODO: assert row is not already in a repository's head commit or tracked or staged
+        -- assert row is not already tracked
+        if delta._is_tracked(row_id) then
+            raise exception 'Row with row_id % is already tracked.', row_id;
+        end if;
 
         update delta.repository set tracked_rows_added = tracked_rows_added || to_jsonb(row_id::text) where id = _repository_id;
     /*
@@ -112,7 +130,7 @@ create or replace function _tracked_row_remove( _repository_id uuid, _row_id met
         
         select count(*) into c from delta.repository where id = _repository_id and tracked_rows_added ? _row_id::text;
         if c < 1 then
-            raise exception 'Row with row_id % cannot be untracked because it is not tracked, count is %', _row_id, c;
+            raise exception 'Row with row_id % cannot be untracked because it is not tracked by supplied repository.', _row_id;
         end if;
 
         update delta.repository set tracked_rows_added = tracked_rows_added - _row_id::text where id = _repository_id;
@@ -121,14 +139,14 @@ create or replace function _tracked_row_remove( _repository_id uuid, _row_id met
     end;
 $$ language plpgsql;
 
-create or replace function tracked_row_remove( _repository_id uuid, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function tracked_row_remove( name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns uuid as $$
-    select delta._tracked_row_remove( _repository_id, meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
+    select delta._tracked_row_remove(delta.repository_id(name), meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
 $$ language sql;
 
-create or replace function tracked_row_remove( _repository_id uuid, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function tracked_row_remove( name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns uuid as $$
-    select delta._tracked_row_remove( _repository_id, meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
+    select delta._tracked_row_remove(delta.repository_id(name), meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
 $$ language sql;
 
 

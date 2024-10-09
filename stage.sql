@@ -24,6 +24,24 @@ from delta.repository;
 -------------------------------------------------
 
 --
+-- _is_staged()
+--
+
+create or replace function _is_staged( row_id meta.row_id ) returns boolean as $$
+declare
+    row_count integer;
+begin
+    select count(*) into row_count from delta.repository where jsonb_object_keys(staged_rows_added)::text ? row_id::text;
+    if row_count > 0 then
+        return true;
+    else
+        return false;
+    end if;
+end;
+$$ language plpgsql;
+
+
+--
 -- stage_row_add()
 --
 

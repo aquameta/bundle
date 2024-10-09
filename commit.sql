@@ -85,9 +85,8 @@ create function _commit(
 
 
 
-        -- stage rows added
+        -- add stage rows added
 
-        -- add stage_rows_added to _manifest
         select (repository.stage_rows_added || _manifest) into _manifest
         from delta.repository where id = _repository_id;
         -- clear this repo's stage (TODO: function)
