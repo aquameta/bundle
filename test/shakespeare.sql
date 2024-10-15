@@ -32,7 +32,7 @@ insert into shakespeare.character (id, name, speech_count) values ('9002', 'Plut
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('untracked_row=>2'::hstore),
+    row ('untracked_rows()=>2'::hstore),
     'New rows'
 );
 
@@ -66,7 +66,7 @@ select delta.commit('io.pgdelta.set_counts','First commit!','Testing User','test
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,stage_rows()=>2,commit_rows()=>2,tracked_rows()=>2,commit_row_added=>2,db_commit_rows()=>2,db_head_commit_rows()=>2'::hstore),
+    row ('commit=>1,commit_rows()=>2,tracked_rows()=>2,commit_fields()=>10,db_commit_fields=>10,db_commit_rows()=>2,db_head_commit_rows()=>2'::hstore),
     'Commit makes a commit and adds the staged rows'
 );
 

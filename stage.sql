@@ -232,9 +232,9 @@ select * from (
     select jsonb_array_elements_text(r.stage_rows_deleted)::meta.row_id from delta.repository r-- where relation_id=....?
 
     union
-    -- head_commit_rows
+    -- head_commit_rows for all tables
     select hcr.row_id as row_id
-    from delta.repository r, delta._head_commit_rows(r.head_commit_id) hcr
+    from delta.repository r, delta._head_commit_rows(r.id) hcr
 ) r;
 $$ language sql;
 

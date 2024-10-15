@@ -377,7 +377,7 @@ $$ language plpgsql;
 --
 
 create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(manifest->'contents')::meta.row_id
+    select id, jsonb_object_keys(manifest)::meta.row_id
     from delta.commit
     where id = _commit_id /* and something something _relation_id optimization */;
 $$ language sql;
@@ -392,9 +392,8 @@ $$ language sql;
 create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns table(commit_id uuid, row_id meta.row_id) as $$
     select * from delta._commit_rows(_commit_id, _relation_id_filter);
-
-
 $$ language sql;
+
 
 --
 -- commit_fields()

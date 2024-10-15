@@ -239,3 +239,12 @@ select *, 'select meta.row_id(' ||
 
     as stmt
 from delta.trackable_relation r;
+
+
+--
+-- tracked_row_added
+--
+
+create view tracked_row_added as
+select id as repository_id, jsonb_array_elements(tracked_rows_added)::meta.row_id as row_id
+from repository;
