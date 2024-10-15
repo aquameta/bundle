@@ -206,6 +206,7 @@ select * from (
 
 
 create function untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
+-- all rows that aren't ignored by an ignore rule
 select r.row_id
 from delta.exec((
     select array_agg (stmt)
@@ -215,25 +216,25 @@ from delta.exec((
 
 except
 
+-- ...except the following:
 select * from (
+    -- stage_rows_added
     select jsonb_object_keys(r.stage_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
+
     union
+    -- tracked rows
     -- select t.row_id from delta.tracked_row_added t
     select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
+
     union
+    -- stage_rows_deleted
     -- select d.row_id from delta.stage_row_deleted d
     select jsonb_array_elements_text(r.stage_rows_deleted)::meta.row_id from delta.repository r-- where relation_id=....?
 
-    /*
-    TO RESURRECT:
     union
-    select row_id from delta.head_commit_row row_id
-    */
-
-    union
-
+    -- head_commit_rows
     select hcr.row_id as row_id
-    from delta.repository r, delta.commit_rows(r.head_commit_id) hcr
+    from delta.repository r, delta._head_commit_rows(r.head_commit_id) hcr
 ) r;
 $$ language sql;
 
@@ -244,7 +245,7 @@ $$ language sql;
 
 create or replace function tracked_rows( _repository_id uuid ) returns setof meta.row_id as $$
     -- head commit rows
-    select row_id from delta.head_commit_rows(_repository_id)
+    select row_id from delta._head_commit_rows(_repository_id)
 
     -- ...plus newly tracked rows
     union
@@ -269,7 +270,7 @@ $$ language sql;
 create or replace function offstage_row_deleted( _repository_id uuid ) returns setof meta.row_id as $$
     -- rows deleted from head commit
     select row_id
-    from delta.db_head_commit_rows(_repository_id)
+    from delta._db_head_commit_rows(_repository_id)
         where exists = false
 
     except

@@ -56,46 +56,6 @@ create table commit (
 
 
 --
--- commit_row
---
-
-/*
-moved to JSONB
-
-create table commit_row_added (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    commit_id uuid not null references commit(id),
-    row_id meta.row_id not null,
-    position integer not null,
-    unique(commit_id,row_id)
-);
-
-create table commit_row_deleted (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    commit_id uuid not null references commit(id),
-    row_id meta.row_id not null,
-    position integer not null,
-    unique(commit_id,row_id)
-);
-
-
---
--- commit_field
---
-
-create type field_change_type as enum ('add','delete','change');
-create table commit_field_changed (
-    id uuid not null default public.uuid_generate_v7() primary key,
-    commit_id uuid not null references commit(id),
-    field_id meta.field_id not null,
-    change_type field_change_type not null,
-    value_hash text
-);
--- create index commit_field_changed_field_id_hash_index on commit_field_changed using hash(field_id);
--- create index commit_field_changed_field_id_hash_index on commit_field_changed(field_id);
-*/
-
---
 -- repository
 --
 
@@ -515,12 +475,25 @@ $$ language sql;
 -- head_commit_rows()
 --
 
-
-create function head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create function _head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
     select * from delta._commit_rows((
         select head_commit_id from delta.repository r where r.id = _repository_id
     ));
 $$ language sql;
+
+/*
+create function head_commit_rows( repository_name text default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+declare
+    repository_id uuid;
+begin
+    if repository_name is null then 
+        return query select * from delta._head_commit_rows();
+    else
+        return query select * from delta._head_commit_rows(delta.repository_id(repository_name));
+    end if;
+end;
+$$ language plpgsql;
+*/
 
 --
 -- get_commit_manifest()
