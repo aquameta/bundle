@@ -3,6 +3,7 @@
 -- INIT
 --
 ---------------------------------------------------------------------------------------
+set search_path=public,set_counts;
 -- snapshot counts
 select set_counts.create_counters();
 select no_plan();

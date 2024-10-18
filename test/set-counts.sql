@@ -44,7 +44,7 @@ begin
                 ('stage_rows()',              'delta.stage_rows  (delta.repository_id(''io.pgdelta.set_counts''))'),
 
                 ('untracked_rows()',          'delta.untracked_rows()'),
-                ('offstage_row_deleted()',    'delta._offstage_row_deleted(delta.repository_id(''io.pgdelta.set_counts''))'),
+                ('offstage_rows_deleted()',   'delta._offstage_rows_deleted(delta.repository_id(''io.pgdelta.set_counts''))'),
                 ('offstage_fields_changed()', 'delta._offstage_fields_changed(delta.repository_id(''io.pgdelta.set_counts''))')
         )
     )

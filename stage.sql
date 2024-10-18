@@ -2,26 +2,54 @@
 -- STAGE / UNSTAGE FUNCTIONS
 ------------------------------------------------------------------------------
 
+-------------------------------------------------
+-- Info functions and views
+-------------------------------------------------
+
 --
--- views
+-- stage_rows_added()
 --
+
+create or replace function _stage_rows_added( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_object_keys(stage_rows_added)::meta.row_id
+    from delta.repository 
+    where id = _repository_id;
+$$ language sql;
 
 create view stage_row_added as
 select id as repository_id, jsonb_object_keys(stage_rows_added)::meta.row_id as row_id
 from delta.repository;
 
+
+--
+-- stage_rows_deleted()
+--
+
+create or replace function _stage_rows_deleted( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_array_elements(stage_rows_deleted)::meta.row_id
+    from delta.repository 
+    where id = _repository_id;
+$$ language sql;
+
 create view stage_row_deleted as
 select id as repository_id, jsonb_array_elements(stage_rows_deleted)::meta.row_id as row_id
 from delta.repository;
+
+
+--
+-- stage_rows_deleted()
+--
+
+create or replace function _stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_object_keys(stage_fields_changed)::meta.row_id
+    from delta.repository 
+    where id = _repository_id;
+$$ language sql;
 
 create view stage_field_changed as
 select id as repository_id, jsonb_object_keys(stage_fields_changed)::meta.field_id as field_id
 from delta.repository;
 
-
--------------------------------------------------
--- Staging / Unstaging Functions
--------------------------------------------------
 
 --
 -- _is_staged()
@@ -40,6 +68,10 @@ begin
 end;
 $$ language plpgsql;
 
+
+-------------------------------------------------
+-- Staging / Unstaging Action Functions
+-------------------------------------------------
 
 --
 -- stage_row_add()
@@ -180,30 +212,12 @@ $$ language sql;
 
 -------------------------------------------------
 -- Set Views / Functions
+-- TODO: combine these with info functions section above?
 -------------------------------------------------
 
 --
--- untracked_row
+-- untracked_rows
 --
-
-/*
-create or replace view untracked_row as
--- all rows in trackable_relations
-select r.row_id from delta.exec((select array_agg (stmt) from delta.not_ignored_row_stmt)) r (row_id meta.row_id)
-
-except
-
-select * from (
-    select a.row_id from delta.stage_row_added a
-    union
-    select t.row_id from delta.tracked_row_added t
-    union
-    select d.row_id from delta.stage_row_deleted d
-    union
-    select row_id from delta.head_commit_row row_id
-);
-*/
-
 
 create function untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
 -- all rows that aren't ignored by an ignore rule
@@ -264,7 +278,7 @@ $$ language sql;
 
 
 --
--- offstage_row_deleted
+-- offstage_rows_deleted
 --
 
 create or replace function _offstage_rows_deleted( _repository_id uuid ) returns setof meta.row_id as $$

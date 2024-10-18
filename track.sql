@@ -242,7 +242,7 @@ from delta.trackable_relation r;
 
 
 --
--- tracked_row_added
+-- tracked_rows_added
 --
 
 create function _tracked_rows_added( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$

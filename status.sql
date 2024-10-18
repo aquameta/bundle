@@ -59,7 +59,7 @@ create or replace function status(repository_name text default null, detailed bo
             raise notice '  - Unstaged changes:  % tracked rows, % rows deleted, % fields changed', tracked_rows_added, offstage_rows_deleted, offstage_fields_changed;
 
             -- staged changes
-            select count(*) from _stage_row_added(_repository_id)      into stage_rows_added;
+            select count(*) from _stage_rows_added(_repository_id)     into stage_rows_added;
             select count(*) from _stage_rows_deleted(_repository_id)   into stage_rows_deleted;
             select count(*) from _stage_fields_changed(_repository_id) into stage_fields_changed;
             raise notice '  - Staged changes:  % rows added, % rows deleted, % fields changed', stage_rows_added, stage_rows_deleted, stage_fields_changed;
