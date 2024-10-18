@@ -98,7 +98,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
 
         -- stage
         update delta.repository
-        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta.db_row_fields_obj(_row_id))
+        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta.db_row_field_hashes_obj(_row_id))
         where id = _repository_id;
     end;
 $$ language plpgsql;

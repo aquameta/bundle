@@ -84,12 +84,10 @@ create function _commit(
             _manifest := delta.get_commit_manifest(parent_commit_id);
         end if;
 
-
-
         -- add repository.stage_rows_added to _manifest var
-
         select (repository.stage_rows_added || _manifest) into _manifest
         from delta.repository where id = _repository_id;
+
         -- clear this repo's stage (TODO: make empty_stage(repo_id) function)
         update delta.repository set stage_rows_added = '{}' where id = _repository_id;
 

@@ -40,29 +40,30 @@ create or replace function status(repository_name text default null, detailed bo
             select r.name, r.checkout_commit_id, r.head_commit_id, c.author_name, c.author_email, c.message, c.commit_time
             from delta.repository r
                 left join delta.commit c on r.checkout_commit_id = c.id
+            where r.id = _repository_id
             into repository_name, checkout_commit_id, head_commit_id, author_name, author_email, message, commit_time;
 
             -- heading
             raise notice '';
-            raise notice '[ % ]', delta._repository_name(_repository_id);
+            raise notice '[ % ]', delta._repository_name(_repository_id); -- TODO: head commit contents, broken down by relation, commit count
             if checkout_commit_id is not null then
-                raise notice 'Checked out "%" -- % <%>', message, author_name, author_email;
+                raise notice '  - Checked out "%" -- % <%>', message, author_name, author_email;
             else
-                raise notice 'Not checked out.';
+                raise notice '  - Not checked out.';
             end if;
-            raise notice '----------------------------------------------------------------------------------';
+            -- raise notice '----------------------------------------------------------------------------------';
 
             -- unstaged changes
             select count(*) from _tracked_rows_added(_repository_id)       into tracked_rows_added;
             select count(*) from _offstage_rows_deleted(_repository_id)    into offstage_rows_deleted;
             select count(*) from _offstage_fields_changed(_repository_id)  into offstage_fields_changed;
-            raise notice '  - Unstaged changes:  % tracked rows, % rows deleted, % fields changed', tracked_rows_added, offstage_rows_deleted, offstage_fields_changed;
+            raise notice '  - Off-stage changes:  % tracked rows added, % rows deleted, % fields changed', tracked_rows_added, offstage_rows_deleted, offstage_fields_changed;
 
             -- staged changes
             select count(*) from _stage_rows_added(_repository_id)     into stage_rows_added;
             select count(*) from _stage_rows_deleted(_repository_id)   into stage_rows_deleted;
             select count(*) from _stage_fields_changed(_repository_id) into stage_fields_changed;
-            raise notice '  - Staged changes:  % rows added, % rows deleted, % fields changed', stage_rows_added, stage_rows_deleted, stage_fields_changed;
+            raise notice '  - Staged changes:     % rows added, % rows deleted, % fields changed', stage_rows_added, stage_rows_deleted, stage_fields_changed;
         end loop;
 
     end;
