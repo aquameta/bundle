@@ -26,7 +26,7 @@ select count_diff();
 
 -- delete some rows
 select refresh_counters();
-delete from pt.periodic_table where "AtomicNumber" > 100;
+delete from pt.periodic_table where "AtomicNumber" > 10;
 select count_diff();
 --  "untracked_rows()"=>"-18"
 -- missing offstage_rows_deleted

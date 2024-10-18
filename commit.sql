@@ -62,8 +62,9 @@ create function _commit(
         raise notice 'commit()';
         raise notice '  - parent_commit_id: %', parent_commit_id;
 
-        /*
         -- blob
+        /*
+        -- TODO: right now values are just stored in the commit
         raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
         select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra where repository_id = _repository_id;
@@ -85,36 +86,29 @@ create function _commit(
 
 
 
-        -- add stage rows added
+        -- add repository.stage_rows_added to _manifest var
 
         select (repository.stage_rows_added || _manifest) into _manifest
         from delta.repository where id = _repository_id;
-        -- clear this repo's stage (TODO: function)
+        -- clear this repo's stage (TODO: make empty_stage(repo_id) function)
         update delta.repository set stage_rows_added = '{}' where id = _repository_id;
 
 
-        -- stage_rows_deleted
-
         /*
-        -- add stage_fields_changed to _manifest
+        -- add stage_fields_changed to _manifest var
         TODO
         select (repository.stage_rows_added || _manifest) into _manifest
         from delta.repository where id = _repository_id;
         -- cleare this repo's staged field changes
         TODO
-        -- OLD:
+
+        -- remove stage_rows_deleted from _manifest var
         raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
         from delta.stage_row_deleted
         where repository_id = _repository_id;
         */
-
-
-        -- stage_fields_changed
-
-        -- TODO
-
 
         raise notice '  - Manifest: %', substring(_manifest::text,1,80);
 

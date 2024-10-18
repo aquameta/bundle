@@ -104,7 +104,7 @@ begin
         raise notice 'Repository with name % has no head_commit_id.', repository_name;
     end if;
 
-    select delta._checkout(_head_commit_id);
+    perform delta._checkout(_head_commit_id);
 end
 $$ language plpgsql;
 

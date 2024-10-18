@@ -373,7 +373,7 @@ $$ language plpgsql;
 
 
 --
--- _commit_rows()
+-- commit_rows()
 --
 
 create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
@@ -382,11 +382,6 @@ create or replace function _commit_rows( _commit_id uuid, _relation_id meta.rela
     where id = _commit_id /* and something something _relation_id optimization */;
 $$ language sql;
 
-
-
---
--- commit_rows()
---
 
 -- why is this necessary -- was here before for cache diversion
 create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
@@ -402,33 +397,7 @@ $$ language sql;
 -- a field and it's value hash
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
-
-/*
--- TODO: disabling, don't use mat views for now
--- cache checker, divert to head_commit_field mat view if possible
-create or replace function commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
-returns setof field_hash as $$
-declare
-    is_cached boolean;
-begin
-    select into is_cached exists (select 1 from delta.head_commit_field hcf where commit_id = _commit_id);
-
-    raise debug 'commit_fields(%, %): is_cached: %', _commit_id, _relation_id_filter, is_cached;
-
-    if not is_cached or false then
-        return query select * from delta._commit_fields(_commit_id, _relation_id_filter);
-    else
-        return query select field_id, value_hash from delta.head_commit_field where commit_id = _commit_id;
-    end if;
-end
-$$ language plpgsql;
-*/
-
-
-
-
--- naive SQL function, no check on mat views
-create or replace function commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+create or replace function _commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
     select meta.field_id(
         key::meta.row_id,
@@ -439,34 +408,6 @@ returns setof field_hash as $$
     from jsonb_each((
         select manifest from delta.commit where id = _commit_id
     ));
-
-    /*
-    -- ancestry
-    with recursive ancestry as (
-        select c.id as commit_id, c.parent_id, 0 as position
-        from delta.commit c where c.id=_commit_id
-
-        union
-
-        select c.id as commit_id, c.parent_id, p.position + 1
-        from delta.commit c join ancestry p on c.id = p.parent_id
-    )
-    */
-
-    
-    /*
-    select meta.field_id(, value_hash
-    from delta.commit
-        where fc.field_id::meta.relation_id =
-            case
-                -- no op
-                when _relation_id_filter is null then fc.field_id::meta.relation_id
-                -- filter
-                else _relation_id_filter
-            end
-        order by fc.field_id, a.position
-    ) c where change_type != 'delete';
-    */
 $$ language sql;
 
 
