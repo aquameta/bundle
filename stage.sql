@@ -384,7 +384,7 @@ declare
     _tracked_rows_obj jsonb;
 begin
     -- create _tracked_rows_obj
-    select jsonb_object_agg(row_id, delta.db_row_fields_obj(row_id::meta.row_id))
+    select jsonb_object_agg(row_id, delta.db_row_field_hashes_obj(row_id::meta.row_id))
     into _tracked_rows_obj
     from (
         select jsonb_array_elements_text(tracked_rows_added) row_id

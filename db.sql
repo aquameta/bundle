@@ -236,21 +236,31 @@ $$ language plpgsql;
 -- db_row_field_hashes_obj()
 --
 -- returns a jsonb object whose keys are column names and values are live db value hashes
+-- TODO: can this be done inline so values aren't stored in memory in temp obj?
 
-create or replace function db_row_field_hashs_obj(_row_id meta.row_id) returns jsonb as $$
+create or replace function db_row_field_hashes_obj(_row_id meta.row_id) returns jsonb as $$
 declare
     stmt text;
     obj jsonb;
+    hashed_obj jsonb := '{}';
+    key text;
+    value text;
 begin
-    -- TODO: This is wrong.  to_json converts row to json but doesn't hash fields.
+    -- build key: value temp obj
     stmt := format('select to_json(xx) from %I.%I xx where %s',
         _row_id.schema_name,
         _row_id.relation_name,
         meta._pk_stmt(_row_id, '%1$I = %2$L')
     );
-
     execute stmt into obj;
-    return obj;
+    -- raise notice 'db_row_field_hashes_obj: %', obj;
+
+    -- hash values into hashed_obj, for return
+    for key, value in select * from jsonb_each_text(obj) loop
+        hashed_obj := hashed_obj || jsonb_build_object(key, delta.hash(value));
+    end loop;
+
+    return hashed_obj;
 end;
 $$ language plpgsql;
 
