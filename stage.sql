@@ -267,7 +267,25 @@ $$ language sql;
 -- offstage_row_deleted
 --
 
-create or replace function offstage_row_deleted( _repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _offstage_rows_deleted( _repository_id uuid ) returns setof meta.row_id as $$
+    -- rows deleted from head commit
+    select row_id
+    from delta._db_head_commit_rows(_repository_id)
+        where exists = false
+
+    except
+
+    -- minus those that have been staged for deletion
+    select jsonb_array_elements_text(r.stage_rows_deleted)::meta.row_id
+    from delta.repository r where r.id = _repository_id;
+$$ language sql;
+
+
+--
+-- offstage_fields_changed()
+--
+
+create or replace function _offstage_fields_changed( _repository_id uuid ) returns setof meta.row_id as $$
     -- rows deleted from head commit
     select row_id
     from delta._db_head_commit_rows(_repository_id)

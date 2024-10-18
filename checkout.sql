@@ -72,7 +72,7 @@ begin
     for commit_row in
         select r.row_id, jsonb_object_agg((f.field_id).column_name, b.value) as fields
         from delta.commit_rows(_commit_id) r
-            join delta.commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
+            join delta._commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
             join delta.blob b on f.value_hash = b.hash
         group by r.row_id
     loop

@@ -245,6 +245,12 @@ from delta.trackable_relation r;
 -- tracked_row_added
 --
 
+create function _tracked_rows_added( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_array_elements(tracked_rows_added)::meta.row_id
+    from delta.repository
+    where id = _repository_id;
+$$ language sql;
+
 create view tracked_row_added as
 select id as repository_id, jsonb_array_elements(tracked_rows_added)::meta.row_id as row_id
 from repository;
