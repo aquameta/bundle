@@ -2,7 +2,7 @@
 -- STATUS
 ------------------------------------------------------------------------------
 
-create or replace function status(repository_name text default null, detailed boolean default false) returns void as $$
+create or replace function status(repository_name text default null, detailed boolean default false) returns text as $$
     declare
         _repository_ids uuid[];
         _repository_id uuid;
@@ -33,8 +33,8 @@ create or replace function status(repository_name text default null, detailed bo
             end if;
             _repository_ids := array[(select delta.repository_id(repository_name))];
         else
-            select array_agg(id) from delta.repository into _repository_ids;
-            statii := statii || E'STATUS\n======\n';
+            select array_agg(id order by name) from delta.repository into _repository_ids;
+            -- statii := statii || E'STATUS\n======\n';
         end if;
 
         -- untracked rows
@@ -94,26 +94,26 @@ create or replace function status(repository_name text default null, detailed bo
                 -- checked out status
                 case
                     when checked_out = true then
-                        format('Checked out "%s" -- %s <%s>', message, author_name, author_email)
+                        format('Checked out "%s" -- %s <%s> ', message, author_name, author_email)
                     else
                         'Not checked out.'
                     end,
                 -- off-stage changes status
                 tracked_rows_added,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes',  offstage_rows_deleted, offstage_fields_changed)
+                    format(', %s deletes, %s field changes ',  offstage_rows_deleted, offstage_fields_changed)
                 end,
 
                 -- staged changes status
                 stage_rows_added,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes',  stage_rows_deleted, stage_fields_changed)
+                    format(', %s deletes, %s field changes ',  stage_rows_deleted, stage_fields_changed)
                 end
             );
 
 
         end loop;
-        raise notice E'\n%', statii;
+        return statii;
 
     end;
 $$ language plpgsql;
