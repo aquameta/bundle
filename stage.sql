@@ -3,7 +3,7 @@
 ------------------------------------------------------------------------------
 
 -------------------------------------------------
--- Info functions and views
+-- Info (get_*) functions and views
 -------------------------------------------------
 
 --
@@ -37,10 +37,10 @@ from delta.repository;
 
 
 --
--- stage_rows_deleted()
+-- stage_fields_changed()
 --
 
-create or replace function _stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+create or replace function _get_stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
     select id, jsonb_object_keys(stage_fields_changed)::meta.row_id
     from delta.repository 
     where id = _repository_id;
@@ -206,6 +206,7 @@ $$ language sql;
 
 create or replace function _stage_field_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
     begin
+        -- TODO: asert field is changed and part of repo
         update delta.repository
         set stage_fields_changed = stage_fields_changed || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
         where id = _repository_id;
@@ -216,7 +217,6 @@ $$ language plpgsql;
 --
 -- unstage a field change
 --
-
 
 
 -------------------------------------------------
@@ -415,4 +415,23 @@ $$ language plpgsql;
 
 create or replace function stage_tracked_rows( repository_name text ) returns void as $$
     select delta._stage_tracked_rows(delta.repository_id(repository_name))
+$$ language sql;
+
+
+--
+-- stage_fields_changed()
+-- stages all changed unstaged field changes on a repository
+
+create or replace function _stage_fields_changed( _repository_id uuid ) returns void as $$
+    begin
+        update delta.repository
+        set stage_fields_changed = stage_fields_changed || (
+            select jsonb_object_agg( field_id::text, value_hash ) from _offstage_fields_changed(_repository_id)
+        )
+        where id = _repository_id;
+    end;
+$$ language plpgsql;
+
+create or replace function stage_fields_changed( repository_name text ) returns void as $$
+    select _stage_fields_changed(delta.repository_id(repository_name));
 $$ language sql;
