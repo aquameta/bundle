@@ -35,7 +35,7 @@ begin
                 ('commit_fields()',           'delta._commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
 
                 ('db_commit_rows()',          'delta.db_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
-                ('db_commit_fields',          'delta.db_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
+                ('db_commit_fields',          'delta._db_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
 
                 ('db_head_commit_rows()',     'delta._db_head_commit_rows(delta.repository_id(''io.pgdelta.set_counts''))'),
 --                ('db_head_commit_fields',     'delta._db_head_commit_fields(delta.repository_id(''io.pgdelta.set_counts''))'),

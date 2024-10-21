@@ -78,7 +78,7 @@ begin
 
     literals_stmt := array_to_string(stmts,E'\nunion\n');
 
-    raise debug 'literals_stmt: %', literals_stmt;
+    -- raise debug 'literals_stmt: %', literals_stmt;
 
     if literals_stmt != '' then
         return query execute literals_stmt;
@@ -145,7 +145,7 @@ JOIN, it'll pick up new fields (from new columns presumably).
 */
 
 
-create or replace function db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
+create or replace function _db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
 declare
     rel record;
     stmts text[] = '{}';
@@ -196,18 +196,24 @@ begin
     literals_stmt := format('
         select
             meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
-            public.digest((keyval).value, ''sha256'')::text as value_hash
+            delta.hash((keyval).value)::text as value_hash
         from (%s) fields;',
         literals_stmt
     );
 
-    raise debug 'literals_stmt: %', literals_stmt;
+    -- raise notice 'literals_stmt: %', literals_stmt;
 
     return query execute literals_stmt;
 
 end
 $$ language plpgsql;
 
+
+--
+-- _db_head_commit_fields()
+create or replace function _db_head_commit_fields(_repository_id uuid) returns setof delta.field_hash as $$
+    select * from delta._db_commit_fields(delta._head_commit_id(_repository_id));
+$$ language sql;
 
 --
 -- db_row_fields_obj()

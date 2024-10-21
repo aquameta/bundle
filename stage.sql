@@ -204,6 +204,15 @@ $$ language sql;
 -- stage a field change
 --
 
+create or replace function _stage_field_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
+    begin
+        update delta.repository
+        set stage_fields_changed = stage_fields_changed || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
+        where id = _repository_id;
+        return true;
+    end;
+$$ language plpgsql;
+
 --
 -- unstage a field change
 --
@@ -299,17 +308,17 @@ $$ language sql;
 -- offstage_fields_changed()
 --
 
-create or replace function _offstage_fields_changed( _repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _offstage_fields_changed( _repository_id uuid ) returns setof delta.field_hash as $$
     -- rows deleted from head commit
-    select row_id
-    from delta._db_head_commit_rows(_repository_id)
-        where exists = false
+    select *
+    from delta._db_head_commit_fields(_repository_id)
 
     except
 
     -- minus those that have been staged for deletion
-    select jsonb_array_elements_text(r.stage_rows_deleted)::meta.row_id
-    from delta.repository r where r.id = _repository_id;
+    select *
+    from delta._head_commit_fields(_repository_id)
+
 $$ language sql;
 
 

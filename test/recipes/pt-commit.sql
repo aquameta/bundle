@@ -1,4 +1,4 @@
-\i test/data/periodic_table.sql 
+\i ../data/periodic_table.sql
 
 select repository_create('pt');
 update pt.periodic_table set "Discoverer" = 'This is a really long piece of text that is way longer than a hash, yo.' where "AtomicNumber" = 1;
