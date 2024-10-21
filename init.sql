@@ -7,7 +7,7 @@ create extension if not exists "pg_uuidv7" schema public;
 create extension if not exists pgcrypto schema public;
 
 create extension if not exists meta version '0.5.0';
-create extension if not exists meta_triggers;
+create extension if not exists meta_triggers version '0.5.0';
 
 -- begin;
 

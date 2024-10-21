@@ -59,7 +59,7 @@ create or replace function _is_staged( row_id meta.row_id ) returns boolean as $
 declare
     row_count integer;
 begin
-    select count(*) into row_count from delta.repository where jsonb_object_keys(staged_rows_added)::text ? row_id::text;
+    select count(*) into row_count from delta.repository where jsonb_object_keys(stage_rows_added)::text ? row_id::text;
     if row_count > 0 then
         return true;
     else
@@ -131,7 +131,6 @@ $$ language sql;
 
 create or replace function _stage_row_delete( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
-        stage_row_deleted_id uuid;
     begin
 
         -- assert repository exists
@@ -171,7 +170,6 @@ $$ language plpgsql;
 
 create or replace function _unstage_row( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
-        stage_row_added_id uuid;
         row_exists boolean;
     begin
 
@@ -181,11 +179,11 @@ create or replace function _unstage_row( _repository_id uuid, _row_id meta.row_i
             raise exception 'Row with row_id % is not staged.', _row_id;
         end if;
 
-        update delta.repository set stage_row_added = stage_row_added - array[_row_id::text]
-        where repository_id = _repository_id;
+        update delta.repository set stage_rows_added = stage_rows_added - array[_row_id::text]
+        where id = _repository_id;
 
-        update delta.repository set stage_row_deleted = stage_row_deleted - array[_row_id::text]
-        where repository_id = _repository_id;
+        update delta.repository set stage_rows_deleted = stage_rows_deleted - array[_row_id::text]
+        where id = _repository_id;
     end;
 $$ language plpgsql;
 
@@ -393,12 +391,12 @@ declare
     _tracked_rows_obj jsonb;
 begin
     -- create _tracked_rows_obj
-    select jsonb_object_agg(row_id, delta.db_row_field_hashes_obj(row_id::meta.row_id))
+    select jsonb_object_agg(r.row_id, delta.db_row_field_hashes_obj(row_id::meta.row_id))
     into _tracked_rows_obj
     from (
         select jsonb_array_elements_text(tracked_rows_added) row_id
         from delta.repository where id = _repository_id
-    );
+    ) r;
 
     -- append _tracked_rows_obj to stage_rows_added
     update delta.repository

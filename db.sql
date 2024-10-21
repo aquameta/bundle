@@ -134,7 +134,7 @@ Steps:
    return a big list of field_hash records, (meta.field_id, value_hash)
 
 It returns the value hash of all fields on any row in the supplied commit, with
-it's value hash.  Typically this would be called with the repo's head commit
+its value hash.  Typically, this would be called with the repo's head commit
 (repository.head_commit_id), though it can be used to diff against previous
 commits as well.
 

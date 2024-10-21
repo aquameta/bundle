@@ -46,7 +46,6 @@ $$ language plpgsql;
 
 create or replace function _tracked_row_add( _repository_id uuid, row_id meta.row_id ) returns void as $$
     declare
-        tracked_row_id uuid;
     begin
 
         -- assert repository exists
@@ -84,7 +83,6 @@ $$ language plpgsql;
 create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
 returns void as $$
     declare
-        tracked_row_id uuid;
     begin
 
         -- assert repository exists

@@ -51,7 +51,8 @@ begin
 
     -- propagate vars
     select r.id, r.name, r.head_commit_id, r.checkout_commit_id, c.message
-    from delta.commit c join delta.repository r on r.id = c.repository_id
+    from delta.commit c
+        join delta.repository r on r.id = c.repository_id
     where c.id = _commit_id
     into _repository_id, repository_name, _head_commit_id, _checkout_commit_id, commit_message;
 
@@ -115,7 +116,6 @@ $$ language plpgsql;
 
 create function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
 declare
-    insert_stmt text;
 begin
     raise notice '_checkout_row( %, % )', row_id, fields;
     return;

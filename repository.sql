@@ -244,7 +244,6 @@ $$ language sql;
 
 create or replace function _repository_has_uncommitted_changes( _repository_id uuid ) returns boolean as $$
     declare
-        changes_count integer;
         is_checked_out boolean;
     begin
         -- if it isn't checked out, it doesn't have uncommitted changes
@@ -379,7 +378,7 @@ $$ language plpgsql;
 create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
     select id, jsonb_object_keys(manifest)::meta.row_id
     from delta.commit
-    where id = _commit_id /* and something something _relation_id optimization */;
+    where id = _commit_id /* and something something _relation_id optimization TODO */;
 $$ language sql;
 
 
@@ -406,7 +405,7 @@ $$ language sql;
 -- a field and it's value hash
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
-create or replace function _commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+create or replace function _commit_fields(_commit_id uuid, _relation_id_filter /* TODO */ meta.relation_id default null)
 returns setof field_hash as $$
     select meta.field_id(
         key::meta.row_id,

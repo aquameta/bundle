@@ -6,7 +6,6 @@ create or replace function status(repository_name text default null, detailed bo
     declare
         _repository_ids uuid[];
         _repository_id uuid;
-        rec record;
         c integer;
         checkout_commit_id text; head_commit_id text; author_name text; author_email text; message text; commit_time timestamptz;
 
@@ -80,7 +79,7 @@ create or replace function status(repository_name text default null, detailed bo
             select count(*) from delta._stage_fields_changed(_repository_id) into stage_fields_changed;
 
             /*
-             * status messsage
+             * status message
              */
 
             statii := statii || format('

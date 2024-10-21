@@ -21,8 +21,8 @@ create or replace function unhash( _hash text ) returns text as $$
 declare
     val text;
 begin
-    if length(hash) < 32 then -- length(public.digest('foo','sha256')) then
-        return hash;
+    if length(_hash) < 32 then -- length(public.digest('foo','sha256')) then
+        return _hash;
     else
         select value into val from delta.blob where hash = _hash;
         return val;
