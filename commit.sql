@@ -20,7 +20,7 @@ $$ language sql;
 -- commit()
 --
 
-create function _commit(
+create or replace function _commit(
     _repository_id uuid,
     _message text,
     _author_name text,

@@ -262,7 +262,7 @@ $$ language plpgsql;
 -- _commit_exists()
 --
 
-create function _commit_exists(commit_id uuid) returns boolean as $$
+create or replace function _commit_exists(commit_id uuid) returns boolean as $$
     select exists (select 1 from delta.commit where id=commit_id);
 $$ language sql;
 
@@ -386,7 +386,7 @@ $$ language sql;
 -- get_head_commit_rows()
 --
 
-create function _get_head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function _get_head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
     select * from delta._get_commit_rows(delta._head_commit_id(_repository_id));
 $$ language sql;
 
@@ -415,7 +415,7 @@ $$ language sql;
 --
 -- get_head_commit_fields()
 --
-create function _get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
+create or replace function _get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
     select * from delta._get_commit_fields(delta._head_commit_id(_repository_id));
 $$ language sql;
 
@@ -425,7 +425,7 @@ $$ language sql;
 
 
 /*
-create function get_head_commit_rows( repository_name text default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function get_head_commit_rows( repository_name text default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
 declare
     repository_id uuid;
 begin
@@ -442,7 +442,7 @@ $$ language plpgsql;
 -- get_commit_manifest()
 --
 
-create function _get_commit_manifest( _commit_id uuid ) returns jsonb as $$
+create or replace function _get_commit_manifest( _commit_id uuid ) returns jsonb as $$
     select manifest from delta.commit where id = _commit_id;
 $$ language sql;
 

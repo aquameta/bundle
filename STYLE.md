@@ -13,17 +13,21 @@ Style Guide
 - Whe possible, use a `begin ... exceptions` block to catch and re-raise exceptions, instead of
   checking for things that constraints already enforce, for much speed.
 
-## Tables
+## Relations
 - Singular names
 - Lowercase
 - Underscores
 
 ## Functions
-- Use plural names for set-returning functions
-- Prefer `returns setof` to `returns table`, setof is inlinable where table is not?
+- Use plural names for set-returning functions.
+- Functions should start with the action being taken, e.g. `create_repository()`
+  instead of `repository_create()`.
+- Functions that just return information and don't change state should start with `_get_...`.
+- Functions that return a boolean typically start with `_is_...`.
 - "public" functions (ones the user might call from the psql prompt or their code) typically take
-  human-readable text arguments, e.g. repository name instead of repository id
-- "private" functions begin with a underscore, and typically take ids where applicable
+  human-readable text arguments, e.g. repository name instead of repository id.
+- "private" functions begin with a underscore, and typically take ids where applicable.
+- Prefer `returns setof` to `returns table`, setof is inlinable where table is not?
 - `create or replace function foo( x int, y int, z decimal ) returns x as $$`
 - When arguments collide with column names (e.g. `repository_id`), prefix the argument with a
   underscore (e.g. `_repository_id`)

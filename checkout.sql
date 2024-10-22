@@ -34,7 +34,7 @@ $$ language plpgsql;
 -- checkout()
 --
 
-create function _checkout( _commit_id uuid ) returns text as $$
+create or replace function _checkout( _commit_id uuid ) returns text as $$
 declare
     _repository_id uuid;
     _head_commit_id uuid;
@@ -114,7 +114,7 @@ $$ language plpgsql;
  * _checkout_row()
  */
 
-create function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
+create or replace function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
 declare
 begin
     raise notice '_checkout_row( %, % )', row_id, fields;

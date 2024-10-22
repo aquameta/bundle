@@ -93,7 +93,7 @@ $$ language plpgsql;
 -- get_db_head_commit_rows()
 --
 
-create function _get_db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
+create or replace function _get_db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
     select * from delta._get_db_commit_rows(delta._head_commit_id(repository_id))
 $$ language sql;
 
