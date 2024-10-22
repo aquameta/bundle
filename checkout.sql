@@ -16,7 +16,7 @@ begin
     -- TODO: speed this up by grouping by relation, one delete stmt per relation
     -- TODO: set repo.checkout_commit_id to null?  probably.
 
-    for r in select * from delta.commit_rows(_commit_id) loop
+    for r in select * from delta._get_commit_rows(_commit_id) loop
         if r.row_id is null then raise exception '_checkout_delete(): row_id is null'; end if;
 
         pk_comparison_stmt := meta._pk_stmt(r.row_id, '%1$I::text = %2$L::text');
@@ -72,8 +72,8 @@ begin
 
     for commit_row in
         select r.row_id, jsonb_object_agg((f.field_id).column_name, b.value) as fields
-        from delta.commit_rows(_commit_id) r
-            join delta._commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
+        from delta._get_commit_rows(_commit_id) r
+            join delta._get_commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
             join delta.blob b on f.value_hash = b.hash
         group by r.row_id
     loop

@@ -3,11 +3,11 @@
 ------------------------------------------------------------------------------
 
 --
--- commit_ancestry()
+-- get_commit_ancestry()
 --
 
 create type _commit_ancestry as( commit_id uuid, position integer );
-create or replace function _commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
+create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
     with recursive parent as (
         select c.id, c.parent_id, 1 as position from delta.commit c where c.id=_commit_id
         union

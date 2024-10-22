@@ -37,7 +37,7 @@ create or replace function status(repository_name text default null, detailed bo
         end if;
 
         -- untracked rows
-        select count(*) as c from delta.untracked_rows() into c;
+        select count(*) as c from delta._get_untracked_rows() into c;
         statii := statii || format(E'  - Untracked rows: %s\n', c);
 
         foreach _repository_id in array _repository_ids loop
@@ -60,30 +60,30 @@ create or replace function status(repository_name text default null, detailed bo
             end if;
 
             -- head_branch_commits
-            select count(*) from delta._commit_ancestry (_head_commit_id(_repository_id)) into head_branch_commits;
+            select count(*) from delta._get_commit_ancestry (_head_commit_id(_repository_id)) into head_branch_commits;
 
             -- total_commits
             select count(*) from delta.commit where repository_id = _repository_id into total_commits;
 
             -- head_commit_rows
-            select count(*) from delta._head_commit_rows(_repository_id) into head_commit_rows;
+            select count(*) from delta._get_head_commit_rows(_repository_id) into head_commit_rows;
 
             -- unstaged changes
             select count(*) from delta._tracked_rows_added(_repository_id)       into tracked_rows_added;
-            select count(*) from delta._offstage_rows_deleted(_repository_id)    into offstage_rows_deleted;
-            select count(*) from delta._offstage_fields_changed(_repository_id)  into offstage_fields_changed;
+            select count(*) from delta._get_offstage_rows_deleted(_repository_id)    into offstage_rows_deleted;
+            select count(*) from delta._get_offstage_fields_changed(_repository_id)  into offstage_fields_changed;
 
             -- staged changes
-            select count(*) from delta._stage_rows_added(_repository_id)     into stage_rows_added;
-            select count(*) from delta._stage_rows_deleted(_repository_id)   into stage_rows_deleted;
-            select count(*) from delta._stage_fields_changed(_repository_id) into stage_fields_changed;
+            select count(*) from delta._get_stage_rows_added(_repository_id)     into stage_rows_added;
+            select count(*) from delta._get_stage_rows_deleted(_repository_id)   into stage_rows_deleted;
+            select count(*) from delta._get_stage_fields_changed(_repository_id) into stage_fields_changed;
 
             /*
              * status message
              */
 
             statii := statii || format('
-[ %s ] - %s commits total, %s commits in head branch
+[ %s ] - %s commits total, %s commits in head branch 
   - %s
   - Off-stage changes:  %s rows tracked%s
   - Staged changes:     %s rows added%s

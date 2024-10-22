@@ -375,26 +375,19 @@ $$ language plpgsql;
 -- commit_rows()
 --
 
-create or replace function _commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function _get_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
     select id, jsonb_object_keys(manifest)::meta.row_id
     from delta.commit
     where id = _commit_id /* and something something _relation_id optimization TODO */;
 $$ language sql;
 
 
--- why is this necessary -- was here before for cache diversion
-create or replace function commit_rows(_commit_id uuid, _relation_id_filter meta.relation_id default null)
-returns table(commit_id uuid, row_id meta.row_id) as $$
-    select * from delta._commit_rows(_commit_id, _relation_id_filter);
-$$ language sql;
-
-
 --
--- head_commit_rows()
+-- get_head_commit_rows()
 --
 
-create function _head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
-    select * from delta._commit_rows(delta._head_commit_id(_repository_id));
+create function _get_head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
+    select * from delta._get_commit_rows(delta._head_commit_id(_repository_id));
 $$ language sql;
 
 
@@ -405,7 +398,7 @@ $$ language sql;
 -- a field and it's value hash
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
-create or replace function _commit_fields(_commit_id uuid, _relation_id_filter /* TODO */ meta.relation_id default null)
+create or replace function _get_commit_fields(_commit_id uuid, _relation_id_filter /* TODO */ meta.relation_id default null)
 returns setof field_hash as $$
     select meta.field_id(
         key::meta.row_id,
@@ -420,10 +413,10 @@ $$ language sql;
 
 
 --
--- head_commit_fields()
+-- get_head_commit_fields()
 --
-create function _head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
-    select * from delta._commit_fields(delta._head_commit_id(_repository_id));
+create function _get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
+    select * from delta._get_commit_fields(delta._head_commit_id(_repository_id));
 $$ language sql;
 
 
@@ -432,14 +425,14 @@ $$ language sql;
 
 
 /*
-create function head_commit_rows( repository_name text default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create function get_head_commit_rows( repository_name text default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
 declare
     repository_id uuid;
 begin
     if repository_name is null then 
-        return query select * from delta._head_commit_rows();
+        return query select * from delta._get_head_commit_rows();
     else
-        return query select * from delta._head_commit_rows(delta.repository_id(repository_name));
+        return query select * from delta._get_head_commit_rows(delta.repository_id(repository_name));
     end if;
 end;
 $$ language plpgsql;

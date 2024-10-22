@@ -31,21 +31,21 @@ begin
         -- custom function calls
         select * from (
             values
-                ('commit_rows()',             'delta.commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
-                ('commit_fields()',           'delta._commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
+                ('commit_rows',             'delta._get_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
+                ('commit_fields',           'delta._get_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
 
-                ('db_commit_rows()',          'delta.db_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
-                ('db_commit_fields',          'delta._db_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
+                ('db_commit_rows',          'delta.get_db_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
+                ('db_commit_fields',        'delta._get_db_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
 
-                ('db_head_commit_rows()',     'delta._db_head_commit_rows(delta.repository_id(''io.pgdelta.set_counts''))'),
---                ('db_head_commit_fields',     'delta._db_head_commit_fields(delta.repository_id(''io.pgdelta.set_counts''))'),
+                ('db_head_commit_rows',     'delta._get_db_head_commit_rows(delta.repository_id(''io.pgdelta.set_counts''))'),
+--                ('db_head_commit_fields',    'delta._get_db_head_commit_fields(delta.repository_id(''io.pgdelta.set_counts''))'),
 
-                ('tracked_rows()',            'delta.tracked_rows(delta.repository_id(''io.pgdelta.set_counts''))'),
-                ('stage_rows()',              'delta.stage_rows  (delta.repository_id(''io.pgdelta.set_counts''))'),
+                ('tracked_rows',            'delta._get_tracked_rows(delta.repository_id(''io.pgdelta.set_counts''))'),
+                ('stage_rows',              'delta._get_stage_rows  (delta.repository_id(''io.pgdelta.set_counts''))'),
 
-                ('untracked_rows()',          'delta.untracked_rows()'),
-                ('offstage_rows_deleted()',   'delta._offstage_rows_deleted(delta.repository_id(''io.pgdelta.set_counts''))'),
-                ('offstage_fields_changed()', 'delta._offstage_fields_changed(delta.repository_id(''io.pgdelta.set_counts''))')
+                ('untracked_rows',          'delta._get_untracked_rows()'),
+                ('offstage_rows_deleted',   'delta._get_offstage_rows_deleted(delta.repository_id(''io.pgdelta.set_counts''))'),
+                ('offstage_fields_changed', 'delta._get_offstage_fields_changed(delta.repository_id(''io.pgdelta.set_counts''))')
         )
     )
     loop

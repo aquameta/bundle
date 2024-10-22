@@ -1,5 +1,9 @@
 ------------------------------------------------------------------------------
 -- STAGE / UNSTAGE FUNCTIONS
+
+-- Organized as
+--   a) functions that change data
+--   b) functions that just get info
 ------------------------------------------------------------------------------
 
 
@@ -32,7 +36,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
 
         -- stage
         update delta.repository
-        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta.db_row_field_hashes_obj(_row_id))
+        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta.get_db_row_field_hashes_obj(_row_id))
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -138,7 +142,7 @@ $$ language sql;
 
 create or replace function _stage_field_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
     begin
-        -- TODO: asert field is changed and part of repo
+        -- TODO: assert field is changed and part of repo
         update delta.repository
         set stage_fields_changed = stage_fields_changed || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
         where id = _repository_id;
@@ -151,15 +155,19 @@ $$ language plpgsql;
 --
 
 
+
+
+
 -------------------------------------------------
 -- Set Views / Functions
 -- Convention: _get_*()
 -------------------------------------------------
+
 --
 -- stage_rows_added()
 --
 
-create or replace function _stage_rows_added( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+create or replace function _get_stage_rows_added( _repository_id uuid ) returns table (repository_id uuid,row_id meta.row_id) as $$
     select id, jsonb_object_keys(stage_rows_added)::meta.row_id
     from delta.repository
     where id = _repository_id;
@@ -174,7 +182,7 @@ from delta.repository;
 -- stage_rows_deleted()
 --
 
-create or replace function _stage_rows_deleted( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+create or replace function _get_stage_rows_deleted( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
     select id, jsonb_array_elements(stage_rows_deleted)::meta.row_id
     from delta.repository
     where id = _repository_id;
@@ -186,7 +194,7 @@ from delta.repository;
 
 
 --
--- stage_fields_changed()
+-- get_stage_fields_changed()
 --
 
 create or replace function _get_stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
@@ -219,19 +227,11 @@ $$ language plpgsql;
 
 
 
-
----------- end new paste
-
-
-
-
-
-
 --
--- untracked_rows
+-- get_untracked_rows()
 --
 
-create or replace function untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
+create or replace function _get_untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
 -- all rows that aren't ignored by an ignore rule
 select r.row_id
 from delta.exec((
@@ -260,18 +260,18 @@ select * from (
     union
     -- head_commit_rows for all tables
     select hcr.row_id as row_id
-    from delta.repository r, delta._head_commit_rows(r.id) hcr
+    from delta.repository r, delta._get_head_commit_rows(r.id) hcr
 ) r;
 $$ language sql;
 
 
 --
--- tracked_rows
---
+-- get_tracked_rows()
+-- Returns *all* tracked rows: Newly tracked, staged and head_commit rows
 
-create or replace function tracked_rows( _repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _get_tracked_rows( _repository_id uuid ) returns setof meta.row_id as $$
     -- head commit rows
-    select row_id from delta._head_commit_rows(_repository_id)
+    select row_id from delta._get_head_commit_rows(_repository_id)
 
     -- ...plus newly tracked rows
     union
@@ -288,15 +288,18 @@ create or replace function tracked_rows( _repository_id uuid ) returns setof met
     where r.id = _repository_id
 $$ language sql;
 
+--
+-- get_newly_tracked_rows() TODO
+--
 
 --
--- offstage_rows_deleted
+-- get_offstage_rows_deleted()
 --
 
-create or replace function _offstage_rows_deleted( _repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _get_offstage_rows_deleted( _repository_id uuid ) returns setof meta.row_id as $$
     -- rows deleted from head commit
     select row_id
-    from delta._db_head_commit_rows(_repository_id)
+    from delta._get_db_head_commit_rows(_repository_id)
         where exists = false
 
     except
@@ -308,35 +311,35 @@ $$ language sql;
 
 
 --
--- offstage_fields_changed()
+-- get_offstage_fields_changed()
 --
 
-create or replace function _offstage_fields_changed( _repository_id uuid ) returns setof delta.field_hash as $$
+create or replace function _get_offstage_fields_changed( _repository_id uuid ) returns setof delta.field_hash as $$
     -- rows deleted from head commit
     select *
-    from delta._db_head_commit_fields(_repository_id)
+    from delta._get_db_head_commit_fields(_repository_id)
 
     except
 
     -- minus those that have been staged for deletion
     select *
-    from delta._head_commit_fields(_repository_id)
+    from delta._get_head_commit_fields(_repository_id)
 
 $$ language sql;
 
 
 --
--- stage_rows()
+-- _get_stage_rows()
 --
 
 create type stage_row as (row_id meta.row_id, new_row boolean);
-create or replace function stage_rows( _repository_id uuid ) returns setof stage_row as $$
+create or replace function _get_stage_rows( _repository_id uuid ) returns setof stage_row as $$
     select row_id, false as new_row from (
 
 /*
         -- head_commit_row
         select hcr.row_id as row_id
-        from delta.head_commit_rows(_repository_id) hcr 
+        from delta.get_head_commit_rows(_repository_id) hcr 
 
         except
         */
@@ -358,13 +361,6 @@ create or replace function stage_rows( _repository_id uuid ) returns setof stage
 $$ language sql;
 
 
---
--- stage_row_field
---
-
-
-
-
 -------------------------------------------------
 -- Macro-ops
 -------------------------------------------------
@@ -377,7 +373,7 @@ create or replace function _track_relation_rows( repository_id uuid, _relation_i
     update delta.repository
     set tracked_rows_added = tracked_rows_added || (
         select jsonb_agg(row_id::text)
-        from delta.untracked_rows(_relation_id) row_id
+        from delta._get_untracked_rows(_relation_id) row_id
     ) where id = repository_id;
 $$ language sql;
 
@@ -390,13 +386,13 @@ $$ language sql;
 -- stage_tracked_rows()
 --
 
--- TODO: this can probably be optimized by combining calls to db_row_fields_obj()
+-- TODO: this can probably be optimized by combining calls to get_db_row_fields_obj()
 create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
 declare
     _tracked_rows_obj jsonb;
 begin
     -- create _tracked_rows_obj
-    select jsonb_object_agg(r.row_id, delta.db_row_field_hashes_obj(row_id::meta.row_id))
+    select jsonb_object_agg(r.row_id, delta.get_db_row_field_hashes_obj(row_id::meta.row_id))
     into _tracked_rows_obj
     from (
         select jsonb_array_elements_text(tracked_rows_added) row_id
@@ -422,19 +418,19 @@ $$ language sql;
 
 
 --
--- stage_fields_changed()
+-- stage_field_changes()
 -- stages all changed unstaged field changes on a repository
 
-create or replace function _stage_fields_changed( _repository_id uuid ) returns void as $$
+create or replace function _stage_field_changes( _repository_id uuid ) returns void as $$
     begin
         update delta.repository
         set stage_fields_changed = stage_fields_changed || (
-            select jsonb_object_agg( field_id::text, value_hash ) from _offstage_fields_changed(_repository_id)
+            select jsonb_object_agg( field_id::text, value_hash ) from _get_offstage_fields_changed(_repository_id)
         )
         where id = _repository_id;
     end;
 $$ language plpgsql;
 
-create or replace function stage_fields_changed( repository_name text ) returns void as $$
-    select _stage_fields_changed(delta.repository_id(repository_name));
+create or replace function stage_field_changes( repository_name text ) returns void as $$
+    select delta._stage_field_changes(delta.repository_id(repository_name));
 $$ language sql;
