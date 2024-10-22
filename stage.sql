@@ -2,72 +2,6 @@
 -- STAGE / UNSTAGE FUNCTIONS
 ------------------------------------------------------------------------------
 
--------------------------------------------------
--- Info (get_*) functions and views
--------------------------------------------------
-
---
--- stage_rows_added()
---
-
-create or replace function _stage_rows_added( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_object_keys(stage_rows_added)::meta.row_id
-    from delta.repository 
-    where id = _repository_id;
-$$ language sql;
-
-create view stage_row_added as
-select id as repository_id, jsonb_object_keys(stage_rows_added)::meta.row_id as row_id
-from delta.repository;
-
-
---
--- stage_rows_deleted()
---
-
-create or replace function _stage_rows_deleted( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements(stage_rows_deleted)::meta.row_id
-    from delta.repository 
-    where id = _repository_id;
-$$ language sql;
-
-create view stage_row_deleted as
-select id as repository_id, jsonb_array_elements(stage_rows_deleted)::meta.row_id as row_id
-from delta.repository;
-
-
---
--- stage_fields_changed()
---
-
-create or replace function _get_stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_object_keys(stage_fields_changed)::meta.row_id
-    from delta.repository 
-    where id = _repository_id;
-$$ language sql;
-
-create view stage_field_changed as
-select id as repository_id, jsonb_object_keys(stage_fields_changed)::meta.field_id as field_id
-from delta.repository;
-
-
---
--- _is_staged()
---
-
-create or replace function _is_staged( row_id meta.row_id ) returns boolean as $$
-declare
-    row_count integer;
-begin
-    select count(*) into row_count from delta.repository where jsonb_object_keys(stage_rows_added)::text ? row_id::text;
-    if row_count > 0 then
-        return true;
-    else
-        return false;
-    end if;
-end;
-$$ language plpgsql;
-
 
 -------------------------------------------------
 -- Staging / Unstaging Action Functions
@@ -219,14 +153,85 @@ $$ language plpgsql;
 
 -------------------------------------------------
 -- Set Views / Functions
--- TODO: combine these with info functions section above?
+-- Convention: _get_*()
 -------------------------------------------------
+--
+-- stage_rows_added()
+--
+
+create or replace function _stage_rows_added( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_object_keys(stage_rows_added)::meta.row_id
+    from delta.repository
+    where id = _repository_id;
+$$ language sql;
+
+create view stage_row_added as
+select id as repository_id, jsonb_object_keys(stage_rows_added)::meta.row_id as row_id
+from delta.repository;
+
+
+--
+-- stage_rows_deleted()
+--
+
+create or replace function _stage_rows_deleted( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_array_elements(stage_rows_deleted)::meta.row_id
+    from delta.repository
+    where id = _repository_id;
+$$ language sql;
+
+create view stage_row_deleted as
+select id as repository_id, jsonb_array_elements(stage_rows_deleted)::meta.row_id as row_id
+from delta.repository;
+
+
+--
+-- stage_fields_changed()
+--
+
+create or replace function _get_stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
+    select id, jsonb_object_keys(stage_fields_changed)::meta.row_id
+    from delta.repository
+    where id = _repository_id;
+$$ language sql;
+
+create view stage_field_changed as
+select id as repository_id, jsonb_object_keys(stage_fields_changed)::meta.field_id as field_id
+from delta.repository;
+
+
+--
+-- _is_staged()
+--
+
+create or replace function _is_staged( row_id meta.row_id ) returns boolean as $$
+declare
+    row_count integer;
+begin
+    select count(*) into row_count from delta.repository where jsonb_object_keys(stage_rows_added)::text ? row_id::text;
+    if row_count > 0 then
+        return true;
+    else
+        return false;
+    end if;
+end;
+$$ language plpgsql;
+
+
+
+
+---------- end new paste
+
+
+
+
+
 
 --
 -- untracked_rows
 --
 
-create function untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
+create or replace function untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
 -- all rows that aren't ignored by an ignore rule
 select r.row_id
 from delta.exec((
