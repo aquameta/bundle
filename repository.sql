@@ -14,7 +14,7 @@ create table blob (
 create index blob_hash_hash_index on blob using hash (hash);
 
 
-create or replace function blob_hash_gen_trigger() returns trigger as $$
+create or replace function _blob_hash_gen_trigger() returns trigger as $$
     begin
         if NEW.value is NULL then
             NEW.hash = '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9'::bytea;
@@ -32,7 +32,7 @@ $$ language plpgsql;
 
 create trigger blob_hash_update
     before insert or update on blob
-    for each row execute procedure blob_hash_gen_trigger();
+    for each row execute procedure _blob_hash_gen_trigger();
 
 
 --
@@ -143,10 +143,10 @@ $$ stable language sql;
 
 
 --
--- repository_create()
+-- create_repository()
 --
 
-create or replace function repository_create( repository_name text ) returns uuid as $$
+create or replace function create_repository( repository_name text ) returns uuid as $$
 declare
     _repository_id uuid;
 --     _stage_commit_id uuid;
@@ -191,10 +191,10 @@ $$ language plpgsql;
 
 
 --
--- repository_delete()
+-- delete_repository()
 --
 
-create or replace function _repository_delete( repository_id uuid ) returns void as $$
+create or replace function _delete_repository( repository_id uuid ) returns void as $$
     begin
         if not delta._repository_exists(repository_id) then
             raise exception 'Repository with id % does not exist.', repository_id;
@@ -204,13 +204,13 @@ create or replace function _repository_delete( repository_id uuid ) returns void
     end;
 $$ language plpgsql;
 
-create or replace function repository_delete( repository_name text ) returns void as $$
+create or replace function delete_repository( repository_name text ) returns void as $$
     begin
         if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._repository_delete(delta.repository_id(repository_name));
+        perform delta._delete_repository(delta.repository_id(repository_name));
 
     end;
 $$ language plpgsql;
@@ -442,7 +442,7 @@ $$ language plpgsql;
 -- get_commit_manifest()
 --
 
-create function get_commit_manifest( _commit_id uuid ) returns jsonb as $$
+create function _get_commit_manifest( _commit_id uuid ) returns jsonb as $$
     select manifest from delta.commit where id = _commit_id;
 $$ language sql;
 

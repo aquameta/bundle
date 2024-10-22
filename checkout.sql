@@ -3,10 +3,10 @@
 ------------------------------------------------------------------------------
 
 --
--- checkout_delete()
+-- delete_checkout()
 --
 
-create or replace function _checkout_delete( _commit_id uuid ) returns void as $$
+create or replace function _delete_checkout( _commit_id uuid ) returns void as $$
 declare
         r record;
         pk_comparison_stmt text;
@@ -17,7 +17,7 @@ begin
     -- TODO: set repo.checkout_commit_id to null?  probably.
 
     for r in select * from delta._get_commit_rows(_commit_id) loop
-        if r.row_id is null then raise exception '_checkout_delete(): row_id is null'; end if;
+        if r.row_id is null then raise exception '_delete_checkout(): row_id is null'; end if;
 
         pk_comparison_stmt := meta._pk_stmt(r.row_id, '%1$I::text = %2$L::text');
         execute format ('delete from %I.%I where %s',
@@ -64,7 +64,7 @@ begin
     -- if repo is already checked out, then delete it
     -- TODO: instead of just deleting the checkout, do a diff between _commit_id and _checkout_commit_id, and make selective changes
     if _checkout_commit_id is not null then
-        perform delta._checkout_delete(_checkout_commit_id);
+        perform delta._delete_checkout(_checkout_commit_id);
     end if;
 
     -- naive.

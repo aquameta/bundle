@@ -67,7 +67,7 @@ select delta.commit('io.pgdelta.set_counts','First commit!','Testing User','test
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,get_commit_rows()=>2,_get_tracked_rows()=>2,commit_fields()=>10,get_db_commit_fields=>10,get_db_commit_rows()=>2,get_db_head_commit_rows()=>2'::hstore),
+    row ('commit=>1,get_commit_rows()=>2,_get_tracked_rows()=>2,commit_fields()=>10,get_db_commit_fields=>10,db_commit_rows=>2,get_db_head_commit_rows()=>2'::hstore),
     'Commit makes a commit and adds the staged rows'
 );
 

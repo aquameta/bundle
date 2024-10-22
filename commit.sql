@@ -72,7 +72,7 @@ create function _commit(
 
         -- topo sort
         raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
-        stage_row_relations := delta.topological_sort_stage(_repository_id);
+        stage_row_relations := delta._topological_sort_stage(_repository_id);
 
 
         -- create _manifest
@@ -81,7 +81,7 @@ create function _commit(
             _manifest := '{}'::jsonb;
         else
             -- modify parent commit
-            _manifest := delta.get_commit_manifest(parent_commit_id);
+            _manifest := delta._get_commit_manifest(parent_commit_id);
         end if;
 
         -- add repository.stage_rows_added to _manifest var
@@ -199,7 +199,7 @@ Approach:
 */
 
 create type delta.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
-create or replace function delta.topological_sort_stage( _repository_id uuid ) returns meta.relation_id[] as $$
+create or replace function delta._topological_sort_stage( _repository_id uuid ) returns meta.relation_id[] as $$
 declare
     start_time timestamp := clock_timestamp();
     stage_row_relations meta.relation_id[];

@@ -34,7 +34,7 @@ begin
                 ('commit_rows',             'delta._get_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
                 ('commit_fields',           'delta._get_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
 
-                ('db_commit_rows',          'delta.get_db_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
+                ('db_commit_rows',          'delta._get_db_commit_rows  (delta.head_commit_id(''io.pgdelta.set_counts''))'),
                 ('db_commit_fields',        'delta._get_db_commit_fields(delta.head_commit_id(''io.pgdelta.set_counts''))'),
 
                 ('db_head_commit_rows',     'delta._get_db_head_commit_rows(delta.repository_id(''io.pgdelta.set_counts''))'),
@@ -90,4 +90,4 @@ $$ language plpgsql;
 insert into delta.ignored_schema (schema_id) values (meta.schema_id('set_counts'));
 
 -- create testing schema
-select delta.repository_create('io.pgdelta.set_counts');
+select delta.create_repository('io.pgdelta.set_counts');

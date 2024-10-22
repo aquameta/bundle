@@ -69,7 +69,7 @@ create or replace function status(repository_name text default null, detailed bo
             select count(*) from delta._get_head_commit_rows(_repository_id) into head_commit_rows;
 
             -- unstaged changes
-            select count(*) from delta._tracked_rows_added(_repository_id)       into tracked_rows_added;
+            select count(*) from delta._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
             select count(*) from delta._get_offstage_rows_deleted(_repository_id)    into offstage_rows_deleted;
             select count(*) from delta._get_offstage_fields_changed(_repository_id)  into offstage_fields_changed;
 

@@ -7,7 +7,7 @@
 --
 
 create type row_exists as( row_id meta.row_id, exists boolean );
-create or replace function get_db_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns setof row_exists as $$
+create or replace function _get_db_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns setof row_exists as $$
 declare
     rel record;
     stmts text[] := '{}';
@@ -94,11 +94,7 @@ $$ language plpgsql;
 --
 
 create function _get_db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
-    select * from delta.get_db_commit_rows(delta._head_commit_id(repository_id))
-$$ language sql;
-
-create function get_db_head_commit_rows( name text ) returns setof row_exists as $$
-    select * from delta._get_db_head_commit_rows(delta.repository_id(name))
+    select * from delta._get_db_commit_rows(delta._head_commit_id(repository_id))
 $$ language sql;
 
 
@@ -171,7 +167,7 @@ begin
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
-            from delta.get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from delta._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -220,7 +216,7 @@ $$ language sql;
 --
 -- returns a jsonb object whose keys are column names and values are live db values
 
-create or replace function get_db_row_fields_obj(_row_id meta.row_id) returns jsonb as $$
+create or replace function _get_db_row_fields_obj(_row_id meta.row_id) returns jsonb as $$
 declare
     stmt text;
     obj jsonb;
@@ -244,7 +240,7 @@ $$ language plpgsql;
 -- returns a jsonb object whose keys are column names and values are live db value hashes
 -- TODO: can this be done inline so values aren't stored in memory in temp obj?
 
-create or replace function get_db_row_field_hashes_obj(_row_id meta.row_id) returns jsonb as $$
+create or replace function _get_db_row_field_hashes_obj(_row_id meta.row_id) returns jsonb as $$
 declare
     stmt text;
     obj jsonb;
@@ -287,7 +283,7 @@ where
 
 
 
-select * from get_db_commit_rows(head_commit_id('io.aquadelta.test')) dbcr
+select * from _get_db_commit_rows(head_commit_id('io.aquadelta.test')) dbcr
 full outer join _get_commit_rows(head_commit_id('io.aquadelta.test')) cr on dbcr.row_id = cr.row_id
 where
     dbcr.row_id is null

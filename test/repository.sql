@@ -9,21 +9,21 @@ select results_eq(
 -----------------------------------------------------------
 
 select throws_ok(
-    'select delta.repository_create('''')',
+    'select delta.create_repository('''')',
     'Repository name cannot be empty string.'
 );
 
 select throws_ok(
-    'select delta.repository_create(null)',
+    'select delta.create_repository(null)',
     'Repository name cannot be null.'
 );
 
-prepare returned_repo_id as select delta.repository_create('org.example.test');
+prepare returned_repo_id as select delta.create_repository('org.example.test');
 prepare selected_repo_id as select id from delta.repository where name='org.example.test';
 select results_eq(
     'returned_repo_id',
     'selected_repo_id',
-    'repository_create() creates a repository and returns it''s id'
+    'create_repository() creates a repository and returns it''s id'
 );
 
 -----------------------------------------------------------
@@ -50,20 +50,20 @@ select ok(
 
 -----------------------------------------------------------
 select throws_ok(
-    'select delta.repository_delete(''org.example.parrot'')',
+    'select delta.delete_repository(''org.example.parrot'')',
     'Repository with name org.example.parrot does not exist.',
-    'repository_delete() fails when deleting non-existent repository'
+    'delete_repository() fails when deleting non-existent repository'
 );
 
-select delta.repository_delete('org.example.test');
+select delta.delete_repository('org.example.test');
 select ok(
     not exists (select id from delta.repository where name='org.example.test'),
-    'repository_delete() deletes the repository.'
+    'delete_repository() deletes the repository.'
 );
 
 -----------------------------------------------------------
 
-select delta.repository_create('org.opensourceshakespeare.db');
+select delta.create_repository('org.opensourceshakespeare.db');
 select ok(
     delta.repository_exists('org.opensourceshakespeare.db'),
     'repository_exists() finds an existing repository'

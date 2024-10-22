@@ -36,7 +36,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
 
         -- stage
         update delta.repository
-        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta.get_db_row_field_hashes_obj(_row_id))
+        set stage_rows_added = stage_rows_added || jsonb_build_object(_row_id::text, delta._get_db_row_field_hashes_obj(_row_id))
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -392,7 +392,7 @@ declare
     _tracked_rows_obj jsonb;
 begin
     -- create _tracked_rows_obj
-    select jsonb_object_agg(r.row_id, delta.get_db_row_field_hashes_obj(row_id::meta.row_id))
+    select jsonb_object_agg(r.row_id, delta._get_db_row_field_hashes_obj(row_id::meta.row_id))
     into _tracked_rows_obj
     from (
         select jsonb_array_elements_text(tracked_rows_added) row_id
