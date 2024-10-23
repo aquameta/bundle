@@ -38,7 +38,7 @@ select row_eq(
 ---------------------------------------
 -- track rows
 ---------------------------------------
-select delta.tracked_row_add('io.pgdelta.set_counts','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
+select delta.tracked_row_add('io.pgdelta.set_counts',meta.row_id('shakespeare','character','id',id)) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -50,7 +50,7 @@ select row_eq(
 ---------------------------------------
 -- stage_row_add()
 ---------------------------------------
-select delta.stage_row_add('io.pgdelta.set_counts','shakespeare','character','id',id) from shakespeare.character where id in ('9001','9002');
+select delta.stage_row_add('io.pgdelta.set_counts',meta.row_id('shakespeare','character','id',id::text)) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -95,7 +95,7 @@ select row_eq(
 ---------------------------------------
 -- stage the delete
 ---------------------------------------
-select delta.stage_row_delete('io.pgdelta.set_counts','shakespeare','character','id','9001');
+select delta.stage_row_delete('io.pgdelta.set_counts',meta.row_id('shakespeare','character','id','9001'));
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -118,7 +118,7 @@ select row_eq(
 -- track all of shakespeare
 ---------------------------------------
 select set_counts.refresh_counters();
-select delta.track_relation_rows('io.pgdelta.set_counts', schema_name, name) from meta.table where schema_name='shakespeare';
+select delta.track_relation_rows('io.pgdelta.set_counts', meta.relation_id(schema_name, name)) from meta.table where schema_name='shakespeare';
 
 select row_eq(
     $$ select set_counts.count_diff() $$,

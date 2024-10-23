@@ -90,8 +90,7 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
 $$ language plpgsql;
 
 
-create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-returns void as $$
+create or replace function tracked_row_add( repository_name text, row_id meta.row_id ) returns void as $$
     declare
     begin
 
@@ -102,16 +101,10 @@ returns void as $$
 
         perform delta._tracked_row_add(
             delta.repository_id(repository_name),
-            meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
+            row_id
         );
     end;
 $$ language plpgsql;
-
--- helper for non-compount pks
-create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns void as $$
-    select delta.tracked_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
-$$ language sql;
 
 
 --
@@ -135,14 +128,8 @@ create or replace function _tracked_row_remove( _repository_id uuid, _row_id met
     end;
 $$ language plpgsql;
 
-create or replace function tracked_row_remove( name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
-returns uuid as $$
-    select delta._tracked_row_remove(delta.repository_id(name), meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
-$$ language sql;
-
-create or replace function tracked_row_remove( name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-returns uuid as $$
-    select delta._tracked_row_remove(delta.repository_id(name), meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
+create or replace function tracked_row_remove( name text, row_id meta.row_id ) returns uuid as $$
+    select delta._tracked_row_remove(delta.repository_id(name), row_id);
 $$ language sql;
 
 

@@ -2,7 +2,7 @@ set search_path=public,set_counts;
 -- track
 
 select refresh_counters();
-select delta.track_relation_rows('io.pgdelta.set_counts','pt','periodic_table');
+select delta.track_relation_rows('io.pgdelta.set_counts',meta.relation_id('pt','periodic_table'));
 select count_diff();
 
 
@@ -18,7 +18,6 @@ select count_diff();
 select refresh_counters();
 select delta.commit('io.pgdelta.set_counts', 'Periodic table', 'Eric', 'eric@aquameta.com');
 select count_diff();
---                                                                                                                                             ^^ wrong
 
 
 -- delete some rows

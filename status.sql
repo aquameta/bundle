@@ -60,7 +60,7 @@ create or replace function status(repository_name text default null, detailed bo
             end if;
 
             -- head_branch_commits
-            select count(*) from delta._get_commit_ancestry (_head_commit_id(_repository_id)) into head_branch_commits;
+            select count(*) from delta._get_commit_ancestry (delta._head_commit_id(_repository_id)) into head_branch_commits;
 
             -- total_commits
             select count(*) from delta.commit where repository_id = _repository_id into total_commits;

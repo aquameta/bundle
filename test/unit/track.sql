@@ -45,7 +45,7 @@ end $$ language plpgsql;
 
 -- track one row
 do $$ begin
-    perform delta.tracked_row_add('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+    perform delta.tracked_row_add('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'));
 end $$ language plpgsql;
 
 select ok(
@@ -72,14 +72,14 @@ select ok(
 
 -- track again
 select throws_ok(
-	$$ select delta.tracked_row_add('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7'); $$,
+	$$ select delta.tracked_row_add('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7')); $$,
     format('Row with row_id %s is already tracked.', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7')::text)
 );
 
 
 -- track a row in a non-table
 do $$ begin
-    perform delta.tracked_row_add('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+    perform delta.tracked_row_add('io.pgdelta.unittest', meta.row_id('public', 'not_a_table', 'a', '1'));
 end $$ language plpgsql;
 
 select ok(
@@ -93,20 +93,20 @@ select ok(
 
 -- remove row that is tracked
 do $$ begin
-    perform delta.tracked_row_remove('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+    perform delta.tracked_row_remove('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'));
 end $$ language plpgsql;
 
 select ok(
 	(select not delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
         meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'))),
-	'_is_newly_tracked() cannot find row after removal by tracked_row_remove_row()'
+	'_is_newly_tracked() cannot find row after removal by tracked_row_remove()'
 );
 
 
 -- remove non-table row that is tracked
 do $$ begin
-    perform delta.tracked_row_remove('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+    perform delta.tracked_row_remove('io.pgdelta.unittest', meta.row_id('public', 'not_a_table', 'a', '1'));
 end $$ language plpgsql;
 
 select ok(

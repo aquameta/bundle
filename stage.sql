@@ -39,7 +39,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
     end;
 $$ language plpgsql;
 
-create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
+create or replace function stage_row_add( repository_name text, row_id meta.row_id )
 returns void as $$
     begin
         -- assert repository exists
@@ -49,16 +49,10 @@ returns void as $$
 
         perform delta._stage_row_add(
             delta.repository_id(repository_name),
-            meta.row_id(schema_name, relation_name, pk_column_names, pk_values)
+            row_id
         );
     end;
 $$ language plpgsql;
-
--- helper for single column pks
-create or replace function stage_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text ) returns void as $$
-    select delta.stage_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
-$$ language sql;
-
 
 
 --
@@ -82,7 +76,7 @@ create or replace function _stage_row_delete( _repository_id uuid, _row_id meta.
     end;
 $$ language plpgsql;
 
-create or replace function stage_row_delete( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function stage_row_delete( repository_name text, row_id meta.row_id )
 returns void as $$
     begin
 
@@ -93,7 +87,7 @@ returns void as $$
 
         perform delta._stage_row_delete(
             delta.repository_id(repository_name),
-            meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
+            row_id
         );
     end;
 $$ language plpgsql;
@@ -123,14 +117,9 @@ create or replace function _unstage_row( _repository_id uuid, _row_id meta.row_i
     end;
 $$ language plpgsql;
 
-create or replace function unstage_row( _repository_id uuid, schema_name text, relation_name text, pk_column_name text, pk_value text )
+create or replace function unstage_row( _repository_id uuid, row_id meta.row_id )
 returns void as $$
-    select delta._unstage_row(_repository_id, meta.row_id(schema_name, relation_name, pk_column_name, pk_value));
-$$ language sql;
-
-create or replace function unstage_row( _repository_id uuid, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-returns void as $$
-    select delta._unstage_row(_repository_id, meta.row_id(schema_name, relation_name, pk_column_names, pk_values));
+    select delta._unstage_row(_repository_id, row_id);
 $$ language sql;
 
 
@@ -375,8 +364,8 @@ create or replace function _track_relation_rows( repository_id uuid, _relation_i
     ) where id = repository_id;
 $$ language sql;
 
-create or replace function track_relation_rows( repository_name text, schema_name text, relation_name text ) returns void as $$ -- setof uuid?
-    select delta._track_relation_rows(delta.repository_id(repository_name), meta.relation_id(schema_name, relation_name));
+create or replace function track_relation_rows( repository_name text, relation_id meta.relation_id ) returns void as $$ -- setof uuid?
+    select delta._track_relation_rows(delta.repository_id(repository_name), relation_id);
 $$ language sql;
 
 
