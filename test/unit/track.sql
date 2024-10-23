@@ -1,3 +1,4 @@
+select '------------- track.sql --------------------------------------------------';
 /*
  * Tracking on non-table relations
  */
@@ -11,7 +12,9 @@ from (
         (7, 8, 9)
 ) AS not_a_table(a, b, c);
 
-select delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+do $$ begin
+    perform delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+end $$ language plpgsql;
 
 select results_eq(
 	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''public'',''not_a_table'') and primary_key_column_names = array[''a''];',
@@ -19,7 +22,9 @@ select results_eq(
 	'_track_nontable_relation() adds relation to trackable_relations'
 );
 
-select delta._untrack_nontable_relation(meta.relation_id('public','not_a_table'));
+do $$ begin
+    perform delta._untrack_nontable_relation(meta.relation_id('public','not_a_table'));
+end $$ language plpgsql;
 
 select results_ne(
 	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''public'',''not_a_table'') and primary_key_column_names = array[''a''];',
@@ -28,7 +33,9 @@ select results_ne(
 );
 
 -- track it again for testing
-select delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+do $$ begin
+    perform delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+end $$ language plpgsql;
 
 
 
@@ -37,7 +44,9 @@ select delta._track_nontable_relation(meta.relation_id('public','not_a_table'), 
  */
 
 -- track one row
-select delta.tracked_row_add('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+do $$ begin
+    perform delta.tracked_row_add('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+end $$ language plpgsql;
 
 select ok(
 	(select delta._is_newly_tracked(
@@ -69,7 +78,9 @@ select throws_ok(
 
 
 -- track a row in a non-table
-select delta.tracked_row_add('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+do $$ begin
+    perform delta.tracked_row_add('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+end $$ language plpgsql;
 
 select ok(
 	(select delta._is_newly_tracked(
@@ -81,7 +92,9 @@ select ok(
 
 
 -- remove row that is tracked
-select delta.tracked_row_remove('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+do $$ begin
+    perform delta.tracked_row_remove('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+end $$ language plpgsql;
 
 select ok(
 	(select not delta._is_newly_tracked(
@@ -92,7 +105,9 @@ select ok(
 
 
 -- remove non-table row that is tracked
-select delta.tracked_row_remove('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+do $$ begin
+    perform delta.tracked_row_remove('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+end $$ language plpgsql;
 
 select ok(
 	(select not delta._is_newly_tracked(

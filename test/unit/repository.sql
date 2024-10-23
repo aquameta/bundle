@@ -1,4 +1,4 @@
-DO $$ BEGIN RAISE NOTICE '----------- repository.sql ------------'; END $$;
+select '---------- repository.sql --------------------------------------------';
 
 set search_path=public;
 
@@ -111,7 +111,10 @@ select throws_ok(
     'delete_repository() fails when deleting non-existent repository'
 );
 
-select delta.delete_repository('org.example.banana');
+do $$ begin
+    perform delta.delete_repository('org.example.banana');
+end $$ language plpgsql;
+
 select ok(
     not exists (select id from delta.repository where name='org.example.banana'),
     'delete_repository() deletes the repository.'

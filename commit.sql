@@ -54,24 +54,24 @@ create or replace function _commit(
             if delta._repository_has_commits(_repository_id) then
                 raise exception 'No parent_commit_id supplied, and repository''s head_commit_id is null.  Please specify a parent commit_id for this commit.';
             else
-                raise notice 'First commit!';
+                raise debug 'First commit!';
                 first_commit := true;
             end if;
         end if;
 
-        raise notice 'commit()';
-        raise notice '  - parent_commit_id: %', parent_commit_id;
+        raise debug 'commit()';
+        raise debug '  - parent_commit_id: %', parent_commit_id;
 
         -- blob
         /*
         -- TODO: right now values are just stored in the commit
-        raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
+        raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
         select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra where repository_id = _repository_id;
         */
 
         -- topo sort
-        raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
+        raise debug '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
         stage_row_relations := delta._topological_sort_stage(_repository_id);
 
 
@@ -101,14 +101,14 @@ create or replace function _commit(
         TODO
 
         -- remove stage_rows_deleted from _manifest var
-        raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
+        raise debug '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
         from delta.stage_row_deleted
         where repository_id = _repository_id;
         */
 
-        raise notice '  - Manifest: %', substring(_manifest::text,1,80);
+        raise debug '  - Manifest: %', substring(_manifest::text,1,80);
 
 
         -- create commit
@@ -129,7 +129,7 @@ create or replace function _commit(
             _manifest
         ) returning id into new_commit_id;
 
-        raise notice '  - New commit with id %', new_commit_id;
+        raise debug '  - New commit with id %', new_commit_id;
 
 
         -- update head pointer, checkout pointer
@@ -137,7 +137,7 @@ create or replace function _commit(
 
         -- TODO: unset search_path
 
-        raise notice '  - Done @ %', clock_timestamp() - start_time;
+        raise debug '  - Done @ %', clock_timestamp() - start_time;
         return new_commit_id;
     end;
 $$ language plpgsql;
