@@ -1,5 +1,7 @@
 DO $$ BEGIN RAISE NOTICE '----------- repository.sql ------------'; END $$;
 
+set search_path=public;
+
 --
 -- blob table and hashing
 --

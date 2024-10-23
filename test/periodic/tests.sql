@@ -1,4 +1,4 @@
-set search_path=set_counts;
+set search_path=public,set_counts;
 -- track
 
 select refresh_counters();

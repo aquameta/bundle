@@ -1,3 +1,3 @@
-./run-unit.sh
-./run-periodic-table.sh
-./run-shakespeare.sh
+cd unit; ./run.sh; cd ../
+cd periodic; ./run.sh; cd ../
+cd shakespeare; ./run.sh; cd ../
