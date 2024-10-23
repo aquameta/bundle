@@ -1,6 +1,16 @@
------------------------------------------------------------
+/*
+ *
+ * stage tests
+ *
+ * Assumes that an empty repository `io.pgdelta.unittest` has been created, and
+ * that the periodic table dataset has been loaded.
+ */
 
--- stage one row
+
+--
+-- stage_row_add()
+--
+
 /*
 -- fails because row not tracked
 

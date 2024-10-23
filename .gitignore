@@ -1,4 +1,4 @@
 pg_delta--*.sql
 *.swp
 *.swo
-test/tests.sql
+.idea

@@ -1,29 +1,119 @@
+/*
+ * Tracking on non-table relations
+ */
+
+create view public.not_a_table as
+select *
+from (
+    values
+        (1, 2, 3),
+        (4, 5, 6),
+        (7, 8, 9)
+) AS not_a_table(a, b, c);
+
+select delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+
+select results_eq(
+	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''public'',''not_a_table'') and primary_key_column_names = array[''a''];',
+	'select 1',
+	'_track_nontable_relation() adds relation to trackable_relations'
+);
+
+select delta._untrack_nontable_relation(meta.relation_id('public','not_a_table'));
+
+select results_ne(
+	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''public'',''not_a_table'') and primary_key_column_names = array[''a''];',
+	'select 1',
+	'_untrack_nontable_relation() removes relation from trackable_relations'
+);
+
+-- track it again for testing
+select delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+
+
+
+/*
+ * Tracking and untracking
+ */
+
 -- track one row
-select delta.tracked_row_add('io.pgdelta.unittest', 'shakespeare', 'character', 'id', 'Aaron');
+select delta.tracked_row_add('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+
+select ok(
+	(select delta._is_newly_tracked(
+        delta.repository_id('io.pgdelta.unittest'),
+        meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'))),
+	'_is_newly_tracked() finds row added by tracked_row_add()'
+);
+
+select is(
+    (select count(*)::integer from delta._get_tracked_rows_added(delta.repository_id('io.pgdelta.unittest'))),
+    (select 1),
+    'One tracked row after it is added.'
+);
+
+
+select ok(
+	(select not delta._is_newly_tracked(
+        delta.repository_id('io.pgdelta.unittest'),
+        meta.row_id('pt', 'periodic_table', 'AtomicNumber', '8'))),
+	'_is_newly_tracked() doesn''t finds untracked row'
+);
 
 
 -- track again
 select throws_ok(
-    $$ select delta.tracked_row_add('io.pgdelta.unittest', 'shakespeare', 'character', 'id', id::text) from shakespeare.character where name ilike 'a%%' order by name limit 1; $$,
-    format('Row with row_id %s is already tracked.', meta.row_id('shakespeare', 'character', 'id', 'Aaron')::text)
+	$$ select delta.tracked_row_add('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7'); $$,
+    format('Row with row_id %s is already tracked.', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7')::text)
 );
 
 
+-- track a row in a non-table
+select delta.tracked_row_add('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+
+select ok(
+	(select delta._is_newly_tracked(
+        delta.repository_id('io.pgdelta.unittest'),
+        meta.row_id('public', 'not_a_table', 'a', '1'))),
+	'_is_newly_tracked() finds non-table row added by tracked_row_add()'
+);
+
+
+
+-- remove row that is tracked
+select delta.tracked_row_remove('io.pgdelta.unittest', 'pt', 'periodic_table', 'AtomicNumber', '7');
+
+select ok(
+	(select not delta._is_newly_tracked(
+        delta.repository_id('io.pgdelta.unittest'),
+        meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'))),
+	'_is_newly_tracked() cannot find row after removal by tracked_row_remove_row()'
+);
+
+
+-- remove non-table row that is tracked
+select delta.tracked_row_remove('io.pgdelta.unittest', 'public', 'not_a_table', 'a', '1');
+
+select ok(
+	(select not delta._is_newly_tracked(
+        delta.repository_id('io.pgdelta.unittest'),
+        meta.row_id('pt', 'not_a_table', 'a', '1'))),
+	'_is_newly_tracked() cannot find non-table row, after removal by tracked_row_remove_row()'
+);
+
 -- remove row that isn't tracked
 select throws_ok(
-    $$ select delta._tracked_row_remove(delta.repository_id('io.pgdelta.unittest'), meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%%' order by name limit 1 $$,
+    $$ select delta._tracked_row_remove(delta.repository_id('io.pgdelta.unittest'), meta.row_id('pt', 'periodic_table', 'AtomicNumber', '3'::text)) $$,
     format(
         'Row with row_id %s cannot be removed because it is not tracked by supplied repository.',
-        meta.row_id('shakespeare','character','id','Aaron')
+        meta.row_id('pt','periodic_table','AtomicNumber','3')
     )
 );
 
 
-/*
--- track one row
-select delta.tracked_row_add('io.pgdelta.unittest', 'shakespeare', 'character', 'id', id::text)
-from shakespeare.character where name ilike 'a%' order by name limit 1;
-*/
 
-
-
+select is(
+    (select count(*)::integer from delta._get_tracked_rows_added(delta.repository_id('io.pgdelta.unittest'))),
+    (select 0),
+    'No tracked rows after they are removed'
+);

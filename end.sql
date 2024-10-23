@@ -12,10 +12,10 @@ do $$
             insert into delta.ignored_table(relation_id) values (meta.relation_id(r.schema_name, r.name));
         end loop;
 
-        -- ignore system catalogs, pg_temp*, pg_toast*, public (TODO: audit use of public)
+        -- ignore system catalogs, pg_temp*, pg_toast*
         for r in
             select * from meta.schema
-                where name in ('pg_catalog','public','information_schema')
+                where name in ('pg_catalog','information_schema')
                     or name like 'pg_toast%'
                     or name like 'pg_temp%'
         loop

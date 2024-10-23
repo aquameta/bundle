@@ -2,35 +2,48 @@
 -- TRACKED / UNTRACKED ROWS
 ------------------------------------------------------------------------------
 
---
--- trackable_nontable_relation
---
+/*
+ * trackable_nontable_relation
+ *
+ * By default, only rows in *tables* are included in untracked rows, rows in
+ * views and other non-table relations are not.  However, there are times when
+ * one might wish to version control views, foreign tables, or other types of
+ * non-table relations.  When their relation_id is added to this table, their
+ * contents are included in untracked_rows, and can be version-controlled.
+ */
 
 create table trackable_nontable_relation(
     id uuid not null default public.uuid_generate_v7() primary key,
-    relation_id meta.relation_id not null,
+    relation_id meta.relation_id not null unique,
     pk_column_names text[] not null
 );
 
 
---
--- track_nontable_relation()
---
+/*
+ * [un]track_nontable_relation()
+ */
 
 create or replace function _track_nontable_relation(_relation_id meta.relation_id, _pk_column_names text[]) returns void as $$
     insert into delta.trackable_nontable_relation (relation_id, pk_column_names) values (_relation_id, _pk_column_names);
 $$ language sql;
 
+create or replace function _untrack_nontable_relation(_relation_id meta.relation_id) returns void as $$
+    delete from delta.trackable_nontable_relation where _relation_id = relation_id;
+$$ language sql;
 
---
--- _is_tracked()
---
 
-create or replace function _is_tracked( row_id meta.row_id ) returns boolean as $$
+/*
+ * _is_newly_tracked()
+ */
+
+create or replace function _is_newly_tracked( repository_id uuid, row_id meta.row_id ) returns boolean as $$
 declare
     row_count integer;
 begin
-    select count(*) into row_count from delta.repository where tracked_rows_added ? row_id::text;
+    select count(*) into row_count from delta.repository
+	where id = repository_id
+		and tracked_rows_added ? row_id::text;
+
     if row_count > 0 then
         return true;
     else
@@ -40,9 +53,11 @@ end;
 $$ language plpgsql;
 
 
---
--- tracked_row_add()
---
+/*
+ * tracked_row_add()
+ *
+ * Adds an untracked row to a repository's tracked_rows_added column.
+ */
 
 create or replace function _tracked_row_add( _repository_id uuid, row_id meta.row_id ) returns void as $$
     declare
@@ -54,6 +69,7 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
         end if;
 
         /*
+        TODO: cruft from pre-json days, refactor this to check repository.tracked_rows_added
         if meta.row_exists(meta.row_id('delta','tracked_row_added', 'row_id', row_id::text)) then
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
@@ -65,17 +81,11 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
         end if;
 
         -- assert row is not already tracked
-        if delta._is_tracked(row_id) then
+        if delta._is_newly_tracked(_repository_id, row_id) then
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
 
         update delta.repository set tracked_rows_added = tracked_rows_added || to_jsonb(row_id::text) where id = _repository_id;
-    /*
-    exception
-        when null_value_not_allowed then
-            raise exception 'Repository with id % does not exist.', repository_id;
-        when others then raise;
-    */
     end;
 $$ language plpgsql;
 
@@ -97,23 +107,11 @@ returns void as $$
     end;
 $$ language plpgsql;
 
-
-
+-- helper for non-compount pks
 create or replace function tracked_row_add( repository_name text, schema_name text, relation_name text, pk_column_name text, pk_value text )
 returns void as $$
-    begin
-
-        -- assert repository exists
-        if not delta.repository_exists(repository_name) then
-            raise exception 'Repository with name % does not exist.', repository_name;
-        end if;
-
-        perform delta._tracked_row_add(
-            delta.repository_id(repository_name),
-            meta.row_id(schema_name, relation_name, pk_column_name, pk_value)
-        );
-    end;
-$$ language plpgsql;
+    select delta.tracked_row_add(repository_name, schema_name, relation_name, array[pk_column_name], array[pk_value]);
+$$ language sql;
 
 
 --
@@ -153,8 +151,8 @@ $$ language sql;
 --
 
 create or replace view trackable_relation as
-    select relation_id, primary_key_column_names from (
-
+    select relation_id, primary_key_column_names
+    from (
         -- every table that has a primary key
         select
             t.id as relation_id,
@@ -176,15 +174,16 @@ create or replace view trackable_relation as
 
     -- ...that is not ignored
 
-
-
     where relation_id not in (
         select relation_id from delta.ignored_table
     )
 
     -- ...and is not in an ignored schema
 
-    and relation_id::meta.schema_id not in ( select schema_id from delta.ignored_schema );
+        and relation_id::meta.schema_id not in (
+            select schema_id from delta.ignored_schema
+        )
+    ;
 
 
 --
@@ -250,5 +249,5 @@ create or replace function _get_tracked_rows_added( _repository_id uuid ) return
 $$ language sql;
 
 create or replace view tracked_row_added as
-select id as repository_id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id as row_id
-from repository;
+    select id as repository_id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id as row_id
+    from repository;
