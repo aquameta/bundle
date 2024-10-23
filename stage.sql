@@ -23,11 +23,9 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
         end if;
 
         -- check that it's not already staged
-        /*
         if meta.row_exists(meta.row_id('delta','stage_row_added', 'row_id', _row_id::text)) then
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
-        */
 
         -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 

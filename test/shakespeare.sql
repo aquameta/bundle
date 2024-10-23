@@ -6,8 +6,6 @@
 set search_path=public,set_counts;
 -- snapshot counts
 select set_counts.create_counters();
-select no_plan();
-
 
 
 ---------------------------------------------------------------------------------------
@@ -149,7 +147,3 @@ select row_eq(
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit shakespeare'
 );
-
-
-
-select finish();

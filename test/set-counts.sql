@@ -19,7 +19,7 @@ create table set_counts.set_count (
     count integer
 );
 
-create function set_counts.create_counters() returns void as $$
+create or replace function set_counts.create_counters() returns void as $$
 declare rel record;
 begin
     delete from set_counts.set_count;
@@ -59,12 +59,12 @@ end
 $$ language plpgsql;
 
 
-create function set_counts.refresh_counters() returns void as $$
+create or replace function set_counts.refresh_counters() returns void as $$
     delete from set_counts.set_count;
     select set_counts.create_counters();
 $$ language sql;
 
-create function set_counts.count_diff () returns public.hstore as $$
+create or replace function set_counts.count_diff () returns public.hstore as $$
 declare
     old_count integer;
     _count integer;
