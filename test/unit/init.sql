@@ -1,0 +1,1 @@
+\i ../shakespeare/data.sql

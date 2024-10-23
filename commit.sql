@@ -3,11 +3,11 @@
 ------------------------------------------------------------------------------
 
 --
--- commit_ancestry()
+-- get_commit_ancestry()
 --
 
 create type _commit_ancestry as( commit_id uuid, position integer );
-create or replace function _commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
+create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
     with recursive parent as (
         select c.id, c.parent_id, 1 as position from delta.commit c where c.id=_commit_id
         union
@@ -17,32 +17,24 @@ $$ language sql;
 
 
 --
--- _commit_exists()
---
-
-create function _commit_exists(commit_id uuid) returns boolean as $$
-    select exists (select 1 from delta.commit where id=commit_id);
-$$ language sql;
-
-
---
 -- commit()
 --
 
-create function _commit(
+create or replace function _commit(
     _repository_id uuid,
-    message text,
-    author_name text,
-    author_email text,
+    _message text,
+    _author_name text,
+    _author_email text,
     parent_commit_id uuid default null
 ) returns uuid as $$
     declare
         new_commit_id uuid;
         parent_commit_id uuid;
-        manifest jsonb := '{}';
+        _manifest jsonb := '{}';
+        stage_row_relations meta.relation_id[];
+
         first_commit boolean := false;
         start_time timestamp;
-        stage_row_relations meta.relation_id[];
     begin
         start_time := clock_timestamp();
 
@@ -68,96 +60,80 @@ create function _commit(
         end if;
 
         raise notice 'commit()';
-
-
-/*
-        manifest := select jsonb_agg(
-            jsonb_build_object(
-                'schema_name', (s.row_id).schema_name,
-                'relation_name', (s.row_id).relation_name,
-                'pk_column_name', (s.row_id).pk_column_names,
-                'columns', (s.row_id).schema_name,
-        ) from delta.stage_rows(_repository_id) s;
-*/
-
-
-        -- create the commit
-        insert into delta.commit (
-            repository_id,
-            parent_id,
-            manifest,
-            message,
-            author_name,
-            author_email
-        ) values (
-            _repository_id,
-            parent_commit_id,
-            manifest,
-            message,
-            author_name,
-            author_email
-
-        )
-        returning id into new_commit_id;
-
+        raise notice '  - parent_commit_id: %', parent_commit_id;
 
         -- blob
         /*
+        -- TODO: right now values are just stored in the commit
         raise notice '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
-        select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra;
+        select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra where repository_id = _repository_id;
         */
-
-
-        -- commit_field_changed
-        /*
-        raise notice '  - Inserting commit_fields @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_field_changed (commit_id, field_id, value_hash, change_type)
-        select new_commit_id, meta.field_id(fields.row_id, fields.key), fields.hash, 'add'
-        from (
-            select row_id, (jsonb_each_text(value)).*, public.digest((jsonb_each_text(value)).value::text, 'sha256') as hash from delta.stage_row_added
-        ) fields;
-        */
-
 
         -- topo sort
         raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
-        stage_row_relations := delta.topological_sort_stage(_repository_id);
+        stage_row_relations := delta._topological_sort_stage(_repository_id);
 
 
-        -- commit_row_added
-        raise notice '  - Inserting commit_row_added @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_row_added (commit_id, row_id, position)
-        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_added
-        where repository_id = _repository_id;
+        -- create _manifest
+        if parent_commit_id is null then
+            -- first commit
+            _manifest := '{}'::jsonb;
+        else
+            -- modify parent commit
+            _manifest := delta._get_commit_manifest(parent_commit_id);
+        end if;
 
-        delete from delta.stage_row_added where repository_id = _repository_id;
+        -- add repository.stage_rows_added to _manifest var
+        select (repository.stage_rows_added || _manifest) into _manifest
+        from delta.repository where id = _repository_id;
+
+        -- clear this repo's stage (TODO: make empty_stage(repo_id) function)
+        update delta.repository set stage_rows_added = '{}' where id = _repository_id;
 
 
-        -- commit_row_deleted
+        /*
+        -- add stage_fields_changed to _manifest var
+        TODO
+        select (repository.stage_rows_added || _manifest) into _manifest
+        from delta.repository where id = _repository_id;
+        -- cleare this repo's staged field changes
+        TODO
+
+        -- remove stage_rows_deleted from _manifest var
         raise notice '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
         from delta.stage_row_deleted
         where repository_id = _repository_id;
+        */
 
-        delete from delta.stage_row_deleted where repository_id = _repository_id;
+        raise notice '  - Manifest: %', substring(_manifest::text,1,80);
 
 
-    /*
-        insert into commit_field_changed
-        insert into commit_field_*
-    */
+        -- create commit
+        insert into delta.commit (
+            repository_id,
+            parent_id,
+            -- commit_time, default now(), also not in function sig
+            message,
+            author_name,
+            author_email,
+            manifest
+        ) values (
+            _repository_id,
+            parent_commit_id,
+            _message,
+            _author_name,
+            _author_email,
+            _manifest
+        ) returning id into new_commit_id;
+
+        raise notice '  - New commit with id %', new_commit_id;
+
 
         -- update head pointer, checkout pointer
         update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
-
-        raise notice '  - Refreshing head_commit_row @ % ...', clock_timestamp() - start_time;
-        execute format ('refresh materialized view delta.head_commit_row');
-
-        raise notice '  - Refreshing head_commit_field @ % ...', clock_timestamp() - start_time;
-        execute format ('refresh materialized view delta.head_commit_field');
 
         -- TODO: unset search_path
 
@@ -223,7 +199,7 @@ Approach:
 */
 
 create type delta.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
-create or replace function delta.topological_sort_stage( _repository_id uuid ) returns meta.relation_id[] as $$
+create or replace function delta._topological_sort_stage( _repository_id uuid ) returns meta.relation_id[] as $$
 declare
     start_time timestamp := clock_timestamp();
     stage_row_relations meta.relation_id[];

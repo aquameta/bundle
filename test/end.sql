@@ -1,4 +1,5 @@
--- drop schema if exists delta_test cascade;
--- drop schema if exists shakespeare cascade;
+select public.finish();
 
-commit;
+
+drop schema if exists delta_test cascade;
+drop schema if exists shakespeare cascade;

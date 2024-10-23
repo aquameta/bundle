@@ -3,11 +3,11 @@
 ------------------------------------------------------------------------------
 
 --
--- db_commit_rows()
+-- get_db_commit_rows()
 --
 
 create type row_exists as( row_id meta.row_id, exists boolean );
-create or replace function db_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns setof row_exists as $$
+create or replace function _get_db_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns setof row_exists as $$
 declare
     rel record;
     stmts text[] := '{}';
@@ -15,7 +15,7 @@ declare
     pk_comparison_stmt text;
 begin
     if not delta._commit_exists( _commit_id ) then
-        -- raise warning 'db_commit_rows(): Commit with id % does not exist.', _commit_id;
+        -- raise warning 'get_db_commit_rows(): Commit with id % does not exist.', _commit_id;
         return;
     end if;
 
@@ -26,9 +26,9 @@ begin
     -- commit_rows() for much speed
     select repository_id from delta.commit where commit_id = _commit_id into _repository_id;
     if _commit_id = delta._head_commit_id(repository_id) then
-        commit_rows_stmt := 'delta.head_commit_rows';
+        commit_rows_stmt := 'delta.get_head_commit_rows';
     else
-        commit_rows_stmt := 'delta.commit_rows(_commit_id) row_id'
+        commit_rows_stmt := 'delta._get_commit_rows(_commit_id) row_id'
     end if;
 */
 
@@ -38,7 +38,7 @@ begin
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_names as pk_column_names
-        from delta.commit_rows(_commit_id) row_id
+        from delta._get_commit_rows(_commit_id) row_id
         where row_id::meta.relation_id =
             case
                 when _relation_id is null then row_id::meta.relation_id
@@ -58,7 +58,7 @@ begin
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
-            from delta.commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from delta._get_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -78,7 +78,7 @@ begin
 
     literals_stmt := array_to_string(stmts,E'\nunion\n');
 
-    raise debug 'literals_stmt: %', literals_stmt;
+    -- raise debug 'literals_stmt: %', literals_stmt;
 
     if literals_stmt != '' then
         return query execute literals_stmt;
@@ -90,16 +90,16 @@ $$ language plpgsql;
 
 
 --
--- db_head_commit_rows()
+-- get_db_head_commit_rows()
 --
 
-create function db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
-    select * from delta.db_commit_rows(delta._head_commit_id(repository_id))
+create or replace function _get_db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
+    select * from delta._get_db_commit_rows(delta._head_commit_id(repository_id))
 $$ language sql;
 
 
 --
--- db_commit_fields()
+-- get_db_commit_fields()
 --
 
 /*
@@ -130,7 +130,7 @@ Steps:
    return a big list of field_hash records, (meta.field_id, value_hash)
 
 It returns the value hash of all fields on any row in the supplied commit, with
-it's value hash.  Typically this would be called with the repo's head commit
+its value hash.  Typically, this would be called with the repo's head commit
 (repository.head_commit_id), though it can be used to diff against previous
 commits as well.
 
@@ -141,7 +141,7 @@ JOIN, it'll pick up new fields (from new columns presumably).
 */
 
 
-create or replace function db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
+create or replace function _get_db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
 declare
     rel record;
     stmts text[] = '{}';
@@ -154,7 +154,7 @@ begin
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_names as pk_column_names
-        from delta.commit_rows(commit_id) row_id
+        from delta._get_commit_rows(commit_id) row_id
     loop
         -- TODO: check that each relation exists and has not been deleted.
         -- currently, when that happens, this function will fail.
@@ -167,7 +167,7 @@ begin
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
-            from delta.db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from delta._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -192,23 +192,89 @@ begin
     literals_stmt := format('
         select
             meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
-            public.digest((keyval).value, ''sha256'')::text as value_hash
+            delta.hash((keyval).value)::text as value_hash
         from (%s) fields;',
         literals_stmt
     );
 
-    raise debug 'literals_stmt: %', literals_stmt;
+    -- raise notice 'literals_stmt: %', literals_stmt;
 
     return query execute literals_stmt;
 
 end
 $$ language plpgsql;
 
+
+--
+-- _get_db_head_commit_fields()
+create or replace function _get_db_head_commit_fields(_repository_id uuid) returns setof delta.field_hash as $$
+    select * from delta._get_db_commit_fields(delta._head_commit_id(_repository_id));
+$$ language sql;
+
+--
+-- get_db_row_fields_obj()
+--
+-- returns a jsonb object whose keys are column names and values are live db values
+
+create or replace function _get_db_row_fields_obj(_row_id meta.row_id) returns jsonb as $$
+declare
+    stmt text;
+    obj jsonb;
+begin
+    stmt := format('select to_json(xx) from %I.%I xx where %s',
+        _row_id.schema_name,
+        _row_id.relation_name,
+        meta._pk_stmt(_row_id, '%1$I = %2$L')
+    );
+
+    execute stmt into obj;
+    return obj;
+end;
+$$ language plpgsql;
+
+
+
+--
+-- get_db_row_field_hashes_obj()
+--
+-- returns a jsonb object whose keys are column names and values are live db value hashes
+-- TODO: can this be done inline so values aren't stored in memory in temp obj?
+
+create or replace function _get_db_row_field_hashes_obj(_row_id meta.row_id) returns jsonb as $$
+declare
+    stmt text;
+    obj jsonb;
+    hashed_obj jsonb := '{}';
+    key text;
+    value text;
+begin
+    -- build key: value temp obj
+    stmt := format('select to_json(xx) from %I.%I xx where %s',
+        _row_id.schema_name,
+        _row_id.relation_name,
+        meta._pk_stmt(_row_id, '%1$I = %2$L')
+    );
+    execute stmt into obj;
+    -- raise notice 'get_db_row_field_hashes_obj: %', obj;
+
+    -- hash values into hashed_obj, for return
+    for key, value in select * from jsonb_each_text(obj) loop
+        hashed_obj := hashed_obj || jsonb_build_object(key, delta.hash(value));
+    end loop;
+
+    return hashed_obj;
+end;
+$$ language plpgsql;
+
+
+
+
+
 /*
 big diff queries:
 
 select *
-from db_commit_fields(head_commit_id('io.aquadelta.test')) dbcf
+from get_db_commit_fields(head_commit_id('io.aquadelta.test')) dbcf
 full outer join commit_fields(head_commit_id('io.aquadelta.test')) cf on dbcf.field_id = cf.field_id
 where
     dbcf.value_hash != cf.value_hash or
@@ -217,8 +283,8 @@ where
 
 
 
-select * from db_commit_rows(head_commit_id('io.aquadelta.test')) dbcr
-full outer join commit_rows(head_commit_id('io.aquadelta.test')) cr on dbcr.row_id = cr.row_id
+select * from _get_db_commit_rows(head_commit_id('io.aquadelta.test')) dbcr
+full outer join _get_commit_rows(head_commit_id('io.aquadelta.test')) cr on dbcr.row_id = cr.row_id
 where
     dbcr.row_id is null
     or cr.row_id is null

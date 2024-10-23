@@ -26,7 +26,7 @@ $$ language plpgsql;
 
 
 -- track the ignore rules in the core delta repo
-select delta.repository_create('io.aquadelta.core.repository');
+select delta.create_repository('io.aquadelta.core.repository');
 select delta.tracked_row_add('io.aquadelta.core.repository', 'delta','ignored_table','id',id::text) from delta.ignored_table;
 select delta.tracked_row_add('io.aquadelta.core.repository', 'delta','ignored_schema','id',id::text) from delta.ignored_schema;
 
