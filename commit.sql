@@ -84,23 +84,23 @@ create or replace function _commit(
             _manifest := delta._get_commit_manifest(parent_commit_id);
         end if;
 
-        -- add repository.stage_rows_added to _manifest var
-        select (repository.stage_rows_added || _manifest) into _manifest
+        -- add repository.stage_rows_to_add to _manifest var
+        select (repository.stage_rows_to_add || _manifest) into _manifest
         from delta.repository where id = _repository_id;
 
         -- clear this repo's stage (TODO: make empty_stage(repo_id) function)
-        update delta.repository set stage_rows_added = '{}' where id = _repository_id;
+        update delta.repository set stage_rows_to_add = '{}' where id = _repository_id;
 
 
         /*
-        -- add stage_fields_changed to _manifest var
+        -- add stage_fields_to_change to _manifest var
         TODO
-        select (repository.stage_rows_added || _manifest) into _manifest
+        select (repository.stage_rows_to_add || _manifest) into _manifest
         from delta.repository where id = _repository_id;
         -- cleare this repo's staged field changes
         TODO
 
-        -- remove stage_rows_deleted from _manifest var
+        -- remove stage_rows_to_remove from _manifest var
         raise debug '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))

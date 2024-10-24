@@ -67,9 +67,9 @@ create table repository (
 
     tracked_rows_added jsonb not null default '[]',
 
-    stage_rows_added jsonb not null default '{}',
-    stage_rows_deleted jsonb not null default '[]',
-    stage_fields_changed jsonb not null default '{}'
+    stage_rows_to_add jsonb not null default '{}',
+    stage_rows_to_remove jsonb not null default '[]',
+    stage_fields_to_change jsonb not null default '{}'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 

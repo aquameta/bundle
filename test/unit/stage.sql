@@ -54,13 +54,13 @@ select ok(
 
 
 --
--- _get_stage_rows_added()
+-- _get_stage_rows_to_add()
 --
 
 select results_eq(
-   $$ select row_id::text from delta._get_stage_rows_added(delta.repository_id('io.pgdelta.unittest')) $$,
+   $$ select row_id::text from delta._get_stage_rows_to_add(delta.repository_id('io.pgdelta.unittest')) $$,
    array['(pt,periodic_table,{AtomicNumber},{1})'],
-   '_get_stage_rows_added() finds staged row'
+   '_get_stage_rows_to_add() finds staged row'
 );
 
 
@@ -71,9 +71,9 @@ do $$ begin
 end; $$ language plpgsql;
 
 select results_eq(
-   $$ select row_id::text from delta._get_stage_rows_added(delta.repository_id('io.pgdelta.unittest')) $$,
+   $$ select row_id::text from delta._get_stage_rows_to_add(delta.repository_id('io.pgdelta.unittest')) $$,
    array[]::text[],
-   '_get_stage_rows_added() does not find staged row after commit.'
+   '_get_stage_rows_to_add() does not find staged row after commit.'
 );
 
 select delta.status();

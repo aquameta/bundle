@@ -16,12 +16,12 @@ create or replace function status(repository_name text default null, detailed bo
         head_commit_rows integer;
 
         tracked_rows_added integer;
-        offstage_rows_deleted integer;
-        offstage_fields_changed integer;
+        offstage_rows_to_remove integer;
+        offstage_fields_to_change integer;
 
-        stage_rows_added integer;
-        stage_rows_deleted integer;
-        stage_fields_changed integer;
+        stage_rows_to_add integer;
+        stage_rows_to_remove integer;
+        stage_fields_to_change integer;
 
         statii text := '';
     begin
@@ -70,13 +70,13 @@ create or replace function status(repository_name text default null, detailed bo
 
             -- unstaged changes
             select count(*) from delta._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
-            select count(*) from delta._get_offstage_rows_deleted(_repository_id)    into offstage_rows_deleted;
-            select count(*) from delta._get_offstage_fields_changed(_repository_id)  into offstage_fields_changed;
+            select count(*) from delta._get_offstage_rows_to_remove(_repository_id)    into offstage_rows_to_remove;
+            select count(*) from delta._get_offstage_fields_to_change(_repository_id)  into offstage_fields_to_change;
 
             -- staged changes
-            select count(*) from delta._get_stage_rows_added(_repository_id)     into stage_rows_added;
-            select count(*) from delta._get_stage_rows_deleted(_repository_id)   into stage_rows_deleted;
-            select count(*) from delta._get_stage_fields_changed(_repository_id) into stage_fields_changed;
+            select count(*) from delta._get_stage_rows_to_add(_repository_id)     into stage_rows_to_add;
+            select count(*) from delta._get_stage_rows_to_remove(_repository_id)   into stage_rows_to_remove;
+            select count(*) from delta._get_stage_fields_to_change(_repository_id) into stage_fields_to_change;
 
             /*
              * status message
@@ -100,13 +100,13 @@ create or replace function status(repository_name text default null, detailed bo
                 -- off-stage changes status
                 tracked_rows_added,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes ',  offstage_rows_deleted, offstage_fields_changed)
+                    format(', %s deletes, %s field changes ',  offstage_rows_to_remove, offstage_fields_to_change)
                 end,
 
                 -- staged changes status
-                stage_rows_added,
+                stage_rows_to_add,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes ',  stage_rows_deleted, stage_fields_changed)
+                    format(', %s deletes, %s field changes ',  stage_rows_to_remove, stage_fields_to_change)
                 end
             );
 
