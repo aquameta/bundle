@@ -30,7 +30,7 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
         -- TODO: make sure the row is not already in the repository, or tracked by any other repo
 
         -- untrack
-        perform delta._tracked_row_remove(_repository_id, _row_id);
+        perform delta._untrack_tracked_row(_repository_id, _row_id);
 
         -- stage
         update delta.repository
@@ -56,10 +56,10 @@ $$ language plpgsql;
 
 
 --
--- stage_row_delete()
+-- stage_row_removal()
 --
 
-create or replace function _stage_row_delete( _repository_id uuid, _row_id meta.row_id ) returns void as $$
+create or replace function _stage_row_removal( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
     begin
 
@@ -76,7 +76,7 @@ create or replace function _stage_row_delete( _repository_id uuid, _row_id meta.
     end;
 $$ language plpgsql;
 
-create or replace function stage_row_delete( repository_name text, row_id meta.row_id )
+create or replace function stage_row_removal( repository_name text, row_id meta.row_id )
 returns void as $$
     begin
 
@@ -85,7 +85,7 @@ returns void as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._stage_row_delete(
+        perform delta._stage_row_removal(
             delta.repository_id(repository_name),
             row_id
         );
@@ -94,11 +94,11 @@ $$ language plpgsql;
 
 
 --
--- unstage_row()
+-- unstage_row_removal()
 --
 -- Removes a staged row (add or delete) from the stage.  Split these up?
 
-create or replace function _unstage_row( _repository_id uuid, _row_id meta.row_id ) returns void as $$
+create or replace function _unstage_row_removal( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
         row_exists boolean;
     begin
@@ -117,9 +117,9 @@ create or replace function _unstage_row( _repository_id uuid, _row_id meta.row_i
     end;
 $$ language plpgsql;
 
-create or replace function unstage_row( _repository_id uuid, row_id meta.row_id )
+create or replace function unstage_row_removal( _repository_id uuid, row_id meta.row_id )
 returns void as $$
-    select delta._unstage_row(_repository_id, row_id);
+    select delta._unstage_row_removal(_repository_id, row_id);
 $$ language sql;
 
 
@@ -175,7 +175,7 @@ create or replace function _get_stage_rows_deleted( _repository_id uuid ) return
     where id = _repository_id;
 $$ language sql;
 
-create view stage_row_deleted as
+create view stage_row_removal as
 select id as repository_id, jsonb_array_elements(stage_rows_deleted)::meta.row_id as row_id
 from delta.repository;
 
@@ -233,12 +233,12 @@ select * from (
 
     union
     -- tracked rows
-    -- select t.row_id from delta.tracked_row_added t
+    -- select t.row_id from delta.track_untracked_rowed t
     select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
 
     union
     -- stage_rows_deleted
-    -- select d.row_id from delta.stage_row_deleted d
+    -- select d.row_id from delta.stage_row_removal
     select jsonb_array_elements_text(r.stage_rows_deleted)::meta.row_id from delta.repository r-- where relation_id=....?
 
     union
@@ -350,10 +350,10 @@ $$ language sql;
 -------------------------------------------------
 
 --
--- track_relation_rows
+-- track_untracked_rows_by_relation
 --
 
-create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns void as $$ -- returns setof uuid?
+create or replace function _track_untracked_rows_by_relation( repository_id uuid, _relation_id meta.relation_id ) returns void as $$ -- returns setof uuid?
     update delta.repository
     set tracked_rows_added = tracked_rows_added || (
         select jsonb_agg(row_id::text)
@@ -361,8 +361,8 @@ create or replace function _track_relation_rows( repository_id uuid, _relation_i
     ) where id = repository_id;
 $$ language sql;
 
-create or replace function track_relation_rows( repository_name text, relation_id meta.relation_id ) returns void as $$ -- setof uuid?
-    select delta._track_relation_rows(delta.repository_id(repository_name), relation_id);
+create or replace function track_untracked_rows_by_relation( repository_name text, relation_id meta.relation_id ) returns void as $$ -- setof uuid?
+    select delta._track_untracked_rows_by_relation(delta.repository_id(repository_name), relation_id);
 $$ language sql;
 
 

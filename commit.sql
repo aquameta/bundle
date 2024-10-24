@@ -104,7 +104,7 @@ create or replace function _commit(
         raise debug '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_deleted
+        from delta.stage_row_removal
         where repository_id = _repository_id;
         */
 

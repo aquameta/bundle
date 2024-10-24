@@ -54,12 +54,12 @@ $$ language plpgsql;
 
 
 /*
- * tracked_row_add()
+ * track_untracked_row()
  *
  * Adds an untracked row to a repository's tracked_rows_added column.
  */
 
-create or replace function _tracked_row_add( _repository_id uuid, row_id meta.row_id ) returns void as $$
+create or replace function _track_untracked_row( _repository_id uuid, row_id meta.row_id ) returns void as $$
     declare
     begin
 
@@ -90,7 +90,7 @@ create or replace function _tracked_row_add( _repository_id uuid, row_id meta.ro
 $$ language plpgsql;
 
 
-create or replace function tracked_row_add( repository_name text, row_id meta.row_id ) returns void as $$
+create or replace function track_untracked_row( repository_name text, row_id meta.row_id ) returns void as $$
     declare
     begin
 
@@ -99,7 +99,7 @@ create or replace function tracked_row_add( repository_name text, row_id meta.ro
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._tracked_row_add(
+        perform delta._track_untracked_row(
             delta.repository_id(repository_name),
             row_id
         );
@@ -108,10 +108,10 @@ $$ language plpgsql;
 
 
 --
--- tracked_row_remove()
+-- untrack_tracked_row()
 --
 
-create or replace function _tracked_row_remove( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
+create or replace function _untrack_tracked_row( _repository_id uuid, _row_id meta.row_id ) returns uuid as $$
     declare
         tracked_row_id uuid;
         c integer;
@@ -128,8 +128,8 @@ create or replace function _tracked_row_remove( _repository_id uuid, _row_id met
     end;
 $$ language plpgsql;
 
-create or replace function tracked_row_remove( name text, row_id meta.row_id ) returns uuid as $$
-    select delta._tracked_row_remove(delta.repository_id(name), row_id);
+create or replace function untrack_tracked_row( name text, row_id meta.row_id ) returns uuid as $$
+    select delta._untrack_tracked_row(delta.repository_id(name), row_id);
 $$ language sql;
 
 

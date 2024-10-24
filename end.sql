@@ -29,8 +29,8 @@ $$ language plpgsql;
 do $$
     begin
         perform delta.create_repository('io.aquadelta.core.repository');
-        perform delta.tracked_row_add('io.aquadelta.core.repository', meta.row_id('delta','ignored_table','id',id::text)) from delta.ignored_table;
-        perform delta.tracked_row_add('io.aquadelta.core.repository', meta.row_id('delta','ignored_schema','id',id::text)) from delta.ignored_schema;
+        perform delta.track_untracked_row('io.aquadelta.core.repository', meta.row_id('delta','ignored_table','id',id::text)) from delta.ignored_table;
+        perform delta.track_untracked_row('io.aquadelta.core.repository', meta.row_id('delta','ignored_schema','id',id::text)) from delta.ignored_schema;
 
         perform delta.stage_tracked_rows('io.aquadelta.core.repository');
         perform delta.commit('io.aquadelta.core.repository', 'Ignore rules.', 'Eric Hanson', 'eric@aquameta.com');

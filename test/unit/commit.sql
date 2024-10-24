@@ -36,12 +36,12 @@ select isa_ok(
 */
 
 do $$ begin
-    perform delta.tracked_row_add('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
+    perform delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
     from shakespeare.character where name ilike 'b%' order by name limit 1;
 end $$ language plpgsql;
 
 do $$ begin
-    perform delta.stage_row_add('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
+    perform delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
     from shakespeare.character where name ilike 'b%' order by name limit 1;
 end $$ language plpgsql;
 

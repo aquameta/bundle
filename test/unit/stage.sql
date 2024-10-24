@@ -19,12 +19,12 @@ do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.tracked_row_add(
+        perform delta.track_untracked_row(
             'io.pgdelta.unittest',
             row_id
         );
 
-        perform delta.stage_row_add(
+        perform delta.stage_tracked_row(
             'io.pgdelta.unittest',
             row_id
         );
@@ -80,7 +80,7 @@ select delta.status();
 
 
 --
--- stage_row_delete()
+-- stage_row_removal()
 --
 
 -- stage delete of commited row
@@ -88,7 +88,7 @@ do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.stage_row_delete(
+        perform delta.stage_row_removal(
             'io.pgdelta.unittest',
             row_id
         );
@@ -119,7 +119,7 @@ do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.tracked_row_add(
+        perform delta.track_untracked_row(
             'io.pgdelta.unittest',
             meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text)
         )
@@ -148,26 +148,3 @@ select throws_ok(
     format('Row with row_id %s is already staged.', meta.row_id('shakespeare', 'character', 'id', 'Aaron')),
     'Staging an already staged row throws exception'
 );
-
-
-
-/*
-create or replace function _unstage_row( _repository_id uuid, _row_id meta.row_id ) returns void as $$
-create or replace function unstage_row( _repository_id uuid, schema_name text, relation_name text, pk_column_name text, pk_value text )
-create or replace function unstage_row( _repository_id uuid, schema_name text, relation_name text, pk_column_names text[], pk_values text[] )
-create or replace function _stage_field_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
-create or replace function _get_stage_rows_added( _repository_id uuid ) returns table (repository_id uuid,row_id meta.row_id) as $$
-create or replace function _get_stage_rows_deleted( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-create or replace function _get_stage_fields_changed( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-create or replace function _get_untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
-create or replace function _get_tracked_rows( _repository_id uuid ) returns setof meta.row_id as $$
-create or replace function _get_offstage_rows_deleted( _repository_id uuid ) returns setof meta.row_id as $$
-create or replace function _get_offstage_fields_changed( _repository_id uuid ) returns setof delta.field_hash as $$
-create or replace function _get_stage_rows( _repository_id uuid ) returns setof stage_row as $$
-create or replace function _track_relation_rows( repository_id uuid, _relation_id meta.relation_id ) returns void as $$ -- returns setof uuid?
-create or replace function track_relation_rows( repository_name text, schema_name text, relation_name text ) returns void as $$ -- setof uuid?
-create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
-create or replace function stage_tracked_rows( repository_name text ) returns void as $$
-create or replace function _stage_field_changes( _repository_id uuid ) returns void as $$
-create or replace function stage_field_changes( repository_name text ) returns void as $$
-*/
