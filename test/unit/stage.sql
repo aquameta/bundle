@@ -9,7 +9,7 @@ select '------------ stage.sql -----------------------------------------------';
 
 
 --
--- stage_row_add()
+-- stage_tracked_row()
 --
 
 select delta.status();
@@ -125,7 +125,7 @@ do $$
         )
         from pt.periodic_table where "AtomicNumber" = 1;
 
-        perform delta.stage_row_add(
+        perform delta.stage_tracked_row(
             'io.pgdelta.unittest',
             meta.row_id('pt','periodic_table','AtomicNumber', "AtomicNumber"::text)
         ) from pt.periodic_table where "AtomicNumber" = 1;
@@ -138,13 +138,13 @@ $$ language plpgsql;
 /*
 -- fails because row not tracked
 
-select delta.stage_row_add('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
+select delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
     from shakespeare.character where name ilike 'a%' order by name limit 1;
 */
 -----------------------------------------------------------
 -- stage again
 select throws_ok(
-    $$ select delta.stage_row_add('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
+    $$ select delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
     format('Row with row_id %s is already staged.', meta.row_id('shakespeare', 'character', 'id', 'Aaron')),
     'Staging an already staged row throws exception'
 );

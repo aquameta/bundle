@@ -12,10 +12,10 @@
 -------------------------------------------------
 
 --
--- stage_row_add()
+-- stage_tracked_row()
 --
 
-create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row_id ) returns void as $$
+create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     begin
         -- assert repository exists
         if not delta._repository_exists(_repository_id) then
@@ -39,7 +39,7 @@ create or replace function _stage_row_add( _repository_id uuid, _row_id meta.row
     end;
 $$ language plpgsql;
 
-create or replace function stage_row_add( repository_name text, row_id meta.row_id )
+create or replace function stage_tracked_row( repository_name text, row_id meta.row_id )
 returns void as $$
     begin
         -- assert repository exists
@@ -47,7 +47,7 @@ returns void as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._stage_row_add(
+        perform delta._stage_tracked_row(
             delta.repository_id(repository_name),
             row_id
         );
@@ -199,16 +199,13 @@ from delta.repository;
 -- _is_staged()
 --
 
-create or replace function _is_staged( row_id meta.row_id ) returns boolean as $$
-declare
-    row_count integer;
+create or replace function _is_staged( repository_id uuid, row_id meta.row_id ) returns boolean as $$
 begin
-    select count(*) into row_count from delta.repository where jsonb_object_keys(stage_rows_added)::text ? row_id::text;
-    if row_count > 0 then
-        return true;
-    else
-        return false;
-    end if;
+    return (
+        select jsonb_object_keys(stage_rows_added) = row_id::text
+        from delta.repository
+        where id = repository_id
+    );
 end;
 $$ language plpgsql;
 

@@ -48,7 +48,7 @@ select row_eq(
 
 
 ---------------------------------------
--- stage_row_add()
+-- stage_tracked_row()
 ---------------------------------------
 select delta.stage_row_add('io.pgdelta.set_counts',meta.row_id('shakespeare','character','id',id::text)) from shakespeare.character where id in ('9001','9002');
 
