@@ -63,16 +63,6 @@ select results_eq(
     'create_repository() creates a repository and returns it''s id'
 );
 
--- create repo to later be deleted
-prepare returned_repo_id2 as select delta.create_repository('org.example.banana');
-prepare selected_repo_id2 as select id from delta.repository where name='org.example.banana';
-select results_eq(
-    'returned_repo_id2',
-    'selected_repo_id2',
-    'create_repository() creates a repository and returns it''s id'
-);
-
-
 --
 -- repository_id()
 --
@@ -112,6 +102,7 @@ select throws_ok(
 );
 
 do $$ begin
+    perform delta.create_repository('org.example.banana');
     perform delta.delete_repository('org.example.banana');
 end $$ language plpgsql;
 
@@ -120,29 +111,26 @@ select ok(
     'delete_repository() deletes the repository.'
 );
 
-
 /*
-List of functions in repository.sql as of 10/22/2024:
-
-_blob_hash_gen_trigger() returns trigger as $$
-repository_id( repository_name text ) returns uuid as $$
-_repository_name( repository_id uuid ) returns text as $$
-_head_commit_id( repository_id uuid ) returns uuid as $$
-head_commit_id( repository_name text ) returns uuid as $$
-_checkout_commit_id( repository_id uuid ) returns uuid as $$
-checkout_commit_id( repository_name text ) returns uuid as $$
-create_repository( repository_name text ) returns uuid as $$
-_delete_repository( repository_id uuid ) returns void as $$
-delete_repository( repository_name text ) returns void as $$
-garbage_collect() returns setof text as $$
-repository_exists( _name text ) returns boolean as $$
-_repository_exists( repository_id uuid ) returns boolean as $$
-_repository_has_commits( _repository_id uuid ) returns boolean as $$
-_repository_has_uncommitted_changes( _repository_id uuid ) returns boolean as $$
-_commit_exists(commit_id uuid) returns boolean as $$
-_get_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
-_get_head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
-_get_commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
-_get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
-_get_commit_manifest( _commit_id uuid ) returns jsonb as $$
+create or replace function _blob_hash_gen_trigger() returns trigger as $$
+create or replace function repository_id( repository_name text ) returns uuid as $$
+create or replace function _repository_name( repository_id uuid ) returns text as $$
+create or replace function _head_commit_id( repository_id uuid ) returns uuid as $$
+create or replace function head_commit_id( repository_name text ) returns uuid as $$
+create or replace function _checkout_commit_id( repository_id uuid ) returns uuid as $$
+create or replace function checkout_commit_id( repository_name text ) returns uuid as $$
+create or replace function create_repository( repository_name text ) returns uuid as $$
+create or replace function _delete_repository( repository_id uuid ) returns void as $$
+create or replace function delete_repository( repository_name text ) returns void as $$
+create or replace function garbage_collect() returns setof text as $$
+create or replace function repository_exists( _name text ) returns boolean as $$
+create or replace function _repository_exists( repository_id uuid ) returns boolean as $$
+create or replace function _repository_has_commits( _repository_id uuid ) returns boolean as $$
+create or replace function _repository_has_uncommitted_changes( _repository_id uuid ) returns boolean as $$
+create or replace function _commit_exists(commit_id uuid) returns boolean as $$
+create or replace function _get_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function _get_head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
+create or replace function _get_commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+create or replace function _get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
+create or replace function _get_commit_manifest( _commit_id uuid ) returns jsonb as $$
 */

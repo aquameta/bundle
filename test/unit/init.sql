@@ -3,5 +3,5 @@ select '------------- init.sql -----------------------------------------------';
 drop schema if exists shakespeare cascade;
 \i ../shakespeare/data.sql
 
-drop schema if exists periodic cascade;
+drop schema if exists pt cascade;
 \i ../periodic/data.sql
