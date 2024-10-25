@@ -67,7 +67,7 @@ create or replace function _commit(
         -- TODO: right now values are just stored in the commit
         raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
-        select distinct (jsonb_each(sra.value)).value from delta.stage_row_added sra where repository_id = _repository_id;
+        select distinct (jsonb_each(sra.value)).value from delta.stage_row_to_add sra where repository_id = _repository_id;
         */
 
         -- topo sort
@@ -104,7 +104,7 @@ create or replace function _commit(
         raise debug '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
         insert into delta.commit_row_deleted (commit_id, row_id, position)
         select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_removal
+        from delta.stage_row_to_remove
         where repository_id = _repository_id;
         */
 
@@ -213,7 +213,7 @@ begin
     -- stage_row_relations
     raise debug '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
     select array_agg(distinct row_id::meta.relation_id)
-        from delta.stage_row_added
+        from delta.stage_row_to_add
         where repository_id =  _repository_id
     into stage_row_relations;
 
@@ -281,7 +281,7 @@ begin
     -- stage_row relations as jsonb object keys, value is empty array
     raise notice '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
     select distinct jsonb_object_agg(row_id::meta.relation_id::text, '[]'::jsonb)
-        from delta.stage_row_added
+        from delta.stage_row_to_add
         where repository_id =  _repository_id
     into stage_row_relations;
 

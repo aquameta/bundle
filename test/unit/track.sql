@@ -1,4 +1,5 @@
 select '------------- track.sql --------------------------------------------------';
+
 /*
  * Tracking on non-table relations
  */
@@ -125,8 +126,7 @@ select throws_ok(
     )
 );
 
-
-
+-- _get_tracked_rows_added
 select is(
     (select count(*)::integer from delta._get_tracked_rows_added(delta.repository_id('io.pgdelta.unittest'))),
     (select 0),

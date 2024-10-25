@@ -16,8 +16,8 @@ create or replace function status(repository_name text default null, detailed bo
         head_commit_rows integer;
 
         tracked_rows_added integer;
-        offstage_rows_to_remove integer;
-        offstage_fields_to_change integer;
+        offstage_deleted_rows integer;
+        offstage_changed_fields integer;
 
         stage_rows_to_add integer;
         stage_rows_to_remove integer;
@@ -70,8 +70,8 @@ create or replace function status(repository_name text default null, detailed bo
 
             -- unstaged changes
             select count(*) from delta._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
-            select count(*) from delta._get_offstage_rows_to_remove(_repository_id)    into offstage_rows_to_remove;
-            select count(*) from delta._get_offstage_fields_to_change(_repository_id)  into offstage_fields_to_change;
+            select count(*) from delta._get_offstage_deleted_rows(_repository_id)    into offstage_deleted_rows;
+            select count(*) from delta._get_offstage_updated_fields(_repository_id)  into offstage_changed_fields;
 
             -- staged changes
             select count(*) from delta._get_stage_rows_to_add(_repository_id)     into stage_rows_to_add;
@@ -100,7 +100,7 @@ create or replace function status(repository_name text default null, detailed bo
                 -- off-stage changes status
                 tracked_rows_added,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes ',  offstage_rows_to_remove, offstage_fields_to_change)
+                    format(', %s deletes, %s field changes ',  offstage_deleted_rows, offstage_changed_fields)
                 end,
 
                 -- staged changes status

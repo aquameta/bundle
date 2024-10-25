@@ -80,7 +80,7 @@ select delta.status();
 
 
 --
--- stage_row_removal()
+-- stage_row_to_remove()
 --
 
 -- stage delete of commited row
@@ -88,7 +88,7 @@ do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.stage_row_removal(
+        perform delta.stage_row_to_remove(
             'io.pgdelta.unittest',
             row_id
         );

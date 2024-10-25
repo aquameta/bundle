@@ -95,11 +95,11 @@ select row_eq(
 ---------------------------------------
 -- stage the delete
 ---------------------------------------
-select delta.stage_row_removal('io.pgdelta.set_counts',meta.row_id('shakespeare','character','id','9001'));
+select delta.stage_row_to_remove('io.pgdelta.set_counts',meta.row_id('shakespeare','character','id','9001'));
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_row_removals=>1,_get_stage_rows()=>-1'::hstore),
+    row ('stage_row_to_removes=>1,_get_stage_rows()=>-1'::hstore),
     'Stage a row delete'
 );
 

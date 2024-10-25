@@ -23,7 +23,7 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
         end if;
 
         -- check that it's not already staged
-        if meta.row_exists(meta.row_id('delta','stage_row_added', 'row_id', _row_id::text)) then
+        if meta.row_exists(meta.row_id('delta','stage_row_to_add', 'row_id', _row_id::text)) then
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
 
@@ -56,10 +56,10 @@ $$ language plpgsql;
 
 
 --
--- stage_row_removal()
+-- stage_row_to_remove()
 --
 
-create or replace function _stage_row_removal( _repository_id uuid, _row_id meta.row_id ) returns void as $$
+create or replace function _stage_row_to_remove( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
     begin
 
@@ -76,7 +76,7 @@ create or replace function _stage_row_removal( _repository_id uuid, _row_id meta
     end;
 $$ language plpgsql;
 
-create or replace function stage_row_removal( repository_name text, row_id meta.row_id )
+create or replace function stage_row_to_remove( repository_name text, row_id meta.row_id )
 returns void as $$
     begin
 
@@ -85,7 +85,7 @@ returns void as $$
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._stage_row_removal(
+        perform delta._stage_row_to_remove(
             delta.repository_id(repository_name),
             row_id
         );
@@ -94,17 +94,17 @@ $$ language plpgsql;
 
 
 --
--- unstage_row_removal()
+-- unstage_row_to_remove()
 --
 -- Removes a staged row (add or delete) from the stage.  Split these up?
 
-create or replace function _unstage_row_removal( _repository_id uuid, _row_id meta.row_id ) returns void as $$
+create or replace function _unstage_row_to_remove( _repository_id uuid, _row_id meta.row_id ) returns void as $$
     declare
         row_exists boolean;
     begin
 
         -- assert row is staged
-        select exists (select 1 from delta.stage_row_added sra where sra.row_id = _row_id) into row_exists;
+        select exists (select 1 from delta.stage_row_to_add sra where sra.row_id = _row_id) into row_exists;
         if not row_exists then
             raise exception 'Row with row_id % is not staged.', _row_id;
         end if;
@@ -117,9 +117,9 @@ create or replace function _unstage_row_removal( _repository_id uuid, _row_id me
     end;
 $$ language plpgsql;
 
-create or replace function unstage_row_removal( _repository_id uuid, row_id meta.row_id )
+create or replace function unstage_row_to_remove( _repository_id uuid, row_id meta.row_id )
 returns void as $$
-    select delta._unstage_row_removal(_repository_id, row_id);
+    select delta._unstage_row_to_remove(_repository_id, row_id);
 $$ language sql;
 
 
@@ -127,7 +127,7 @@ $$ language sql;
 -- stage a field change
 --
 
-create or replace function _stage_field_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
+create or replace function _stage_field_to_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
     begin
         -- TODO: assert field is changed and part of repo
         update delta.repository
@@ -141,6 +141,10 @@ $$ language plpgsql;
 -- unstage a field change
 --
 
+/*
+TODO
+create or replace function _unstage_field_to_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
+*/
 
 
 
@@ -151,7 +155,7 @@ $$ language plpgsql;
 -------------------------------------------------
 
 --
--- stage_rows_to_add()
+-- get_stage_rows_to_add()
 --
 
 create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid,row_id meta.row_id) as $$
@@ -160,13 +164,13 @@ create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns
     where id = _repository_id;
 $$ language sql;
 
-create view stage_row_added as
+create view stage_row_to_add as
 select id as repository_id, jsonb_object_keys(stage_rows_to_add)::meta.row_id as row_id
 from delta.repository;
 
 
 --
--- stage_rows_to_remove()
+-- get_stage_rows_to_remove()
 --
 
 create or replace function _get_stage_rows_to_remove( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
@@ -175,7 +179,7 @@ create or replace function _get_stage_rows_to_remove( _repository_id uuid ) retu
     where id = _repository_id;
 $$ language sql;
 
-create view stage_row_removal as
+create view stage_row_to_remove as
 select id as repository_id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
 from delta.repository;
 
@@ -190,7 +194,7 @@ create or replace function _get_stage_fields_to_change( _repository_id uuid ) re
     where id = _repository_id;
 $$ language sql;
 
-create view stage_field_changed as
+create view stage_fields_to_changed as
 select id as repository_id, jsonb_object_keys(stage_fields_to_change)::meta.field_id as field_id
 from delta.repository;
 
@@ -238,7 +242,7 @@ select * from (
 
     union
     -- stage_rows_to_remove
-    -- select d.row_id from delta.stage_row_removal
+    -- select d.row_id from delta.stage_row_to_remove
     select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id from delta.repository r-- where relation_id=....?
 
     union
@@ -277,10 +281,10 @@ $$ language sql;
 --
 
 --
--- get_offstage_rows_to_remove()
+-- get_offstage_deleted_rows()
 --
 
-create or replace function _get_offstage_rows_to_remove( _repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _get_offstage_deleted_rows( _repository_id uuid ) returns setof meta.row_id as $$
     -- rows deleted from head commit
     select row_id
     from delta._get_db_head_commit_rows(_repository_id)
@@ -295,10 +299,10 @@ $$ language sql;
 
 
 --
--- get_offstage_fields_to_change()
+-- get_offstage_updated_fields()
 --
 
-create or replace function _get_offstage_fields_to_change( _repository_id uuid ) returns setof delta.field_hash as $$
+create or replace function _get_offstage_updated_fields( _repository_id uuid ) returns setof delta.field_hash as $$
     -- rows deleted from head commit
     select *
     from delta._get_db_head_commit_fields(_repository_id)
@@ -402,19 +406,19 @@ $$ language sql;
 
 
 --
--- stage_field_changes()
+-- stage_updated_fields()
 -- stages all changed unstaged field changes on a repository
 
-create or replace function _stage_field_changes( _repository_id uuid ) returns void as $$
+create or replace function _stage_updated_fields( _repository_id uuid ) returns void as $$
     begin
         update delta.repository
         set stage_fields_to_change = stage_fields_to_change || (
-            select jsonb_object_agg( field_id::text, value_hash ) from _get_offstage_fields_to_change(_repository_id)
+            select jsonb_object_agg( field_id::text, value_hash ) from _get_offstage_updated_fields(_repository_id)
         )
         where id = _repository_id;
     end;
 $$ language plpgsql;
 
-create or replace function stage_field_changes( repository_name text ) returns void as $$
-    select delta._stage_field_changes(delta.repository_id(repository_name));
+create or replace function stage_updated_fields( repository_name text ) returns void as $$
+    select delta._stage_updated_fields(delta.repository_id(repository_name));
 $$ language sql;
