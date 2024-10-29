@@ -1,8 +1,6 @@
 select '------------ commit.sql ----------------------------------------------';
 
--- neither of these work.
-
-/*
+-- commit
 do $$
 declare returned_commit_id uuid;
 begin
@@ -10,12 +8,13 @@ begin
 
     perform ok(
         exists(select 1 from delta.commit where id = returned_commit_id),
-        'ok..'
+        'Commit() creates a commit row and returns its id'
     );
 end;
 $$ language plpgsql;
 
 
+/*
 prepare returned_commit_id as select delta.commit('io.pgdelta.unittest', 'First commit', 'Joe User', 'joe@example.com');
 prepare selected_commit_id as select id from delta.commit where id = returned_commit_id;
 

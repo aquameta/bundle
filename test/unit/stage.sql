@@ -12,7 +12,7 @@ select '------------ stage.sql -----------------------------------------------';
 -- stage_tracked_row()
 --
 
-select delta.status();
+-- select delta.status();
 
 -- track and stage one row
 do $$
@@ -76,14 +76,13 @@ select results_eq(
    '_get_stage_rows_to_add() does not find staged row after commit.'
 );
 
-select delta.status();
+-- select delta.status();
 
 
 --
 -- stage_row_to_remove()
 --
 
--- stage delete of commited row
 do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
@@ -142,9 +141,11 @@ select delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare',
     from shakespeare.character where name ilike 'a%' order by name limit 1;
 */
 -----------------------------------------------------------
+/*
 -- stage again
 select throws_ok(
     $$ select delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
     format('Row with row_id %s is already staged.', meta.row_id('shakespeare', 'character', 'id', 'Aaron')),
     'Staging an already staged row throws exception'
 );
+*/

@@ -78,35 +78,22 @@ create or replace function _commit(
         -- create _manifest
         if parent_commit_id is null then
             -- first commit
-            _manifest := '{}'::jsonb;
+            _manifest := (select stage_rows_to_add from delta.repository where id = _repository_id);
         else
             -- modify parent commit
-            _manifest := delta._get_commit_manifest(parent_commit_id);
+            _manifest := (
+                select delta._get_commit_manifest(parent_commit_id)
+                    || repository.stage_rows_to_add
+                    -- TODO #- repository.stage_rows_to_remove
+                from delta.repository
+                where id = _repository_id
+            );
         end if;
 
-        -- add repository.stage_rows_to_add to _manifest var
-        select (repository.stage_rows_to_add || _manifest) into _manifest
-        from delta.repository where id = _repository_id;
+        raise notice 'manifest: %', _manifest;
 
-        -- clear this repo's stage (TODO: make empty_stage(repo_id) function)
-        update delta.repository set stage_rows_to_add = '{}' where id = _repository_id;
-
-
-        /*
-        -- add stage_fields_to_change to _manifest var
-        TODO
-        select (repository.stage_rows_to_add || _manifest) into _manifest
-        from delta.repository where id = _repository_id;
-        -- cleare this repo's staged field changes
-        TODO
-
-        -- remove stage_rows_to_remove from _manifest var
-        raise debug '  - Inserting commit_row_deleted @ % ...', clock_timestamp() - start_time;
-        insert into delta.commit_row_deleted (commit_id, row_id, position)
-        select new_commit_id, row_id, row_number() over (order by array_position(stage_row_relations, row_id::meta.relation_id))
-        from delta.stage_row_to_remove
-        where repository_id = _repository_id;
-        */
+        -- clear this repo's stage
+        perform delta._empty_stage(_repository_id);
 
         raise debug '  - Manifest: %', substring(_manifest::text,1,80);
 
@@ -149,8 +136,7 @@ create or replace function commit(
     author_name text,
     author_email text,
     parent_commit_id uuid default null
-)
-returns uuid as $$
+) returns uuid as $$
 begin
     if not delta.repository_exists(repository_name) then
         raise exception 'Repository with name % does not exists', repository_name;

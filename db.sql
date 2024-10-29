@@ -46,6 +46,7 @@ begin
             end
         group by row_id::meta.relation_id, (row_id).pk_column_names
     loop
+        -- raise notice '#### _db_commit_rows rel: %', rel;
 
         -- for this relation, select the commit_rows that are in this relation, and also in this
         -- repository, and inner join them with the relation's data, breaking it out into one row per
@@ -78,7 +79,7 @@ begin
 
     literals_stmt := array_to_string(stmts,E'\nunion\n');
 
-    -- raise debug 'literals_stmt: %', literals_stmt;
+    raise debug 'literals_stmt: %', literals_stmt;
 
     if literals_stmt != '' then
         return query execute literals_stmt;

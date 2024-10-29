@@ -67,9 +67,9 @@ create table repository (
 
     tracked_rows_added jsonb not null default '[]',
 
-    stage_rows_to_add jsonb not null default '{}',
+    stage_rows_to_add jsonb not null default '[]',
     stage_rows_to_remove jsonb not null default '[]',
-    stage_fields_to_change jsonb not null default '{}'
+    stage_fields_to_change jsonb not null default '[]'
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
@@ -285,19 +285,25 @@ $$ language sql;
 -- get_commit_rows()
 --
 
-create or replace function _get_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns table(commit_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_object_keys(manifest)::meta.row_id
-    from delta.commit
-    where id = _commit_id /* and something something _relation_id optimization TODO */;
+create or replace function _get_commit_rows( _commit_id uuid, _relation_id_filter meta.relation_id default null ) 
+returns table(commit_id uuid, row_id meta.row_id) 
+as $$
+    select commit_id, row_id
+    from (
+        select id as commit_id, jsonb_array_elements_text(manifest)::meta.row_id as row_id
+        from delta.commit
+        where id = _commit_id
+    ) as subquery
+    where (row_id)::meta.relation_id = _relation_id_filter or _relation_id_filter is null;
 $$ language sql;
-
 
 --
 -- get_head_commit_rows()
 --
 
-create or replace function _get_head_commit_rows( _repository_id uuid ) returns table(commit_id uuid, row_id meta.row_id) as $$
-    select * from delta._get_commit_rows(delta._head_commit_id(_repository_id));
+create or replace function _get_head_commit_rows( _repository_id uuid, _relation_id_filter meta.relation_id default null )
+ returns table(commit_id uuid, row_id meta.row_id) as $$
+    select * from delta._get_commit_rows(delta._head_commit_id(_repository_id), _relation_id_filter);
 $$ language sql;
 
 
@@ -307,8 +313,11 @@ $$ language sql;
 -- returns a field and it's value hash
 
 create type field_hash as ( field_id meta.field_id, value_hash text);
-create or replace function _get_commit_fields(_commit_id uuid, _relation_id_filter /* TODO */ meta.relation_id default null)
+
+create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
+    select null::delta.field_hash;
+/*
     select meta.field_id(
         key::meta.row_id,
         (jsonb_each(value)).key
@@ -318,6 +327,7 @@ returns setof field_hash as $$
     from jsonb_each((
         select manifest from delta.commit where id = _commit_id
     ));
+*/
 $$ language sql;
 
 

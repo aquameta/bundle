@@ -34,7 +34,8 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
 
         -- stage
         update delta.repository
-        set stage_rows_to_add = stage_rows_to_add || jsonb_build_object(_row_id::text, delta._get_db_row_field_hashes_obj(_row_id))
+        -- set stage_rows_to_add = stage_rows_to_add || jsonb_build_object(_row_id::text, delta._get_db_row_field_hashes_obj(_row_id))
+        set stage_rows_to_add = stage_rows_to_add || to_jsonb(_row_id::text)
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -71,7 +72,8 @@ create or replace function _stage_row_to_remove( _repository_id uuid, _row_id me
         -- TODO: make sure the row is in the head commit
 
         -- stage
-        update delta.repository set stage_rows_to_remove = stage_rows_to_remove || to_jsonb(_row_id::text)
+        update delta.repository
+        set stage_rows_to_remove = stage_rows_to_remove || to_jsonb(_row_id::text)
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -109,10 +111,9 @@ create or replace function _unstage_row_to_remove( _repository_id uuid, _row_id 
             raise exception 'Row with row_id % is not staged.', _row_id;
         end if;
 
-        update delta.repository set stage_rows_to_add = stage_rows_to_add - array[_row_id::text]
-        where id = _repository_id;
-
-        update delta.repository set stage_rows_to_remove = stage_rows_to_remove - array[_row_id::text]
+        -- TODO: fix.
+        update delta.repository
+        set stage_rows_to_remove = stage_rows_to_remove - array[_row_id::text]
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -131,7 +132,8 @@ create or replace function _stage_field_to_change( _repository_id uuid, _field_i
     begin
         -- TODO: assert field is changed and part of repo
         update delta.repository
-        set stage_fields_to_change = stage_fields_to_change || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
+        -- obj approach: set stage_fields_to_change = stage_fields_to_change || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
+        set stage_fields_to_change = stage_fields_to_change || to_jsonb(field_id::text)
         where id = _repository_id;
         return true;
     end;
@@ -146,6 +148,18 @@ TODO
 create or replace function _unstage_field_to_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
 */
 
+--
+-- empty_stage()
+--
+
+create or replace function _empty_stage( _repository_id uuid ) returns void as $$
+    begin
+        update delta.repository set stage_rows_to_add = '[]' where id = _repository_id;
+        update delta.repository set stage_rows_to_remove = '[]' where id = _repository_id;
+        update delta.repository set stage_fields_to_change = '[]' where id = _repository_id;
+    end;
+$$ language plpgsql;
+
 
 
 
@@ -159,13 +173,13 @@ create or replace function _unstage_field_to_change( _repository_id uuid, _field
 --
 
 create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid,row_id meta.row_id) as $$
-    select id, jsonb_object_keys(stage_rows_to_add)::meta.row_id
+    select id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id
     from delta.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_add as
-select id as repository_id, jsonb_object_keys(stage_rows_to_add)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id as row_id
 from delta.repository;
 
 
@@ -174,13 +188,13 @@ from delta.repository;
 --
 
 create or replace function _get_stage_rows_to_remove( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id
+    select id, jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id
     from delta.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_remove as
-select id as repository_id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id as row_id
 from delta.repository;
 
 
@@ -189,13 +203,13 @@ from delta.repository;
 --
 
 create or replace function _get_stage_fields_to_change( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_object_keys(stage_fields_to_change)::meta.row_id
+    select id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
     from delta.repository
     where id = _repository_id;
 $$ language sql;
 
-create view stage_fields_to_changed as
-select id as repository_id, jsonb_object_keys(stage_fields_to_change)::meta.field_id as field_id
+create view stage_field_to_change as
+select id as repository_id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
 from delta.repository;
 
 
@@ -206,7 +220,7 @@ from delta.repository;
 create or replace function _is_staged( repository_id uuid, row_id meta.row_id ) returns boolean as $$
 begin
     return (
-        select jsonb_object_keys(stage_rows_to_add) = row_id::text
+        select jsonb_array_elements_text(stage_rows_to_add) = row_id::text
         from delta.repository
         where id = repository_id
     );
@@ -233,7 +247,7 @@ except
 -- ...except the following:
 select * from (
     -- stage_rows_to_add
-    select jsonb_object_keys(r.stage_rows_to_add)::meta.row_id from delta.repository r -- where relation_id=....?
+    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id from delta.repository r -- where relation_id=....?
 
     union
     -- tracked rows
@@ -271,7 +285,7 @@ create or replace function _get_tracked_rows( _repository_id uuid ) returns seto
     -- plus staged rows
     union
 
-    select jsonb_object_keys(r.stage_rows_to_add)::meta.row_id
+    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id
     from delta.repository r
     where r.id = _repository_id
 $$ language sql;
@@ -342,7 +356,7 @@ create or replace function _get_stage_rows( _repository_id uuid ) returns setof 
     union
 
     -- ...plus staged rows
-    select jsonb_object_keys(r.stage_rows_to_add)::meta.row_id, true as new_row
+    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id, true as new_row
     from delta.repository r
     where r.id = _repository_id
 
@@ -379,6 +393,8 @@ create or replace function _stage_tracked_rows( _repository_id uuid ) returns vo
 declare
     _tracked_rows_obj jsonb;
 begin
+    /*
+    OLD: obj-based approach
     -- create _tracked_rows_obj
     select jsonb_object_agg(r.row_id, delta._get_db_row_field_hashes_obj(row_id::meta.row_id))
     into _tracked_rows_obj
@@ -390,6 +406,11 @@ begin
     -- append _tracked_rows_obj to stage_rows_to_add
     update delta.repository
     set stage_rows_to_add = stage_rows_to_add || _tracked_rows_obj
+    where id = _repository_id;
+    */
+
+    update delta.repository
+    set stage_rows_to_add = stage_rows_to_add || tracked_rows_added
     where id = _repository_id;
 
     -- clear repository.tracked_rows_added
@@ -410,6 +431,7 @@ $$ language sql;
 -- stages all changed unstaged field changes on a repository
 
 create or replace function _stage_updated_fields( _repository_id uuid ) returns void as $$
+    -- TODO: rewrite
     begin
         update delta.repository
         set stage_fields_to_change = stage_fields_to_change || (
