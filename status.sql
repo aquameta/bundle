@@ -23,6 +23,8 @@ create or replace function status(repository_name text default null, detailed bo
         stage_rows_to_remove integer;
         stage_fields_to_change integer;
 
+        row_count_summary text;
+
         statii text := '';
     begin
         if repository_name is not null then
@@ -78,18 +80,33 @@ create or replace function status(repository_name text default null, detailed bo
             select count(*) from delta._get_stage_rows_to_remove(_repository_id)   into stage_rows_to_remove;
             select count(*) from delta._get_stage_fields_to_change(_repository_id) into stage_fields_to_change;
 
+            select string_agg(
+                (relation_id).schema_name || '.' || 
+                (relation_id).name || ' - ' || 
+                row_count || ' rows',
+                ', ' -- delim
+            )
+            from delta._get_commit_row_count_by_relation(delta._head_commit_id(_repository_id))
+            into row_count_summary;
+
             /*
              * status message
              */
 
             statii := statii || format('
 [ %s ] - %s commits total, %s commits in head branch 
+  - HEAD contents: %s
   - %s
-  - Off-stage changes:  %s rows tracked%s
-  - Staged changes:     %s rows added%s
+  - Off-stage changes:  %s tracked rows added%s
+  - Staged changes:     %s rows to add%s
 ',
 
+                -- heading
                 repository_name, total_commits, head_branch_commits,
+
+                -- contents summary
+                row_count_summary,
+
                 -- checked out status
                 case
                     when checked_out = true then
@@ -100,13 +117,13 @@ create or replace function status(repository_name text default null, detailed bo
                 -- off-stage changes status
                 tracked_rows_added,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes ',  offstage_deleted_rows, offstage_changed_fields)
+                    format(', %s deleted rows, %s updated fields',  offstage_deleted_rows, offstage_changed_fields)
                 end,
 
                 -- staged changes status
                 stage_rows_to_add,
                 case when checked_out = true then
-                    format(', %s deletes, %s field changes ',  stage_rows_to_remove, stage_fields_to_change)
+                    format(', %s rows to remove, %s fields to change',  stage_rows_to_remove, stage_fields_to_change)
                 end
             );
 

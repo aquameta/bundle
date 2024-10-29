@@ -57,6 +57,13 @@ $$ language plpgsql;
 
 
 --
+-- unstage_tracked_row() TODO
+--
+
+
+
+
+--
 -- stage_row_to_remove()
 --
 
@@ -290,13 +297,23 @@ create or replace function _get_tracked_rows( _repository_id uuid ) returns seto
     where r.id = _repository_id
 $$ language sql;
 
---
--- get_newly_tracked_rows() TODO
---
+create or replace function get_tracked_rows( repository_name text ) returns setof meta.row_id as $$
+    select delta._get_tracked_rows(
+        delta.repository_id(repository_name)
+    );
+$$ language sql;
+
 
 --
--- get_offstage_deleted_rows()
+-- get_offstage_deleted_rows() TODO
 --
+
+
+--
+-- stage_deleted_rows() TODO
+--
+
+
 
 create or replace function _get_offstage_deleted_rows( _repository_id uuid ) returns setof meta.row_id as $$
     -- rows deleted from head commit

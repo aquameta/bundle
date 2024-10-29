@@ -285,8 +285,8 @@ $$ language sql;
 -- get_commit_rows()
 --
 
-create or replace function _get_commit_rows( _commit_id uuid, _relation_id_filter meta.relation_id default null ) 
-returns table(commit_id uuid, row_id meta.row_id) 
+create or replace function _get_commit_rows( _commit_id uuid, _relation_id_filter meta.relation_id default null )
+returns table(commit_id uuid, row_id meta.row_id)
 as $$
     select commit_id, row_id
     from (
@@ -304,6 +304,15 @@ $$ language sql;
 create or replace function _get_head_commit_rows( _repository_id uuid, _relation_id_filter meta.relation_id default null )
  returns table(commit_id uuid, row_id meta.row_id) as $$
     select * from delta._get_commit_rows(delta._head_commit_id(_repository_id), _relation_id_filter);
+$$ language sql;
+
+create or replace function get_head_commit_rows( repository_name text, _relation_id_filter meta.relation_id default null )
+ returns table(commit_id uuid, row_id meta.row_id) as $$
+    select *
+    from delta._get_commit_rows(
+        delta._head_commit_id(delta.repository_id(repository_name)),
+        _relation_id_filter
+    );
 $$ language sql;
 
 
@@ -345,4 +354,16 @@ $$ language sql;
 
 create or replace function _get_commit_manifest( _commit_id uuid ) returns jsonb as $$
     select manifest from delta.commit where id = _commit_id;
+$$ language sql;
+
+
+--
+-- get_commit_row_count_by_relation( _commit_id uuid, relation_id uuid )
+-- used in summary
+
+create or replace function _get_commit_row_count_by_relation( _commit_id uuid )
+returns table( relation_id meta.relation_id, row_count integer ) as $$
+    select row_id::meta.relation_id as relation_id, count(*) as row_count
+    from delta._get_commit_rows(_commit_id)
+    group by row_id::meta.relation_id
 $$ language sql;

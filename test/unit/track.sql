@@ -132,3 +132,13 @@ select is(
     (select 0),
     'No tracked rows after they are removed'
 );
+
+
+-- _get_tracked_rows
+select is(
+    (select count(*)::integer from delta._get_tracked_rows_added(delta.repository_id('io.pgdelta.unittest'))),
+    (select 0),
+    'Before there is a commit there are no tracked rows.'
+);
+
+-- TODO: test get_tracked_rows after commit.
