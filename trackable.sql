@@ -195,3 +195,42 @@ select *, 'select meta.row_id(' ||
 
     as stmt
 from delta.trackable_relation r;
+
+
+
+--
+-- get_untracked_rows()
+--
+
+create or replace function _get_untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
+-- all rows that aren't ignored by an ignore rule
+select r.row_id
+from delta.exec((
+    select array_agg (stmt)
+    from delta.not_ignored_row_stmt
+    where relation_id = coalesce(_relation_id, relation_id)
+)) r (row_id meta.row_id)
+
+except
+
+-- ...except the following:
+select * from (
+    -- stage_rows_to_add
+    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id from delta.repository r -- where relation_id=....?
+
+    union
+    -- tracked rows
+    -- select t.row_id from delta.track_untracked_rowed t
+    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
+
+    union
+    -- stage_rows_to_remove
+    -- select d.row_id from delta.stage_row_to_remove
+    select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id from delta.repository r-- where relation_id=....?
+
+    union
+    -- head_commit_rows for all tables
+    select hcr.row_id as row_id
+    from delta.repository r, delta._get_head_commit_rows(r.id) hcr
+) r;
+$$ language sql;
