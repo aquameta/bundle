@@ -134,6 +134,15 @@ $$ language sql;
 
 
 --
+-- untrack_tracked_rows_added()
+--
+
+create or replace function _untrack_tracked_rows_added( _repository_id uuid ) returns void as $$
+    update delta.repository set tracked_rows_added='[]'::jsonb where id = _repository_id;
+$$ language sql;
+
+
+--
 -- trackable relation
 --
 

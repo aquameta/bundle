@@ -70,7 +70,7 @@ create or replace function status(repository_name text default null, detailed bo
             -- head_commit_rows
             select count(*) from delta._get_head_commit_rows(_repository_id) into head_commit_rows;
 
-            -- unstaged changes
+            -- offstage changes
             select count(*) from delta._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
             select count(*) from delta._get_offstage_deleted_rows(_repository_id)    into offstage_deleted_rows;
             select count(*) from delta._get_offstage_updated_fields(_repository_id)  into offstage_changed_fields;

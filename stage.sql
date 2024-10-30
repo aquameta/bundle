@@ -304,10 +304,6 @@ create or replace function get_tracked_rows( repository_name text ) returns seto
 $$ language sql;
 
 
---
--- get_offstage_deleted_rows() TODO
---
-
 
 --
 -- stage_deleted_rows() TODO
@@ -328,6 +324,10 @@ create or replace function _get_offstage_deleted_rows( _repository_id uuid ) ret
     from delta.repository r where r.id = _repository_id;
 $$ language sql;
 
+
+--
+-- get_stage_updated_fields() TODO
+--
 
 --
 -- get_offstage_updated_fields()
