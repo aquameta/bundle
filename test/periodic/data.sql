@@ -12,6 +12,7 @@
 -- Name: periodic_table; Type: TABLE; Schema: public; Owner: -
 --
 
+drop schema if exists pt cascade;
 create schema pt;
 
 CREATE TABLE pt.periodic_table (

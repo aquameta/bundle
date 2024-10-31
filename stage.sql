@@ -140,7 +140,7 @@ create or replace function _stage_field_to_change( _repository_id uuid, _field_i
         -- TODO: assert field is changed and part of repo
         update delta.repository
         -- obj approach: set stage_fields_to_change = stage_fields_to_change || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
-        set stage_fields_to_change = stage_fields_to_change || to_jsonb(field_id::text)
+        set stage_fields_to_change = stage_fields_to_change || to_jsonb(_field_id::text)
         where id = _repository_id;
         return true;
     end;
@@ -423,3 +423,19 @@ $$ language plpgsql;
 create or replace function stage_updated_fields( repository_name text ) returns void as $$
     select delta._stage_updated_fields(delta.repository_id(repository_name));
 $$ language sql;
+
+
+--
+-- stage_deleted_rows()
+-- stage all off-stage deleted rows for removal
+--
+
+create or replace function _stage_deleted_rows( _repository_id uuid ) returns void as $$
+    begin
+        update delta.repository
+        set stage_rows_to_remove = stage_rows_to_remove || (
+            select to_jsonb(array_agg(r::text)) lateral from _get_offstage_deleted_rows (_repository_id) r
+        )
+        where id = _repository_id;
+    end;
+$$ language plpgsql;
