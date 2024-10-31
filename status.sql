@@ -2,11 +2,31 @@
 -- STATUS
 ------------------------------------------------------------------------------
 
+/*
+this would be nice:
+
+
+                    io.aquadelta.core.repository 
+             +----------------------------------------+
+             | 12 commits                             |
+             +----------------------------------------+
+ head commit | "Ignore rules." - 2024-12-25 4:20pm    |
+    contents | (4) delta.ignored_table                |
+             | (3) delta.ignored_schema               |
+             +----------------------------------------+
+          db | 0 tracked  | 0 deleted   | 0 updated   |
+             +----------------------------------------+
+       stage | 0 to added | 0 to remove | 0 to change |
+             +----------------------------------------+
+
+
+*/
+
 create or replace function status(repository_name text default null, detailed boolean default false) returns text as $$
     declare
         _repository_ids uuid[];
         _repository_id uuid;
-        c integer;
+        untracked_row_count integer;
         checkout_commit_id text; head_commit_id text; author_name text; author_email text; message text; commit_time timestamptz;
 
         checked_out boolean;
@@ -39,8 +59,9 @@ create or replace function status(repository_name text default null, detailed bo
         end if;
 
         -- untracked rows
-        select count(*) as c from delta._get_untracked_rows() into c;
-        statii := statii || format(E'  - Untracked rows: %s\n', c);
+        select count(*) as c from delta._get_untracked_rows() into untracked_row_count;
+        statii := statii || format(E'+ Untracked rows: %s\n', untracked_row_count);
+        statii := statii || format(E'+------------------------------------------------------------------------------\n');
 
         foreach _repository_id in array _repository_ids loop
             /*
@@ -81,24 +102,33 @@ create or replace function status(repository_name text default null, detailed bo
             select count(*) from delta._get_stage_fields_to_change(_repository_id) into stage_fields_to_change;
 
             select string_agg(
-                (relation_id).schema_name || '.' || 
-                (relation_id).name || ' - ' || 
-                row_count || ' rows',
-                ', ' -- delim
+                '(' || row_count || ') '
+                    || (relation_id).schema_name || '.'
+                    || (relation_id).name,
+                E'\n+             | ' -- delim
             )
             from delta._get_commit_row_count_by_relation(delta._head_commit_id(_repository_id))
             into row_count_summary;
+
+
 
             /*
              * status message
              */
 
-            statii := statii || format('
-[ %s ] - %s commits total, %s commits in head branch 
-  - HEAD contents: %s
-  - %s
-  - Off-stage changes:  %s tracked rows added%s
-  - Staged changes:     %s rows to add%s
+            statii := statii || format(
+'+ %s
++             +----------------------------------------------------------------
++             | %s commits, %s in this branch
++             +----------------------------------------------------------------
++    contents | %s
++    checkout | %s
++             +----------------------------------------------------------------
++          db | %s tracked %s
++             +----------------------------------------------------------------
++       stage | %s to add  %s
++             +----------------------------------------------------------------
++
 ',
 
                 -- heading
@@ -110,25 +140,28 @@ create or replace function status(repository_name text default null, detailed bo
                 -- checked out status
                 case
                     when checked_out = true then
-                        format('Checked out "%s" -- %s <%s> ', message, author_name, author_email)
+                        format('"%s" -- %s <%s> ', message, author_name, author_email)
                     else
                         'Not checked out.'
-                    end,
+                end,
+
                 -- off-stage changes status
                 tracked_rows_added,
                 case when checked_out = true then
-                    format(', %s deleted rows, %s updated fields',  offstage_deleted_rows, offstage_changed_fields)
+                    format('| %s deleted   | %s updated',  offstage_deleted_rows, offstage_changed_fields)
                 end,
 
                 -- staged changes status
                 stage_rows_to_add,
                 case when checked_out = true then
-                    format(', %s rows to remove, %s fields to change',  stage_rows_to_remove, stage_fields_to_change)
+                    format('| %s to remove | %s to change',  stage_rows_to_remove, stage_fields_to_change)
                 end
             );
 
 
         end loop;
+
+        statii := statii || format(E'+------------------------------------------------------------------------------\n');
         return statii;
 
     end;
