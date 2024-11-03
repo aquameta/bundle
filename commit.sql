@@ -31,8 +31,9 @@ create or replace function _commit(
         new_commit_id uuid;
         parent_commit_id uuid;
         _jsonb_rows jsonb;
-        _jsonb_fields jsonb;
+        _jsonb_fields jsonb := '{}';
         stage_row_relations meta.relation_id[];
+        r record;
 
         first_commit boolean := false;
         start_time timestamp;
@@ -64,23 +65,18 @@ create or replace function _commit(
         raise debug '  - parent_commit_id: %', parent_commit_id;
 
         -- blob
-        raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         /*
+        raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
         select distinct (jsonb_each(sra.value)).value
         from delta._get_stage_rows_to_add(_repository_id); -- FIXME
-        */
-
-        -- topo sort
-        /*
-        raise debug '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
-        stage_row_relations := delta._topological_sort_rowset(_jsonb_rows);
         */
 
         --
         -- create _jsonb_rows
         --
 
+        raise debug '  - Creating _jsonb_rows @ % ...', clock_timestamp() - start_time;
         if parent_commit_id is null then
             -- first commit
             _jsonb_rows := (select stage_rows_to_add from delta.repository where id = _repository_id);
@@ -106,36 +102,55 @@ create or replace function _commit(
             );
         end if;
 
-        raise notice 'jsonb_rows: %', _jsonb_rows;
-
-        -- compute relations
-        stage_row_relations := delta._get_rowset_relations(_jsonb_rows);
+        -- topo sort relations
+        raise debug '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
+        stage_row_relations := delta._topological_sort_relations(delta._get_rowset_relations(_jsonb_rows));
         raise notice 'stage_row_relations: %', stage_row_relations;
 
+		-- sort rows
+		_jsonb_rows := (
+			select jsonb_agg(rr)
+			from (
+				select elem.r::jsonb as rr
+				from jsonb_array_elements(_jsonb_rows) elem(r)
+				order by array_position(stage_row_relations, elem.r::meta.relation_id)
+			) sorted_rows
+		);
 
+        raise notice 'jsonb_rows: %', _jsonb_rows;
 
         --
         -- create _jsonb_fields
         --
 
+        /*
+        steps:
+
+        1. If there is a parent commit, set _jsonb_fields to c.jsonb_fields
+           plus r.stage_fields_to_change.  Old fields plus their changes.
+
+        2. For all stage_rows_to_add, grab their fields objects and add them
+           to the _jsonb_fields.
+
+        3. For all stage_rows_to_remove, remove their fields object from
+           _jsonb_fields.
+        */
+
         if parent_commit_id is not null then
-            -- not first commit
-            _jsonb_fields := (select delta._get_commit_jsonb_fields(parent_commit_id));
+            -- not first commit, grab previous fields and apply fields_to_change
+            _jsonb_fields := (
+                select delta._get_commit_jsonb_fields(parent_commit_id)
+                    || delta._get_stage_fields_to_change(_repository_id)
+                );
         end if;
 
-
-        _jsonb_fields := _jsonb_fields;
-
+        -- slow crappy way.  optimize failure in db._get_db_rowset_fields_obj()
+        for r in select jsonb_array_elements_text(stage_rows_to_add) from delta.repository where id=_repository_id loop
+            _jsonb_fields := _jsonb_fields || delta._get_db_row_fields_obj((r.jsonb_array_elements_text)::meta.row_id);
+        end loop;
         raise notice 'jsonb_fields: %', _jsonb_fields;
 
-
-
-        raise debug '  - Manifest: %', substring(_jsonb_rows::text,1,80);
-
-        -- clear this repo's stage
-        perform delta._empty_stage(_repository_id);
-
-        -- create commit
+        -- create commit, without jsonb_fields object, to be set later
         insert into delta.commit (
             repository_id,
             parent_id,
@@ -154,6 +169,19 @@ create or replace function _commit(
             _jsonb_rows,
             _jsonb_fields
         ) returning id into new_commit_id;
+
+
+        /*
+        _jsonb_fields := _jsonb_fields || (
+            select delta._get_db_rowset_fields_obj(r.stage_rows_to_add)
+            from delta.repository r
+            where r.id = _repository_id
+        );
+        */
+
+
+        -- clear this repo's stage
+        perform delta._empty_stage(_repository_id);
 
         raise debug '  - New commit with id %', new_commit_id;
 
@@ -224,10 +252,10 @@ Approach:
 */
 
 create type delta.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
-create or replace function delta._topological_sort_stage( _repository_id uuid ) returns meta.relation_id[] as $$
+create or replace function delta._topological_sort_relations( _relations meta.relation_id[] )
+returns meta.relation_id[] as $$
 declare
     start_time timestamp := clock_timestamp();
-    stage_row_relations meta.relation_id[];
     edges delta.schema_edge[];
     s meta.relation_id[];
     l meta.relation_id[] = '{}';
@@ -235,26 +263,18 @@ declare
     m meta.relation_id;
     m_edge delta.schema_edge;
 begin
-    -- stage_row_relations
-    raise debug '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
-    select array_agg(distinct row_id::meta.relation_id)
-        from delta.stage_row_to_add
-        where repository_id =  _repository_id
-    into stage_row_relations;
-
-
     -- edges
     raise debug '  - Building edges @ % ...', clock_timestamp() - start_time;
-    select array_agg(distinct row(srr,meta.relation_id(fk.to_schema_name, fk.to_table_name))::delta.schema_edge)
+    select array_agg(distinct row(r,meta.relation_id(fk.to_schema_name, fk.to_table_name))::delta.schema_edge)
     from meta.foreign_key fk
-        join unnest(stage_row_relations) srr on srr.schema_name = fk.schema_name and srr.name = fk.table_name
+        join unnest(_relations) r on r.schema_name = fk.schema_name and r.name = fk.table_name
     into edges;
 
 
     -- s
     raise debug '  - Building s @ % ...', clock_timestamp() - start_time;
     select array_agg(distinct srr)
-    from unnest(stage_row_relations) as srr
+    from unnest(_relations) as srr
        left join unnest(edges) as edge on srr = edge.to_relation_id
     where edge.to_relation_id is null
     into s;
