@@ -40,13 +40,13 @@ select throws_ok(
 
 -- track a row in a non-table
 do $$ begin
-    perform delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('public', 'not_a_table', 'a', '1'));
+    perform delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('unittest', 'not_a_table', 'a', '1'));
 end $$ language plpgsql;
 
 select ok(
 	(select delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
-        meta.row_id('public', 'not_a_table', 'a', '1'))),
+        meta.row_id('unittest', 'not_a_table', 'a', '1'))),
 	'_is_newly_tracked() finds non-table row added by track_untracked_row()'
 );
 
@@ -67,7 +67,7 @@ select ok(
 
 -- remove non-table row that is tracked
 do $$ begin
-    perform delta.untrack_tracked_row('io.pgdelta.unittest', meta.row_id('public', 'not_a_table', 'a', '1'));
+    perform delta.untrack_tracked_row('io.pgdelta.unittest', meta.row_id('unittest', 'not_a_table', 'a', '1'));
 end $$ language plpgsql;
 
 select ok(

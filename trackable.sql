@@ -106,6 +106,18 @@ $$ language sql;
 
 
 --
+-- tracked query
+--
+
+create table tracked_query(
+    id uuid not null default public.uuid_generate_v7() primary key,
+    repository_id uuid not null references repository(id),
+    query text,
+    pk_column_names text[] not null
+);
+
+
+--
 -- trackable relation
 --
 

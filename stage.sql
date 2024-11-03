@@ -296,15 +296,21 @@ $$ language sql;
 --
 
 create or replace function _get_offstage_updated_fields( _repository_id uuid ) returns setof delta.field_hash as $$
-    -- rows deleted from head commit
-    select *
-    from delta._get_db_head_commit_fields(_repository_id)
+    -- fields whos commit hash is different from db hash
+    select hcf.field_id, dbf.value_hash
+    -- fields from head commit
+    from delta._get_head_commit_fields(_repository_id) hcf
+        -- left joined because db_fields() excludes dropped columns and columns may have been dropped
+        left join delta._get_db_head_commit_fields(_repository_id) dbf on dbf.field_id = hcf.field_id
+    -- where value is different
+    where hcf.value_hash != dbf.value_hash
 
+    /*
+    -- TODO
+    -- ...minus those that have been staged for update
     except
-
-    -- minus those that have been staged for deletion
-    select *
-    from delta._get_head_commit_fields(_repository_id)
+    select * from delta._get_stage_updated_fields(_repository_id)
+    */
 
 $$ language sql;
 

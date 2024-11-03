@@ -30,7 +30,8 @@ create or replace function _commit(
     declare
         new_commit_id uuid;
         parent_commit_id uuid;
-        _manifest jsonb := '{}';
+        _jsonb_rows jsonb;
+        _jsonb_fields jsonb;
         stage_row_relations meta.relation_id[];
 
         first_commit boolean := false;
@@ -63,40 +64,76 @@ create or replace function _commit(
         raise debug '  - parent_commit_id: %', parent_commit_id;
 
         -- blob
-        /*
-        -- TODO: right now values are just stored in the commit
         raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
+        /*
         insert into delta.blob (value)
-        select distinct (jsonb_each(sra.value)).value from delta.stage_row_to_add sra where repository_id = _repository_id;
+        select distinct (jsonb_each(sra.value)).value
+        from delta._get_stage_rows_to_add(_repository_id); -- FIXME
         */
 
         -- topo sort
+        /*
         raise debug '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
-        stage_row_relations := delta._topological_sort_stage(_repository_id);
+        stage_row_relations := delta._topological_sort_rowset(_jsonb_rows);
+        */
 
+        --
+        -- create _jsonb_rows
+        --
 
-        -- create _manifest
         if parent_commit_id is null then
             -- first commit
-            _manifest := (select stage_rows_to_add from delta.repository where id = _repository_id);
+            _jsonb_rows := (select stage_rows_to_add from delta.repository where id = _repository_id);
         else
-            -- modify parent commit
-            _manifest := (
-                select delta._get_commit_manifest(parent_commit_id)
+            -- modify parent commit, adding repo.stage_rows_to_add
+            _jsonb_rows := (
+                select delta._get_commit_jsonb_rows(parent_commit_id)
                     || repository.stage_rows_to_add
-                    -- TODO #- repository.stage_rows_to_remove
                 from delta.repository
                 where id = _repository_id
             );
+
+            -- remove rows
+            _jsonb_rows := (
+                select jsonb_agg(a.elem)
+                from jsonb_array_elements(_jsonb_rows) a(elem)
+                    left join jsonb_array_elements((
+                        select repository.stage_rows_to_remove
+                        from delta.repository
+                        where id = _repository_id
+                    )) b(elem) on a.elem = b.elem
+                where b.elem is null
+            );
         end if;
 
-        raise notice 'manifest: %', _manifest;
+        raise notice 'jsonb_rows: %', _jsonb_rows;
+
+        -- compute relations
+        stage_row_relations := delta._get_rowset_relations(_jsonb_rows);
+        raise notice 'stage_row_relations: %', stage_row_relations;
+
+
+
+        --
+        -- create _jsonb_fields
+        --
+
+        if parent_commit_id is not null then
+            -- not first commit
+            _jsonb_fields := (select delta._get_commit_jsonb_fields(parent_commit_id));
+        end if;
+
+
+        _jsonb_fields := _jsonb_fields;
+
+        raise notice 'jsonb_fields: %', _jsonb_fields;
+
+
+
+        raise debug '  - Manifest: %', substring(_jsonb_rows::text,1,80);
 
         -- clear this repo's stage
         perform delta._empty_stage(_repository_id);
-
-        raise debug '  - Manifest: %', substring(_manifest::text,1,80);
-
 
         -- create commit
         insert into delta.commit (
@@ -106,14 +143,16 @@ create or replace function _commit(
             message,
             author_name,
             author_email,
-            manifest
+            jsonb_rows,
+            jsonb_fields
         ) values (
             _repository_id,
             parent_commit_id,
             _message,
             _author_name,
             _author_email,
-            _manifest
+            _jsonb_rows,
+            _jsonb_fields
         ) returning id into new_commit_id;
 
         raise debug '  - New commit with id %', new_commit_id;

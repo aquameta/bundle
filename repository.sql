@@ -44,7 +44,8 @@ create table commit (
     parent_id uuid references commit(id), --null means first commit
     merge_parent_id uuid references commit(id),
 
-    manifest jsonb not null,
+    jsonb_rows jsonb not null default '[]' check (jsonb_typeof(jsonb_rows) = 'array'),
+    jsonb_fields jsonb not null default '{}' check (jsonb_typeof(jsonb_fields) = 'object'),
 
     author_name text not null default '',
     author_email text not null default '',
@@ -65,11 +66,11 @@ create table repository (
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
 
-    tracked_rows_added jsonb not null default '[]',
+    tracked_rows_added jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
 
-    stage_rows_to_add jsonb not null default '[]',
-    stage_rows_to_remove jsonb not null default '[]',
-    stage_fields_to_change jsonb not null default '[]'
+    stage_rows_to_add jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
+    stage_rows_to_remove jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
+    stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array')
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
@@ -290,7 +291,7 @@ returns table(commit_id uuid, row_id meta.row_id)
 as $$
     select commit_id, row_id
     from (
-        select id as commit_id, jsonb_array_elements_text(manifest)::meta.row_id as row_id
+        select id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
         from delta.commit
         where id = _commit_id
     ) as subquery
@@ -334,7 +335,7 @@ returns setof field_hash as $$
     (jsonb_each_text(value)).value -- value_hash
 
     from jsonb_each((
-        select manifest from delta.commit where id = _commit_id
+        select jsonb_rows from delta.commit where id = _commit_id
     ));
 */
 $$ language sql;
@@ -349,11 +350,19 @@ $$ language sql;
 
 
 --
--- get_commit_manifest()
+-- get_commit_jsonb_rows()
 --
 
-create or replace function _get_commit_manifest( _commit_id uuid ) returns jsonb as $$
-    select manifest from delta.commit where id = _commit_id;
+create or replace function _get_commit_jsonb_rows( _commit_id uuid ) returns jsonb as $$
+    select jsonb_rows from delta.commit where id = _commit_id;
+$$ language sql;
+
+
+-- get_commit_jsonb_fields()
+--
+
+create or replace function _get_commit_jsonb_fields( _commit_id uuid ) returns jsonb as $$
+    select jsonb_fields from delta.commit where id = _commit_id;
 $$ language sql;
 
 

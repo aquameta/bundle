@@ -25,3 +25,6 @@ select refresh_counters();
 delete from pt.periodic_table where "AtomicNumber" > 10;
 select count_diff();
 -- missing offstage_deleted_rows
+
+
+select ok(true);

@@ -3,7 +3,7 @@ select '----------- trackable.sql --------------------------------------------';
  * Tracking on non-table relations
  */
 
-create view public.not_a_table as
+create view unittest.not_a_table as
 select *
 from (
     values
@@ -13,26 +13,26 @@ from (
 ) AS not_a_table(a, b, c);
 
 do $$ begin
-    perform delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+    perform delta._track_nontable_relation(meta.relation_id('unittest','not_a_table'), array['a']);
 end $$ language plpgsql;
 
 select results_eq(
-	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''public'',''not_a_table'') and primary_key_column_names = array[''a''];',
+	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''unittest'',''not_a_table'') and primary_key_column_names = array[''a''];',
 	'select 1',
 	'_track_nontable_relation() adds relation to trackable_relations'
 );
 
 do $$ begin
-    perform delta._untrack_nontable_relation(meta.relation_id('public','not_a_table'));
+    perform delta._untrack_nontable_relation(meta.relation_id('unittest','not_a_table'));
 end $$ language plpgsql;
 
 select results_ne(
-	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''public'',''not_a_table'') and primary_key_column_names = array[''a''];',
+	'select 1 from delta.trackable_relation where relation_id = meta.relation_id(''unittest'',''not_a_table'') and primary_key_column_names = array[''a''];',
 	'select 1',
 	'_untrack_nontable_relation() removes relation from trackable_relations'
 );
 
 -- track it again for testing
 do $$ begin
-    perform delta._track_nontable_relation(meta.relation_id('public','not_a_table'), array['a']);
+    perform delta._track_nontable_relation(meta.relation_id('unittest','not_a_table'), array['a']);
 end $$ language plpgsql;
