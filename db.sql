@@ -316,7 +316,7 @@ begin
         col_stmt := array_to_string(col_stmts, E',\n');
         raise notice 'col_stmt: %', col_stmt;
 
-        stmt := format('select meta.row_id(%L,%L,%L,%L) row_id, jsonb_build_object(%s) obj
+        stmt := format('select meta.row_id(%L,%L,%L,%L) row_id, jsonb_build_object(%s) obj 
                 from %I.%I r
                 join jsonb_array_elements_text(%s::jsonb) rs on %s',
 

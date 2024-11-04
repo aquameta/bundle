@@ -140,14 +140,14 @@ create or replace function _commit(
             -- not first commit, grab previous fields and apply fields_to_change
             _jsonb_fields := (
                 select delta._get_commit_jsonb_fields(parent_commit_id)
-                    || delta._get_stage_fields_to_change(_repository_id)
+                    -- || delta._get_stage_fields_to_change(_repository_id): FIXME doesn't work.
                 );
         end if;
 
         -- slow crappy way.  optimize failure in db._get_db_rowset_fields_obj()
         for r in
             select rep.id, elem.row_id::meta.row_id as row_id
-            from repository rep,
+            from delta.repository rep,
                 lateral jsonb_array_elements_text(rep.stage_rows_to_add) elem(row_id)
             where rep.id=_repository_id
         loop
