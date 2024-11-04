@@ -222,6 +222,7 @@ declare
     stmt text;
     obj jsonb;
 begin
+    -- FIXME: the to_jsonb() call is going into meta-ids and converting them to jsonb structures :/
     stmt := format('select to_json(xx) from %I.%I xx where %s',
         _row_id.schema_name,
         _row_id.relation_name,

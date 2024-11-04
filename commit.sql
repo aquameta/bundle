@@ -117,7 +117,7 @@ create or replace function _commit(
 			) sorted_rows
 		);
 
-        raise notice 'jsonb_rows: %', _jsonb_rows;
+        raise notice 'jsonb_rows: %', jsonb_pretty(_jsonb_rows);
 
         --
         -- create _jsonb_fields
@@ -145,10 +145,19 @@ create or replace function _commit(
         end if;
 
         -- slow crappy way.  optimize failure in db._get_db_rowset_fields_obj()
-        for r in select jsonb_array_elements_text(stage_rows_to_add) from delta.repository where id=_repository_id loop
-            _jsonb_fields := _jsonb_fields || delta._get_db_row_fields_obj((r.jsonb_array_elements_text)::meta.row_id);
+        for r in
+            select rep.id, elem.row_id::meta.row_id as row_id
+            from repository rep,
+                lateral jsonb_array_elements_text(rep.stage_rows_to_add) elem(row_id)
+            where rep.id=_repository_id
+        loop
+            _jsonb_fields := _jsonb_fields || jsonb_build_object(
+                r.row_id::text,
+                delta._get_db_row_fields_obj(r.row_id)
+            );
         end loop;
-        raise notice 'jsonb_fields: %', _jsonb_fields;
+
+        raise notice 'jsonb_fields: %', jsonb_pretty(_jsonb_fields);
 
         -- create commit, without jsonb_fields object, to be set later
         insert into delta.commit (
