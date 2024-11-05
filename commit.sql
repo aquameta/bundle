@@ -90,6 +90,7 @@ create or replace function _commit(
             );
 
 			raise notice 'ROWS after adding parent commit and stage_rows_to_add: %', _jsonb_rows;
+			raise notice 'stage_rows_to_remove: %', (select stage_rows_to_remove from delta.repository where id=_repository_id);
 
             -- remove rows
             _jsonb_rows := (
@@ -158,7 +159,7 @@ create or replace function _commit(
             end loop;
         end if;
 
-        -- slow crappy way.  optimize failure in db._get_db_rowset_fields_obj()
+        -- slow crappy way.  optimize attempt failure in db._get_db_rowset_fields_obj()
         for r in
             select rep.id, elem.row_id::meta.row_id as row_id
             from delta.repository rep,

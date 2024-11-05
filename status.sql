@@ -169,13 +169,13 @@ create or replace function status(repository_name text default null, detailed bo
 
             -------------- detailed section ---------------------
             if detailed is true then
-                _tracked_rows_added     := (select jsonb_pretty(to_jsonb((select r.tracked_rows_added from delta.repository r where r.id = _repository_id))));
-                _tracked_rows_added     := (select jsonb_pretty(to_jsonb((select r.tracked_rows_added from delta.repository r where r.id = _repository_id))));
-                -- _offstage_deleted_rows  := (select jsonb_pretty((select to_jsonb(*) from delta._get_offstage_deleted_rows(_repository_id))));
-                -- _offstage_updated_fields := (select jsonb_pretty((select to_jsonb(*) from delta._get_offstage_updated_fields(_repository_id))));
-                _stage_rows_to_add      := (select jsonb_pretty((select to_jsonb(r.stage_rows_to_add) from delta.repository r where r.id = _repository_id)));
-                _stage_fields_to_change := (select jsonb_pretty(to_jsonb((select r.stage_fields_to_change from delta.repository r where r.id = _repository_id))));
-                _stage_rows_to_remove   := (select jsonb_pretty(to_jsonb((select r.stage_rows_to_remove from delta.repository r where r.id = _repository_id))));
+                _tracked_rows_added      := (select r.tracked_rows_added from delta.repository r where r.id = _repository_id);
+                _offstage_deleted_rows   := (select string_agg(r::text, ',') from delta._get_offstage_deleted_rows(_repository_id) r);
+                _offstage_updated_fields := (select string_agg(r::text, ',') from delta._get_offstage_updated_fields(_repository_id) r);
+
+                _stage_rows_to_add       := (select r.stage_rows_to_add from delta.repository r where r.id = _repository_id);
+                _stage_fields_to_change  := (select r.stage_fields_to_change from delta.repository r where r.id = _repository_id);
+                _stage_rows_to_remove    := (select r.stage_rows_to_remove from delta.repository r where r.id = _repository_id);
 
                 statii := statii || E'\n OFFSTAGE:';
                 statii := statii || E'\n track:' || coalesce(_tracked_rows_added, 'NULL');
