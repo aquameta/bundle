@@ -209,13 +209,14 @@ from delta.repository;
 -- get_stage_fields_to_change()
 --
 
-create or replace function _get_stage_fields_to_change( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
+create or replace function _get_stage_fields_to_change( _repository_id uuid ) returns setof meta.field_id as $$
+    select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
     from delta.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_field_to_change as
+    -- select id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
 select id as repository_id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
 from delta.repository;
 
@@ -305,13 +306,9 @@ create or replace function _get_offstage_updated_fields( _repository_id uuid ) r
     -- where value is different
     where hcf.value_hash != dbf.value_hash
 
-    /*
-    -- TODO
-    -- ...minus those that have been staged for update
     except
-    select * from delta._get_stage_updated_fields(_repository_id)
-    */
 
+    select field_id, value_hash from delta._get_db_stage_fields_to_change(_repository_id);
 $$ language sql;
 
 
@@ -416,13 +413,17 @@ $$ language sql;
 -- stages all changed unstaged field changes on a repository
 
 create or replace function _stage_updated_fields( _repository_id uuid ) returns void as $$
-    -- TODO: rewrite
+    declare
+        updated_fields jsonb;
     begin
+        -- TODO: use a CTE instead?
+        updated_fields := (select jsonb_agg(f.field_id::text) from _get_offstage_updated_fields(_repository_id) f);
+        raise notice 'updated_fields: %', updated_fields;
+
         update delta.repository
-        set stage_fields_to_change = stage_fields_to_change || (
-            select jsonb_object_agg( field_id::text, value_hash ) from _get_offstage_updated_fields(_repository_id)
-        )
+        set stage_fields_to_change = stage_fields_to_change || updated_fields
         where id = _repository_id;
+
     end;
 $$ language plpgsql;
 

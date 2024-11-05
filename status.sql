@@ -37,11 +37,19 @@ create or replace function status(repository_name text default null, detailed bo
 
         tracked_rows_added integer;
         offstage_deleted_rows integer;
-        offstage_changed_fields integer;
+        offstage_updated_fields integer;
+
+        _tracked_rows_added text;
+        _offstage_deleted_rows text;
+        _offstage_updated_fields text;
 
         stage_rows_to_add integer;
         stage_rows_to_remove integer;
         stage_fields_to_change integer;
+
+        _stage_rows_to_add text;
+        _stage_rows_to_remove text;
+        _stage_fields_to_change text;
 
         row_count_summary text;
 
@@ -94,7 +102,7 @@ create or replace function status(repository_name text default null, detailed bo
             -- offstage changes
             select count(*) from delta._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
             select count(*) from delta._get_offstage_deleted_rows(_repository_id)    into offstage_deleted_rows;
-            select count(*) from delta._get_offstage_updated_fields(_repository_id)  into offstage_changed_fields;
+            select count(*) from delta._get_offstage_updated_fields(_repository_id)  into offstage_updated_fields;
 
             -- staged changes
             select count(*) from delta._get_stage_rows_to_add(_repository_id)     into stage_rows_to_add;
@@ -148,7 +156,7 @@ create or replace function status(repository_name text default null, detailed bo
                 -- off-stage changes status
                 tracked_rows_added,
                 case when checked_out = true then
-                    format('| %s deleted   | %s updated',  offstage_deleted_rows, offstage_changed_fields)
+                    format('| %s deleted   | %s updated',  offstage_deleted_rows, offstage_updated_fields)
                 end,
 
                 -- staged changes status
@@ -158,6 +166,28 @@ create or replace function status(repository_name text default null, detailed bo
                 end
             );
 
+
+            -------------- detailed section ---------------------
+            if detailed is true then
+                _tracked_rows_added     := (select jsonb_pretty(to_jsonb((select r.tracked_rows_added from delta.repository r where r.id = _repository_id))));
+                _tracked_rows_added     := (select jsonb_pretty(to_jsonb((select r.tracked_rows_added from delta.repository r where r.id = _repository_id))));
+                -- _offstage_deleted_rows  := (select jsonb_pretty((select to_jsonb(*) from delta._get_offstage_deleted_rows(_repository_id))));
+                -- _offstage_updated_fields := (select jsonb_pretty((select to_jsonb(*) from delta._get_offstage_updated_fields(_repository_id))));
+                _stage_rows_to_add      := (select jsonb_pretty((select to_jsonb(r.stage_rows_to_add) from delta.repository r where r.id = _repository_id)));
+                _stage_fields_to_change := (select jsonb_pretty(to_jsonb((select r.stage_fields_to_change from delta.repository r where r.id = _repository_id))));
+                _stage_rows_to_remove   := (select jsonb_pretty(to_jsonb((select r.stage_rows_to_remove from delta.repository r where r.id = _repository_id))));
+
+                statii := statii || E'\n OFFSTAGE:';
+                statii := statii || E'\n track:' || coalesce(_tracked_rows_added, 'NULL');
+                statii := statii || E'\n delete:' || coalesce(_offstage_deleted_rows, 'NULL');
+                statii := statii || E'\n update:' || coalesce(_offstage_updated_fields, 'NULL');
+
+                statii := statii || E'\n STAGE:';
+                statii := statii || E'\n adds :' || coalesce(_stage_rows_to_add,'NULL');
+                statii := statii || E'\n removes :' || coalesce(_stage_rows_to_remove, 'NULL');
+                statii := statii || E'\n changes: ' || coalesce(_stage_fields_to_change, 'NULL');
+
+            end if;
 
         end loop;
 

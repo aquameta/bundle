@@ -89,17 +89,17 @@ create or replace function _commit(
                 where id = _repository_id
             );
 
+			raise notice 'ROWS after adding parent commit and stage_rows_to_add: %', _jsonb_rows;
+
             -- remove rows
             _jsonb_rows := (
-                select jsonb_agg(a.elem)
-                from jsonb_array_elements(_jsonb_rows) a(elem)
-                    left join jsonb_array_elements((
-                        select repository.stage_rows_to_remove
-                        from delta.repository
-                        where id = _repository_id
-                    )) b(elem) on a.elem = b.elem
-                where b.elem is null
+                select jsonb_agg(a.elem) from jsonb_array_elements_text(_jsonb_rows) a(elem)
+                left join (
+                    select jsonb_array_elements_text(stage_rows_to_remove) from delta.repository where id=_repository_id
+                ) x(rem) on x.rem = a.elem
+                -- where x.rem is not null -- FIXME: is this not working??
             );
+			raise notice 'ROWS after removing removables: %', _jsonb_rows;
         end if;
 
         -- topo sort relations
@@ -117,7 +117,7 @@ create or replace function _commit(
 			) sorted_rows
 		);
 
-        raise notice 'jsonb_rows: %', jsonb_pretty(_jsonb_rows);
+        raise notice 'jsonb_rows after SORTING: %', jsonb_pretty(_jsonb_rows);
 
         --
         -- create _jsonb_fields
@@ -137,11 +137,25 @@ create or replace function _commit(
         */
 
         if parent_commit_id is not null then
-            -- not first commit, grab previous fields and apply fields_to_change
-            _jsonb_fields := (
-                select delta._get_commit_jsonb_fields(parent_commit_id)
-                    -- || delta._get_stage_fields_to_change(_repository_id): FIXME doesn't work.
+            -- not first commit, grab previous fields obj
+            _jsonb_fields := (select delta._get_commit_jsonb_fields(parent_commit_id));
+
+            -- apply fields_to_change
+            -- TODO: slow and dumb.
+            for r in
+                select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
+                from delta.repository
+                where id=_repository_id
+            loop
+                raise notice '  --- in field application, jsonb_fields now %', jsonb_pretty(_jsonb_fields);
+                _jsonb_fields := _jsonb_fields || jsonb_build_object (
+                    r.field_id::meta.row_id::text,
+                    jsonb_build_object (
+                        (r.field_id).column_name,
+                        delta.hash(meta.field_id_literal_value(r.field_id))
+                    )
                 );
+            end loop;
         end if;
 
         -- slow crappy way.  optimize failure in db._get_db_rowset_fields_obj()
@@ -156,6 +170,9 @@ create or replace function _commit(
                 delta._get_db_row_fields_obj(r.row_id)
             );
         end loop;
+
+
+        --
 
         raise notice 'jsonb_fields: %', jsonb_pretty(_jsonb_fields);
 

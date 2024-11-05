@@ -268,12 +268,31 @@ begin
 end;
 $$ language plpgsql;
 
---
--- get_db_rowset_fields_obj(jsonb)
---
 
--- Returns a jsonb '{ "$row_id": $fields_obj, ... }' object of live db values,
--- given a jsonb array of row_id::text.
+/*
+create or replace function _get_db_stage_fields_to_change( _repository_id uuid ) returns setof field_hash as $$
+    with fields as
+        select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
+        from delta.repository where id = _repository_id
+    select
+        field_id, delta.hash(meta.field_id_literal_value(field_id))
+    from field;
+end;
+$$ language sql;
+*/
+
+
+create or replace function _get_db_stage_fields_to_change(_repository_id uuid)
+returns setof field_hash as $$
+    select
+        field_id::meta.field_id,
+        delta.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
+    from (
+        select jsonb_array_elements_text(stage_fields_to_change) as field_id
+        from delta.repository
+        where id = _repository_id
+    ) as fields
+$$ language sql;
 
 
 
@@ -316,7 +335,7 @@ begin
         col_stmt := array_to_string(col_stmts, E',\n');
         raise notice 'col_stmt: %', col_stmt;
 
-        stmt := format('select meta.row_id(%L,%L,%L,%L) row_id, jsonb_build_object(%s) obj 
+        stmt := format('select meta.row_id(%L,%L,%L,%L) row_id, jsonb_build_object(%s) obj
                 from %I.%I r
                 join jsonb_array_elements_text(%s::jsonb) rs on %s',
 

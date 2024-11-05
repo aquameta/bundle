@@ -66,11 +66,11 @@ create table repository (
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
 
-    tracked_rows_added jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
+    tracked_rows_added     jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
 
-    stage_rows_to_add jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
-    stage_rows_to_remove jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
-    stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array')
+    stage_rows_to_add      jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_add) = 'array'),
+    stage_rows_to_remove   jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_remove) = 'array'),
+    stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(stage_fields_to_change) = 'array')
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
@@ -320,24 +320,13 @@ $$ language sql;
 --
 -- get_commit_fields()
 --
--- returns a field and it's value hash
+-- returns all fields and their value hashes
 
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
 create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
-    select null::delta.field_hash;
-/*
-    select meta.field_id(
-        key::meta.row_id,
-        (jsonb_each(value)).key
-    ), -- field_id
-    (jsonb_each_text(value)).value -- value_hash
-
-    from jsonb_each((
-        select jsonb_rows from delta.commit where id = _commit_id
-    ));
-*/
+    select meta.field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key), (jsonb_each_text(e.value)).value as val from delta.commit, lateral jsonb_each(jsonb_fields) e where id=_commit_id;
 $$ language sql;
 
 
