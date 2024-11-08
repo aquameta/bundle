@@ -132,4 +132,4 @@ $$ language sql;
 
 create or replace view tracked_row_added as
     select id as repository_id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id as row_id
-    from repository;
+    from delta.repository;

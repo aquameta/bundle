@@ -117,13 +117,13 @@ create or replace function _commit(
                     where x.rem is null
                 )
             );
-            raise notice 'ROWS after removing removables: %', _jsonb_rows;
+            -- raise notice 'ROWS after removing removables: %', _jsonb_rows;
         end if;
 
         -- topo sort relations
         raise debug '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
         stage_row_relations := delta._topological_sort_relations(delta._get_rowset_relations(_jsonb_rows));
-        raise notice 'stage_row_relations: %', stage_row_relations;
+        -- raise notice 'stage_row_relations: %', stage_row_relations;
 
         -- sort rows
         _jsonb_rows := (
@@ -135,7 +135,7 @@ create or replace function _commit(
             ) sorted_rows
         );
 
-        raise notice 'jsonb_rows after SORTING: %', jsonb_pretty(_jsonb_rows);
+        -- raise notice 'jsonb_rows after SORTING: %', jsonb_pretty(_jsonb_rows);
 
 
 
@@ -182,7 +182,7 @@ create or replace function _commit(
             -- remove fields for stage_rows_to_remove
             _jsonb_fields := _jsonb_fields - (
                 select stage_rows_to_remove::text
-                from repository r where id = _repository_id
+                from delta.repository r where id = _repository_id
             );
 
         end if;
@@ -201,7 +201,7 @@ create or replace function _commit(
             );
         end loop;
 
-        raise notice 'jsonb_fields: %', jsonb_pretty(_jsonb_fields);
+        -- raise notice 'jsonb_fields: %', jsonb_pretty(_jsonb_fields);
 
 
         -- create commit, without jsonb_fields object, to be set later
