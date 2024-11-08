@@ -18,7 +18,7 @@ create extension if not exists pgcrypto schema public;
 create extension if not exists meta version '0.5.0';
 create extension if not exists meta_triggers version '0.5.0';
 
-begin;
+-- begin;
 
 create schema delta;
 set search_path=delta;

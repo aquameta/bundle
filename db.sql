@@ -142,7 +142,8 @@ JOIN, it'll pick up new fields (from new columns presumably).
 */
 
 
-create or replace function _get_db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
+create or replace function _get_db_commit_fields(commit_id uuid)
+returns setof delta.value as $$
 declare
     rel record;
     stmts text[] = '{}';
@@ -192,8 +193,8 @@ begin
     -- wrap stmt to beautify columns
     literals_stmt := format('
         select
-            meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
-            delta.hash((keyval).value)::text as value_hash
+            meta.field_id((value).schema_name,(value).relation_name, (value).pk_column_names, (value).pk_values, (value).column_name)),
+            delta.hash((value).value)::text as value
         from (%s) fields;',
         literals_stmt
     );
@@ -333,9 +334,10 @@ create or replace function _get_db_stage_fields_to_change(_repository_id uuid)
 returns setof field_hash as $$
     select
         field_id::meta.field_id,
+        -- insanely slow -- write dynamic SQL here
         delta.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
     from (
-        select jsonb_array_elements_text(stage_fields_to_change) as field_id
+        select stage_fields_to_change as field_id
         from delta.repository
         where id = _repository_id
     ) as fields

@@ -3,42 +3,10 @@
 ------------------------------------------------------------------------------
 
 --
--- blob
---
-
-create table blob (
-    hash text primary key not null,
-    value text,
-    unique(hash, value)
-);
-create index blob_hash_hash_index on blob using hash (hash);
-
-
-create or replace function _blob_hash_gen_trigger() returns trigger as $$
-    begin
-        if NEW.value is NULL then
-            NEW.hash = '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9'::bytea;
-            return NEW;
-        end if;
-
-        NEW.hash = delta.hash(NEW.value);
-        if exists (select 1 from delta.blob b where b.hash = NEW.hash) then
-            return NULL;
-        end if;
-
-        return NEW;
-    end;
-$$ language plpgsql;
-
-create trigger blob_hash_update
-    before insert or update on blob
-    for each row execute procedure _blob_hash_gen_trigger();
-
-
---
 -- commit
 --
 
+/*
 create table commit (
     id uuid not null default public.uuid_generate_v7() primary key,
     parent_id uuid references commit(id), --null means first commit
@@ -46,6 +14,24 @@ create table commit (
 
     jsonb_rows jsonb not null default '[]' check (jsonb_typeof(jsonb_rows) = 'array'),
     jsonb_fields jsonb not null default '{}' check (jsonb_typeof(jsonb_fields) = 'object'),
+
+    author_name text not null default '',
+    author_email text not null default '',
+    message text not null default '',
+    commit_time timestamptz not null default now()
+);
+-- TODO: check constraint for only one null parent_id per repo
+-- TODO: i am not my own grandpa
+*/
+
+
+create table commit (
+    id uuid not null default public.uuid_generate_v7() primary key,
+    parent_id uuid references commit(id), --null means first commit
+    merge_parent_id uuid references commit(id),
+
+    rows meta.row_id[]        not null default '{}',
+    values delta.value[]      not null default '{}',
 
     author_name text not null default '',
     author_email text not null default '',
@@ -66,12 +52,28 @@ create table repository (
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
 
+    tracked_rows_added     meta.row_id[] not null default '{}',
+
+    stage_rows_to_add      meta.row_id[] not null default '{}',
+    stage_rows_to_remove   meta.row_id[] not null default '{}',
+    stage_fields_to_change meta.field_id[] not null default '{}'
+);
+
+
+/*
+create table repository (
+    id uuid not null default public.uuid_generate_v7() primary key,
+    name text not null unique check(name != ''),
+    head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
+    checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
+
     tracked_rows_added     jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
 
     stage_rows_to_add      jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_add) = 'array'),
     stage_rows_to_remove   jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_remove) = 'array'),
     stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(stage_fields_to_change) = 'array')
 );
+*/
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
 -- circular fk
@@ -289,13 +291,20 @@ $$ language sql;
 create or replace function _get_commit_rows( _commit_id uuid, _relation_id_filter meta.relation_id default null )
 returns table(commit_id uuid, row_id meta.row_id)
 as $$
-    select commit_id, row_id
-    from (
-        select id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
-        from delta.commit
-        where id = _commit_id
-    ) as subquery
-    where (row_id)::meta.relation_id = _relation_id_filter or _relation_id_filter is null;
+    with commit_rows as (
+        select c.id as commit_id, unnest(c.rows) as row_id
+        from delta.commit c
+        where c.id = _commit_id
+    )
+    select * from commit_rows
+    where _relation_id_filter is null
+        or (
+            (row_id).schema_name = _relation_id_filter.schema_name
+            and
+            (row_id).relation_name = _relation_id_filter.name
+        )
+    ;
+
 $$ language sql;
 
 --
@@ -303,12 +312,12 @@ $$ language sql;
 --
 
 create or replace function _get_head_commit_rows( _repository_id uuid, _relation_id_filter meta.relation_id default null )
- returns table(commit_id uuid, row_id meta.row_id) as $$
+returns table(commit_id uuid, row_id meta.row_id) as $$
     select * from delta._get_commit_rows(delta._head_commit_id(_repository_id), _relation_id_filter);
 $$ language sql;
 
 create or replace function get_head_commit_rows( repository_name text, _relation_id_filter meta.relation_id default null )
- returns table(commit_id uuid, row_id meta.row_id) as $$
+returns table(commit_id uuid, row_id meta.row_id) as $$
     select *
     from delta._get_commit_rows(
         delta._head_commit_id(delta.repository_id(repository_name)),
@@ -322,22 +331,54 @@ $$ language sql;
 --
 -- returns all fields and their value hashes
 
-create type field_hash as ( field_id meta.field_id, value_hash text);
+-- create type field_hash as ( field_id meta.field_id, value_hash text);
 
-create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
-returns setof field_hash as $$
-    select meta.field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key), (jsonb_each_text(e.value)).value as val from delta.commit, lateral jsonb_each(jsonb_fields) e where id=_commit_id;
+create or replace function _get_commit_fields(_commit_id uuid, _relation_id_filter meta.relation_id default null)
+returns setof value as $$
+    select v
+    from delta.commit c, lateral unnest(c.values) v
+    where c.id=_commit_id
+        and (
+            _relation_id_filter is null or
+            (
+                (v).schema_name = (_relation_id_filter).schema_name
+                and
+                (v).relation_name = (_relation_id_filter).name
+            )
+        )
 $$ language sql;
+
+/*
+HUH?  Prolly kill this.
+create or replace function _get_commit_fields( _commit_id uuid, _relation_id_filter meta.relation_id default null )
+returns setof field_hash as $$
+    with commit_fields as (
+        select c.id as commit_id, unnest(fields) as field_id
+        from delta.commit c
+        where c.id = _commit_id
+    )
+    select * from commit_fields
+    where _relation_id_filter is null
+        or (
+            (field_id).schema_name = _relation_id_filter.schema_name
+            and
+            (field_id).relation_name = _relation_id_filter.name
+        )
+    ;
+
+$$ language sql;
+*/
 
 
 --
 -- get_head_commit_fields()
 --
-create or replace function _get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
+create or replace function _get_head_commit_fields( _repository_id uuid ) returns setof value as $$
     select * from delta._get_commit_fields(delta._head_commit_id(_repository_id));
 $$ language sql;
 
 
+/*
 --
 -- get_commit_jsonb_rows()
 --
@@ -358,6 +399,7 @@ $$ language sql;
 --
 -- get_commit_row_count_by_relation( _commit_id uuid, relation_id uuid )
 -- used in summary
+*/
 
 create or replace function _get_commit_row_count_by_relation( _commit_id uuid )
 returns table( relation_id meta.relation_id, row_count integer ) as $$
