@@ -251,12 +251,12 @@ begin
 
     return (
         select jsonb_object_agg(
-			key,
+            key,
             case
                 when jsonb_typeof(value) in ('string', 'array', 'object') then value--::text::jsonb
                 else value
-			end
-		) from jsonb_each(result_row)
+            end
+        ) from jsonb_each(result_row)
     );
 end;
 $$;
@@ -273,7 +273,7 @@ begin
         meta._pk_stmt(_row_id, '%1$I = %2$L')
     );
 
-	obj := delta.row_to_jsonb_text(stmt);
+    obj := delta.row_to_jsonb_text(stmt);
     return obj;
 end;
 $$ language plpgsql;

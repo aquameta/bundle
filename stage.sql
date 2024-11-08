@@ -167,6 +167,9 @@ create or replace function _empty_stage( _repository_id uuid ) returns void as $
     end;
 $$ language plpgsql;
 
+create or replace function empty_stage( repository_name text ) returns void as $$
+    select delta._empty_stage(delta.repository_id(repository_name));
+$$ language sql;
 
 
 
@@ -446,3 +449,8 @@ create or replace function _stage_deleted_rows( _repository_id uuid ) returns vo
         where id = _repository_id;
     end;
 $$ language plpgsql;
+
+create or replace function stage_deleted_rows( repository_name text ) returns void as $$
+    select _stage_deleted_rows(delta.repository_id(repository_name));
+$$ language sql;
+

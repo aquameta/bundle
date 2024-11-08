@@ -11,8 +11,8 @@ declare
     row_count integer;
 begin
     select count(*) into row_count from delta.repository
-	where id = repository_id
-		and tracked_rows_added ? row_id::text;
+    where id = repository_id
+        and tracked_rows_added ? row_id::text;
 
     if row_count > 0 then
         return true;

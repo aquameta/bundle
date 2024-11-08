@@ -64,7 +64,11 @@ create or replace function _commit(
         raise debug 'commit()';
         raise debug '  - parent_commit_id: %', parent_commit_id;
 
+
+        --
         -- blob
+        --
+
         /*
         raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
         insert into delta.blob (value)
@@ -72,16 +76,27 @@ create or replace function _commit(
         from delta._get_stage_rows_to_add(_repository_id); -- FIXME
         */
 
+
+
         --
         -- create _jsonb_rows
         --
 
         raise debug '  - Creating _jsonb_rows @ % ...', clock_timestamp() - start_time;
+
+
+
+        -- if first commit:
+        -- jsonb_rows is only stage_rows_to_add
+
         if parent_commit_id is null then
-            -- first commit
             _jsonb_rows := (select stage_rows_to_add from delta.repository where id = _repository_id);
+
+
+        -- else not first commit:
+        -- jsonb_rows is parent commit's rows + stage_rows_to_add minus stage_rows_to_remove
+
         else
-            -- modify parent commit, adding repo.stage_rows_to_add
             _jsonb_rows := (
                 select delta._get_commit_jsonb_rows(parent_commit_id)
                     || repository.stage_rows_to_add
@@ -89,18 +104,20 @@ create or replace function _commit(
                 where id = _repository_id
             );
 
-			raise notice 'ROWS after adding parent commit and stage_rows_to_add: %', _jsonb_rows;
-			raise notice 'stage_rows_to_remove: %', (select stage_rows_to_remove from delta.repository where id=_repository_id);
+            -- raise notice 'ROWS after adding parent commit and stage_rows_to_add: %', _jsonb_rows;
+            -- raise notice 'stage_rows_to_remove: %', (select stage_rows_to_remove from delta.repository where id=_repository_id);
 
             -- remove rows
             _jsonb_rows := (
-                select jsonb_agg(a.elem) from jsonb_array_elements_text(_jsonb_rows) a(elem)
-                left join (
-                    select jsonb_array_elements_text(stage_rows_to_remove) from delta.repository where id=_repository_id
-                ) x(rem) on x.rem = a.elem
-                -- where x.rem is not null -- FIXME: is this not working??
+                select jsonb_agg(elem) from (
+                    select elem from jsonb_array_elements_text(_jsonb_rows) a(elem)
+                    left join (
+                        select jsonb_array_elements_text(stage_rows_to_remove) from delta.repository where id=_repository_id
+                    ) x(rem) on x.rem = a.elem
+                    where x.rem is null
+                )
             );
-			raise notice 'ROWS after removing removables: %', _jsonb_rows;
+            raise notice 'ROWS after removing removables: %', _jsonb_rows;
         end if;
 
         -- topo sort relations
@@ -108,17 +125,19 @@ create or replace function _commit(
         stage_row_relations := delta._topological_sort_relations(delta._get_rowset_relations(_jsonb_rows));
         raise notice 'stage_row_relations: %', stage_row_relations;
 
-		-- sort rows
-		_jsonb_rows := (
-			select jsonb_agg(rr)
-			from (
-				select elem.r::jsonb as rr
-				from jsonb_array_elements(_jsonb_rows) elem(r)
-				order by array_position(stage_row_relations, elem.r::meta.relation_id)
-			) sorted_rows
-		);
+        -- sort rows
+        _jsonb_rows := (
+            select jsonb_agg(rr)
+            from (
+                select elem.r::jsonb as rr
+                from jsonb_array_elements(_jsonb_rows) elem(r)
+                order by array_position(stage_row_relations, elem.r::meta.relation_id)
+            ) sorted_rows
+        );
 
         raise notice 'jsonb_rows after SORTING: %', jsonb_pretty(_jsonb_rows);
+
+
 
         --
         -- create _jsonb_fields
@@ -126,25 +145,22 @@ create or replace function _commit(
 
         /*
         steps:
-
         1. If there is a parent commit, set _jsonb_fields to c.jsonb_fields
            plus r.stage_fields_to_change.  Old fields plus their changes.
-
         2. For all stage_rows_to_add, grab their fields objects and add them
            to the _jsonb_fields.
-
         3. For all stage_rows_to_remove, remove their fields object from
            _jsonb_fields.
         */
 
-
         -- start with parent if present
 
         if parent_commit_id is not null then
-            -- not first commit, grab previous fields obj
+            -- grab previous commit's fields
             _jsonb_fields := (select delta._get_commit_jsonb_fields(parent_commit_id));
 
-            -- apply fields_to_change only if there is a parent (because first commits don't have changed fields)
+
+            -- apply fields_to_change
             -- TODO: slow and dumb.
             for r in
                 select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
@@ -161,9 +177,14 @@ create or replace function _commit(
                         )
                     )
                 );
-
-                -- raise notice 'APPLYING obj % to jsonb_fields %', jsonb_pretty(obj), jsonb_pretty(_jsonb_fields);
             end loop;
+
+            -- remove fields for stage_rows_to_remove
+            _jsonb_fields := _jsonb_fields - (
+                select stage_rows_to_remove::text
+                from repository r where id = _repository_id
+            );
+
         end if;
 
         -- apply fields for rows_to_add
