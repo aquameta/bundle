@@ -137,28 +137,36 @@ create or replace function _commit(
            _jsonb_fields.
         */
 
+
+        -- start with parent if present
+
         if parent_commit_id is not null then
             -- not first commit, grab previous fields obj
             _jsonb_fields := (select delta._get_commit_jsonb_fields(parent_commit_id));
 
-            -- apply fields_to_change
+            -- apply fields_to_change only if there is a parent (because first commits don't have changed fields)
             -- TODO: slow and dumb.
             for r in
                 select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
                 from delta.repository
                 where id=_repository_id
             loop
-                raise notice '  --- in field application, jsonb_fields now %', jsonb_pretty(_jsonb_fields);
-                _jsonb_fields := _jsonb_fields || jsonb_build_object (
-                    r.field_id::meta.row_id::text,
-                    jsonb_build_object (
-                        (r.field_id).column_name,
-                        delta.hash(meta.field_id_literal_value(r.field_id))
+                -- raise notice '  --- in field application, jsonb_fields now %', jsonb_pretty(_jsonb_fields);
+                _jsonb_fields := delta.jsonb_deep_merge(
+                    _jsonb_fields, jsonb_build_object (
+                        r.field_id::meta.row_id::text,
+                        jsonb_build_object (
+                            (r.field_id).column_name,
+                            delta.hash(meta.field_id_literal_value(r.field_id))
+                        )
                     )
                 );
+
+                -- raise notice 'APPLYING obj % to jsonb_fields %', jsonb_pretty(obj), jsonb_pretty(_jsonb_fields);
             end loop;
         end if;
 
+        -- apply fields for rows_to_add
         -- slow crappy way.  optimize attempt failure in db._get_db_rowset_fields_obj()
         for r in
             select rep.id, elem.row_id::meta.row_id as row_id
@@ -172,10 +180,8 @@ create or replace function _commit(
             );
         end loop;
 
-
-        --
-
         raise notice 'jsonb_fields: %', jsonb_pretty(_jsonb_fields);
+
 
         -- create commit, without jsonb_fields object, to be set later
         insert into delta.commit (
@@ -222,7 +228,6 @@ create or replace function _commit(
         return new_commit_id;
     end;
 $$ language plpgsql;
-
 
 create or replace function commit(
     repository_name text,

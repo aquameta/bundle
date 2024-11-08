@@ -5,3 +5,6 @@ drop schema if exists shakespeare cascade;
 
 drop schema if exists pt cascade;
 \i ../periodic/data.sql
+
+drop schema if exists unittest cascade;
+create schema unittest;
