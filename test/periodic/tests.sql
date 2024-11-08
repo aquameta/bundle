@@ -1,8 +1,9 @@
-set search_path=public,set_counts;
+set search_path=public,pt,set_counts;
+select no_plan();
 -- track
 
 select refresh_counters();
-select delta.track_untracked_rows_by_relation('io.pgdelta.set_counts',meta.relation_id('pt','periodic_table'));
+select delta.track_untracked_rows_by_relation('io.pgdelta.pt',meta.relation_id('pt','periodic_table'));
 select count_diff();
 
 
@@ -10,13 +11,13 @@ select count_diff();
 -- stage
 
 select refresh_counters();
-select delta.stage_tracked_rows('io.pgdelta.set_counts');
+select delta.stage_tracked_rows('io.pgdelta.pt');
 select count_diff();
 
 
 -- commit
 select refresh_counters();
-select delta.commit('io.pgdelta.set_counts', 'Periodic table', 'Eric', 'eric@aquameta.com');
+select delta.commit('io.pgdelta.pt', 'Periodic table', 'Eric', 'eric@aquameta.com');
 select count_diff();
 
 
@@ -28,3 +29,4 @@ select count_diff();
 
 
 select ok(true);
+select finish();

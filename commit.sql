@@ -6,8 +6,8 @@
 -- get_commit_ancestry()
 --
 
-create type _commit_ancestry as( commit_id uuid, position integer );
-create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestry as $$
+create type _commit_ancestor as( commit_id uuid, position integer );
+create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestor as $$
     with recursive parent as (
         select c.id, c.parent_id, 1 as position from delta.commit c where c.id=_commit_id
         union
@@ -82,7 +82,7 @@ create or replace function _commit(
         -- create _jsonb_rows
         --
 
-        raise debug '  - Creating _jsonb_rows @ % ...', clock_timestamp() - start_time;
+        raise notice '  - Creating _jsonb_rows @ % ...', clock_timestamp() - start_time;
 
 
 
@@ -108,7 +108,7 @@ create or replace function _commit(
             -- raise notice 'stage_rows_to_remove: %', (select stage_rows_to_remove from delta.repository where id=_repository_id);
 
             -- remove rows
-            _jsonb_rows := (
+            _jsonb_rows := coalesce((
                 select jsonb_agg(elem) from (
                     select elem from jsonb_array_elements_text(_jsonb_rows) a(elem)
                     left join (
@@ -116,7 +116,7 @@ create or replace function _commit(
                     ) x(rem) on x.rem = a.elem
                     where x.rem is null
                 )
-            );
+            ), '[]'::jsonb);
             -- raise notice 'ROWS after removing removables: %', _jsonb_rows;
         end if;
 
@@ -126,14 +126,14 @@ create or replace function _commit(
         -- raise notice 'stage_row_relations: %', stage_row_relations;
 
         -- sort rows
-        _jsonb_rows := (
+        _jsonb_rows := coalesce((
             select jsonb_agg(rr)
             from (
                 select elem.r::jsonb as rr
                 from jsonb_array_elements(_jsonb_rows) elem(r)
                 order by array_position(stage_row_relations, elem.r::meta.relation_id)
             ) sorted_rows
-        );
+        ), '[]'::jsonb);
 
         -- raise notice 'jsonb_rows after SORTING: %', jsonb_pretty(_jsonb_rows);
 

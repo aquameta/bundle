@@ -35,13 +35,13 @@ select isa_ok(
 */
 
 do $$ begin
-    perform delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
-    from shakespeare.character where name ilike 'b%' order by name limit 1;
+    perform delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
+    from pt.periodic_table where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin
-    perform delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
-    from shakespeare.character where name ilike 'b%' order by name limit 1;
+    perform delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
+    from pt.periodic_table where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin

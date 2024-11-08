@@ -102,3 +102,10 @@ select is(
 );
 
 -- TODO: test get_tracked_rows after commit.
+
+-- clear nontable relation (cleanup)
+do $$ begin
+    perform delta._untrack_nontable_relation(meta.relation_id('unittest','not_a_table'));
+end $$ language plpgsql;
+
+

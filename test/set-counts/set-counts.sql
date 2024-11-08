@@ -3,14 +3,7 @@
 -- DELTA TESTING FRAMEWORK
 --
 ---------------------------------------------------------------------------------------
-drop schema if exists set_counts cascade;
 create schema set_counts;
-
-create extension if not exists hstore schema public;
-create extension if not exists pgtap schema public;
-
-
-set search_path=public;
 
 create table set_counts.set_count (
     id serial primary key,

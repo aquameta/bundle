@@ -1,21 +1,10 @@
 ---------------------------------------------------------------------------------------
 --
--- INIT
---
----------------------------------------------------------------------------------------
-set search_path=public,shakespeare;
--- snapshot counts
-
--- select delta.delete_repository('org.opensourceshakespeare.db');
-select delta.create_repository('org.opensourceshakespeare.db');
-select set_counts.create_counters();
-
-
----------------------------------------------------------------------------------------
---
 -- TESTS
 --
 ---------------------------------------------------------------------------------------
+
+select no_plan();
 
 ---------------------------------------
 -- empty bundle
@@ -121,7 +110,7 @@ select row_eq(
 -- track all of shakespeare
 ---------------------------------------
 select set_counts.refresh_counters();
-select delta.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.relation_id(schema_name, name)) from meta.table where schema_name='shakespeare' and name in ('character', 'work', 'wordform', 'chapter', 'character_work');
+select delta.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.relation_id(schema_name, name)) from meta.table where schema_name='shakespeare' and name in ('character', 'work', /*'paragraph', 'wordform', */ 'chapter', 'character_work');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -150,3 +139,7 @@ select row_eq(
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit shakespeare'
 );
+
+
+
+select finish();

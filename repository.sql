@@ -164,6 +164,7 @@ declare
     _repository_id uuid;
 --     _stage_commit_id uuid;
 begin
+    raise notice 'Create repository %', repository_name;
     if repository_name = '' then
         raise exception 'Repository name cannot be empty string.';
     end if;
@@ -200,6 +201,7 @@ $$ language plpgsql;
 
 create or replace function delete_repository( repository_name text ) returns void as $$
     begin
+    raise notice 'Delete repository %', repository_name;
         if not delta.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;

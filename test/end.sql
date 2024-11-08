@@ -1,4 +1,4 @@
-select public.finish();
+select '-------------- end.sql -----------------------------------------------';
+drop extension pgtap;
 
--- drop schema if exists shakespeare cascade;
 -- commit;
