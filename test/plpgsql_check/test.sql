@@ -5,7 +5,7 @@ from
     meta.function mf
 cross join lateral
     checker.plpgsql_check_function_tb(
-		mf.schema_name || '.' || mf.name
+        mf.schema_name || '.' || mf.name
             || '(' || array_to_string(mf.type_sig, ',') || ')'
     ) as f
 where

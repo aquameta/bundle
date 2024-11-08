@@ -10,10 +10,10 @@ do $$ begin
 end $$ language plpgsql;
 
 select ok(
-	(select delta._is_newly_tracked(
+    (select delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
         meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'))),
-	'_is_newly_tracked() finds row added by track_untracked_row()'
+    '_is_newly_tracked() finds row added by track_untracked_row()'
 );
 
 select is(
@@ -24,16 +24,16 @@ select is(
 
 
 select ok(
-	(select not delta._is_newly_tracked(
+    (select not delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
         meta.row_id('pt', 'periodic_table', 'AtomicNumber', '8'))),
-	'_is_newly_tracked() doesn''t finds untracked row'
+    '_is_newly_tracked() doesn''t finds untracked row'
 );
 
 
 -- track again
 select throws_ok(
-	$$ select delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7')); $$,
+    $$ select delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7')); $$,
     format('Row with row_id %s is already tracked.', meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7')::text)
 );
 
@@ -44,10 +44,10 @@ do $$ begin
 end $$ language plpgsql;
 
 select ok(
-	(select delta._is_newly_tracked(
+    (select delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
         meta.row_id('unittest', 'not_a_table', 'a', '1'))),
-	'_is_newly_tracked() finds non-table row added by track_untracked_row()'
+    '_is_newly_tracked() finds non-table row added by track_untracked_row()'
 );
 
 
@@ -58,10 +58,10 @@ do $$ begin
 end $$ language plpgsql;
 
 select ok(
-	(select not delta._is_newly_tracked(
+    (select not delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
         meta.row_id('pt', 'periodic_table', 'AtomicNumber', '7'))),
-	'_is_newly_tracked() cannot find row after removal by untrack_tracked_row()'
+    '_is_newly_tracked() cannot find row after removal by untrack_tracked_row()'
 );
 
 
@@ -71,10 +71,10 @@ do $$ begin
 end $$ language plpgsql;
 
 select ok(
-	(select not delta._is_newly_tracked(
+    (select not delta._is_newly_tracked(
         delta.repository_id('io.pgdelta.unittest'),
         meta.row_id('pt', 'not_a_table', 'a', '1'))),
-	'_is_newly_tracked() cannot find non-table row, after removal by untrack_tracked_row()'
+    '_is_newly_tracked() cannot find non-table row, after removal by untrack_tracked_row()'
 );
 
 -- remove row that isn't tracked
