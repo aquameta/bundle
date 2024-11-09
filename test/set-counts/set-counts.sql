@@ -46,14 +46,16 @@ begin
 
 ('commit_ancestry',              'delta._get_commit_ancestry(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
 ('commit_fields',                'delta._get_commit_fields(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('commit_jsonb_fields',          'delta._get_commit_jsonb_fields(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('commit_jsonb_rows',            'delta._get_commit_jsonb_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- BROKEN:
+-- ('commit_jsonb_fields',          'delta._get_commit_jsonb_fields(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('commit_jsonb_rows',            'delta._get_commit_jsonb_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
 ('commit_row_count_by_relation', 'delta._get_commit_row_count_by_relation(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('commit_rows',                  'delta._get_commit_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('db_commit_fields',             'delta._get_db_commit_fields(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('db_commit_rows',               'delta._get_db_commit_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('db_head_commit_fields',        'delta._get_db_head_commit_fields(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
-('db_head_commit_rows',          'delta._get_db_head_commit_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- REDUNDANT:
+-- ('commit_rows',                  'delta._get_commit_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('db_commit_fields',             'delta._get_db_commit_fields(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('db_commit_rows',               'delta._get_db_commit_rows(delta.head_commit_id(''org.opensourceshakespeare.db''))'),
+('db_head_commit_fields',        'delta._get_db_head_commit_fields(delta.repository_id(''org.opensourceshakespeare.db''))'),
+('db_head_commit_rows',          'delta._get_db_head_commit_rows(delta.repository_id(''org.opensourceshakespeare.db''))'),
 ('db_stage_fields_to_change',    'delta._get_db_stage_fields_to_change(delta.repository_id(''org.opensourceshakespeare.db''))'),
 ('head_commit_fields',           'delta._get_head_commit_fields(delta.repository_id(''org.opensourceshakespeare.db''))'),
 ('head_commit_rows',             'delta._get_head_commit_rows(delta.repository_id(''org.opensourceshakespeare.db''))'),

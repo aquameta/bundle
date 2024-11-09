@@ -30,7 +30,7 @@ begin
         -- check if the key exists in the first json object and is also a json object
         if result ? key and jsonb_typeof(result->key) = 'object' and jsonb_typeof(value) = 'object' then
             -- recursively merge sub-objects
-            result := jsonb_set(result, array[key], jsonb_deep_merge(result->key, value));
+            result := jsonb_set(result, array[key], delta.jsonb_deep_merge(result->key, value));
         else
             -- otherwise, just overwrite or add the key-value pair from json2
             result := jsonb_set(result, array[key], value);

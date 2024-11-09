@@ -157,14 +157,13 @@ begin
             (row_id).pk_column_names as pk_column_names
         from delta._get_commit_rows(commit_id) row_id
     loop
-        -- TODO: check that each relation exists and has not been deleted.
-        -- currently, when that happens, this function will fail.
-
         -- for each relation, select head commit rows in this relation and also
         -- in this repository, and inner join them with the relation's data,
         -- into one row per field
 
-        -- FIXME: pk_column_names, pk_values
+        -- TODO: check that each relation exists and has not been deleted.
+        -- currently, when that happens, this function will fail.
+
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
@@ -266,7 +265,6 @@ declare
     stmt text;
     obj jsonb;
 begin
-    -- FIXME: the to_jsonb() call is going into meta-ids and converting them to jsonb structures :/
     stmt := format('select * from %I.%I xx where %s',
         _row_id.schema_name,
         _row_id.relation_name,

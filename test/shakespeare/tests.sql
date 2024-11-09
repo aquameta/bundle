@@ -5,6 +5,7 @@
 ---------------------------------------------------------------------------------------
 
 select no_plan();
+select set_counts.refresh_counters();
 
 ---------------------------------------
 -- empty bundle
@@ -18,6 +19,7 @@ select row_eq(
 ---------------------------------------
 -- new untracked rows
 ---------------------------------------
+select set_counts.refresh_counters();
 insert into shakespeare.character (id, name, speech_count) values ('9001', 'Zonker', 0);
 insert into shakespeare.character (id, name, speech_count) values ('9002', 'Pluto', 0);
 
@@ -30,11 +32,12 @@ select row_eq(
 ---------------------------------------
 -- track rows
 ---------------------------------------
+select set_counts.refresh_counters();
 select delta.track_untracked_row('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id',id)) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('tracked_rows=>2,track_untracked_rowed=>2'::hstore),
+    row ('tracked_rows=>2,tracked_rows_added=>2,untracked_rows=>-2'::hstore),
     'New tracked rows'
 );
 
@@ -42,104 +45,132 @@ select row_eq(
 ---------------------------------------
 -- stage_tracked_row()
 ---------------------------------------
+select set_counts.refresh_counters();
 select delta.stage_tracked_row('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id',id::text)) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_tracked_rows=>2,tracked_rows=>2,stage_rows=>2'::hstore),
+    row ('stage_rows_to_add=>2,tracked_rows_added=>-2,stage_rows=>2'::hstore),
     'Stage tracked rows'
 );
 
 -------------------------------------------------------------------------------
 -- commit()
 -------------------------------------------------------------------------------
+select set_counts.refresh_counters();
 select delta.commit('org.opensourceshakespeare.db','First commit!','Testing User','testing@example.com');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,get_commit_rows=>2,tracked_rows=>2,commit_fields=>10,get_db_commit_fields=>10,db_commit_rows=>2,get_db_head_commit_rows=>2'::hstore),
+    row ('stage_rows=>-2, commit_fields=>10, commit_ancestry=>1, head_commit_rows=>2, stage_rows_to_add=>-2, head_commit_fields=>10, db_head_commit_rows=>2, db_head_commit_fields=>10, commit_row_count_by_relation=>1'::hstore),
+
     'Commit makes a commit and adds the staged rows'
-);
-
--------------------------------------------------------------------------------
--- refresh_counters()
--------------------------------------------------------------------------------
-select set_counts.refresh_counters();
-
-select row_eq(
-    $$ select set_counts.count_diff() $$,
-    row (''::hstore),
-    'refresh_counters() refreshes counters'
 );
 
 ---------------------------------------
 -- delete a row in a commit
 ---------------------------------------
+select set_counts.refresh_counters();
 delete from shakespeare.character where id='9001';
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('offstage_deleted_rows=>1'::hstore),
+    row ('offstage_deleted_rows=>1,db_head_commit_fields=>-5'::hstore),
     'Delete a row in a commit'
 );
 
 
 ---------------------------------------
--- stage the delete
+-- stage the remove 
 ---------------------------------------
+select set_counts.refresh_counters();
 select delta.stage_row_to_remove('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id','9001'));
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_row_to_removes=>1,stage_rows=>-1'::hstore),
-    'Stage a row delete'
+    row ('stage_rows_to_remove=>1,stage_rows=>-1,offstage_deleted_rows=>-1'::hstore),
+    'Stage a row remove'
 );
+
 
 ---------------------------------------
 -- commit
 ---------------------------------------
+select set_counts.refresh_counters();
 select delta.commit('org.opensourceshakespeare.db','Second commit, delete one row','Testing User','testing@example.com');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    row ('stage_rows=>-1, tracked_rows=>-1, commit_ancestry=>1, head_commit_rows=>-1, db_head_commit_rows=>-1, stage_rows_to_remove=>-1'::hstore),
     'Commit a row delete'
 );
+
+
+-- TODO: remove a row that exists
 
 ---------------------------------------
 -- track all of shakespeare
 ---------------------------------------
 select set_counts.refresh_counters();
-select delta.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.relation_id(schema_name, name)) from meta.table where schema_name='shakespeare' and name in ('character', 'work', /*'paragraph', 'wordform', */ 'chapter', 'character_work');
+select delta.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.relation_id(schema_name, name))
+from meta.table
+where schema_name='shakespeare'
+    and name in ('character', 'work', 'chapter', 'character_work'); -- 'paragraph', 'wordform'
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
-    'Track shakespeare'
+    row ('tracked_rows=>3600, untracked_rows=>-3600, tracked_rows_added=>3600'::hstore),
+    'Track all of shakespeare'
 );
 
 ---------------------------------------
 -- stage_tracked_rows
 ---------------------------------------
+select set_counts.refresh_counters();
 select delta.stage_tracked_rows('org.opensourceshakespeare.db');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
-    'Stage shakespeare'
+    row ('stage_rows=>3600, stage_rows_to_add=>3600, tracked_rows_added=>-3600'::hstore),
+    'Stage all of shakespeare'
 );
 
 ---------------------------------------
 -- commit
 ---------------------------------------
+select set_counts.refresh_counters();
 select delta.commit('org.opensourceshakespeare.db','Third commit, add all of shakespeare','Testing User','testing@example.com');
+
+select row_eq(
+    $$ select set_counts.count_diff() $$,
+    row ('stage_rows=>-3600, commit_fields=>14134, commit_ancestry=>1, head_commit_rows=>3600, stage_rows_to_add=>-3600, head_commit_fields=>14134, db_head_commit_rows=>3600, db_head_commit_fields=>14134, commit_row_count_by_relation=>3'::hstore),
+    -- row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    'Commit all of shakespeare'
+);
+
+---------------------------------------
+-- update fields
+---------------------------------------
+select set_counts.refresh_counters();
+update shakespeare.character set description = description || delta.random_string(3);
+update shakespeare.character set name = name || delta.random_string(3);
+select row_eq(
+    $$ select set_counts.count_diff() $$,
+    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    'Update committed rows in shakespeare'
+);
+
+---------------------------------------
+-- update fields
+---------------------------------------
+select set_counts.refresh_counters();
+select delta.stage_updated_fields('org.opensourceshakespeare.db');
+select delta.commit('org.opensourceshakespeare.db','Fourth commit, update a bunch of fields.','Testing User','testing@example.com');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
     row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
     'Commit shakespeare'
 );
-
-
 
 select finish();

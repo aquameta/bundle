@@ -44,7 +44,9 @@ create table commit (
     parent_id uuid references commit(id), --null means first commit
     merge_parent_id uuid references commit(id),
 
+    -- rows jsonb array. values are row_id::text
     jsonb_rows jsonb not null default '[]' check (jsonb_typeof(jsonb_rows) = 'array'),
+    -- fields jsonb obj.  key is row_id, value is "column": "value hash" map
     jsonb_fields jsonb not null default '{}' check (jsonb_typeof(jsonb_fields) = 'object'),
 
     author_name text not null default '',

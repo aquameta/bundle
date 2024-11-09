@@ -33,6 +33,7 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
         perform delta._untrack_tracked_row(_repository_id, _row_id);
 
         -- stage
+        -- TODO: are we supposed to be using to_jsonb here or jsonb_build_object?
         update delta.repository
         -- set stage_rows_to_add = stage_rows_to_add || jsonb_build_object(_row_id::text, delta._get_db_row_field_hashes_obj(_row_id))
         set stage_rows_to_add = stage_rows_to_add || to_jsonb(_row_id::text)
@@ -373,33 +374,16 @@ $$ language sql;
 -- stage_tracked_rows()
 --
 
--- TODO: this can probably be optimized by combining calls to get_db_row_fields_obj()
 create or replace function _stage_tracked_rows( _repository_id uuid ) returns void as $$
 declare
     _tracked_rows_obj jsonb;
 begin
-    /*
-    OLD: obj-based approach
-    -- create _tracked_rows_obj
-    select jsonb_object_agg(r.row_id, delta._get_db_row_field_hashes_obj(row_id::meta.row_id))
-    into _tracked_rows_obj
-    from (
-        select jsonb_array_elements_text(tracked_rows_added) row_id
-        from delta.repository where id = _repository_id
-    ) r;
-
-    -- append _tracked_rows_obj to stage_rows_to_add
-    update delta.repository
-    set stage_rows_to_add = stage_rows_to_add || _tracked_rows_obj
-    where id = _repository_id;
-    */
-
+    -- append tracked_rows_added to stage_rows_to_add
     update delta.repository
     set stage_rows_to_add = stage_rows_to_add || tracked_rows_added
     where id = _repository_id;
 
     -- clear repository.tracked_rows_added
-    -- TODO: function for this
     update delta.repository set tracked_rows_added = '[]'::jsonb
     where id = _repository_id;
 
@@ -420,8 +404,8 @@ create or replace function _stage_updated_fields( _repository_id uuid ) returns 
         updated_fields jsonb;
     begin
         -- TODO: use a CTE instead?
-        updated_fields := (select jsonb_agg(f.field_id::text) from _get_offstage_updated_fields(_repository_id) f);
-        raise notice 'updated_fields: %', updated_fields;
+        updated_fields := (select jsonb_agg(f.field_id::text) from delta._get_offstage_updated_fields(_repository_id) f);
+        -- raise notice 'updated_fields: %', updated_fields;
 
         update delta.repository
         set stage_fields_to_change = stage_fields_to_change || updated_fields
@@ -444,7 +428,7 @@ create or replace function _stage_deleted_rows( _repository_id uuid ) returns vo
     begin
         update delta.repository
         set stage_rows_to_remove = stage_rows_to_remove || (
-            select to_jsonb(array_agg(r::text)) lateral from _get_offstage_deleted_rows (_repository_id) r
+            select to_jsonb(array_agg(r::text)) lateral from delta._get_offstage_deleted_rows (_repository_id) r
         )
         where id = _repository_id;
     end;

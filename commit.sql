@@ -38,6 +38,8 @@ create or replace function _commit(
         first_commit boolean := false;
         start_time timestamp;
     begin
+        raise notice 'commit()';
+
         start_time := clock_timestamp();
 
         -- repository exists
@@ -56,13 +58,12 @@ create or replace function _commit(
             if delta._repository_has_commits(_repository_id) then
                 raise exception 'No parent_commit_id supplied, and repository''s head_commit_id is null.  Please specify a parent commit_id for this commit.';
             else
-                raise debug 'First commit!';
+                raise notice 'First commit!';
                 first_commit := true;
             end if;
         end if;
 
-        raise debug 'commit()';
-        raise debug '  - parent_commit_id: %', parent_commit_id;
+        raise notice '  - parent_commit_id: %', parent_commit_id;
 
 
         --
@@ -71,6 +72,13 @@ create or replace function _commit(
 
         /*
         raise debug '  - Inserting blobs @ % ...', clock_timestamp() - start_time;
+
+        ultimately we want a list of values to add to the blob table
+        1. get relations present in stage_rows_to_add
+        2. get columns for each relation
+        3. for each relation join stage_rows_to_add on pks=pks
+        4.     for every row also in stage_rows_to_add
+
         insert into delta.blob (value)
         select distinct (jsonb_each(sra.value)).value
         from delta._get_stage_rows_to_add(_repository_id); -- FIXME
@@ -121,7 +129,7 @@ create or replace function _commit(
         end if;
 
         -- topo sort relations
-        raise debug '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
+        raise notice '  - Computing topological relation sort @ % ...', clock_timestamp() - start_time;
         stage_row_relations := delta._topological_sort_relations(delta._get_rowset_relations(_jsonb_rows));
         -- raise notice 'stage_row_relations: %', stage_row_relations;
 
@@ -153,6 +161,8 @@ create or replace function _commit(
            _jsonb_fields.
         */
 
+        raise notice '  - Creating _jsonb_fields @ % ...', clock_timestamp() - start_time;
+
         -- start with parent if present
 
         if parent_commit_id is not null then
@@ -161,7 +171,7 @@ create or replace function _commit(
 
 
             -- apply fields_to_change
-            -- TODO: slow and dumb.
+            -- TODO: this is insanely slow.  rewrite.
             for r in
                 select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
                 from delta.repository
@@ -188,7 +198,7 @@ create or replace function _commit(
         end if;
 
         -- apply fields for rows_to_add
-        -- slow crappy way.  optimize attempt failure in db._get_db_rowset_fields_obj()
+        -- TODO: insanely slow.  optimize attempt failure in db._get_db_rowset_fields_obj()
         for r in
             select rep.id, elem.row_id::meta.row_id as row_id
             from delta.repository rep,
@@ -237,7 +247,7 @@ create or replace function _commit(
         -- clear this repo's stage
         perform delta._empty_stage(_repository_id);
 
-        raise debug '  - New commit with id %', new_commit_id;
+        raise notice '  - New commit with id %', new_commit_id;
 
 
         -- update head pointer, checkout pointer
@@ -245,7 +255,7 @@ create or replace function _commit(
 
         -- TODO: unset search_path
 
-        raise debug '  - Done @ %', clock_timestamp() - start_time;
+        raise notice '  - Done @ %', clock_timestamp() - start_time;
         return new_commit_id;
     end;
 $$ language plpgsql;
