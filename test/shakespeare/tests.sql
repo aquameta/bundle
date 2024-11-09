@@ -62,8 +62,7 @@ select delta.commit('org.opensourceshakespeare.db','First commit!','Testing User
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_rows=>-2, commit_fields=>10, commit_ancestry=>1, head_commit_rows=>2, stage_rows_to_add=>-2, head_commit_fields=>10, db_head_commit_rows=>2, db_head_commit_fields=>10, commit_row_count_by_relation=>1'::hstore),
-
+    row('commit_fields=>10, commit_ancestry=>1, head_commit_rows=>2, stage_rows_to_add=>-2, head_commit_fields=>10, db_head_commit_rows=>2, db_head_commit_fields=>10, commit_row_count_by_relation=>1'::hstore),
     'Commit makes a commit and adds the staged rows'
 );
 
@@ -101,7 +100,7 @@ select delta.commit('org.opensourceshakespeare.db','Second commit, delete one ro
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_rows=>-1, tracked_rows=>-1, commit_ancestry=>1, head_commit_rows=>-1, db_head_commit_rows=>-1, stage_rows_to_remove=>-1'::hstore),
+    row ('tracked_rows=>-1, commit_ancestry=>1, head_commit_rows=>-1, db_head_commit_rows=>-1, stage_rows_to_remove=>-1'::hstore),
     'Commit a row delete'
 );
 
@@ -143,8 +142,7 @@ select delta.commit('org.opensourceshakespeare.db','Third commit, add all of sha
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_rows=>-3600, commit_fields=>14134, commit_ancestry=>1, head_commit_rows=>3600, stage_rows_to_add=>-3600, head_commit_fields=>14134, db_head_commit_rows=>3600, db_head_commit_fields=>14134, commit_row_count_by_relation=>3'::hstore),
-    -- row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    row ('commit_fields=>14134, commit_ancestry=>1, head_commit_rows=>3600, stage_rows_to_add=>-3600, head_commit_fields=>14134, db_head_commit_rows=>3600, db_head_commit_fields=>14134, commit_row_count_by_relation=>3'::hstore),
     'Commit all of shakespeare'
 );
 
@@ -156,20 +154,31 @@ update shakespeare.character set description = description || delta.random_strin
 update shakespeare.character set name = name || delta.random_string(3);
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    row ('offstage_updated_fields=>1887'::hstore),
     'Update committed rows in shakespeare'
 );
 
 ---------------------------------------
--- update fields
+-- stage updated fields
 ---------------------------------------
 select set_counts.refresh_counters();
 select delta.stage_updated_fields('org.opensourceshakespeare.db');
+select row_eq(
+    $$ select set_counts.count_diff() $$,
+    row ('stage_fields_to_change=>1887, offstage_updated_fields=>-1887, db_stage_fields_to_change=>1887'::hstore),
+    'Stage updated fields in shakespeare'
+);
+
+---------------------------------------
+-- commit updated fields
+---------------------------------------
+select set_counts.refresh_counters();
 select delta.commit('org.opensourceshakespeare.db','Fourth commit, update a bunch of fields.','Testing User','testing@example.com');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit=>1,commit_row_deleted=>1,untracked_row=>1'::hstore),
+    row ('commit_ancestry=>1, stage_fields_to_change=>-1887, db_stage_fields_to_change=>-1887'::hstore),
+
     'Commit shakespeare'
 );
 

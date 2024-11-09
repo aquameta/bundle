@@ -323,14 +323,11 @@ $$ language sql;
 create type stage_row as (row_id meta.row_id, new_row boolean);
 create or replace function _get_stage_rows( _repository_id uuid ) returns setof stage_row as $$
     select row_id, false as new_row from (
-
-/*
         -- head_commit_row
         select hcr.row_id as row_id
-        from delta.get_head_commit_rows(_repository_id) hcr 
+        from delta._get_head_commit_rows(_repository_id) hcr 
 
         except
-        */
 
         -- ...minus deleted rows
         select jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id as row_id
