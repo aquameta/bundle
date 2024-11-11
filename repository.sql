@@ -291,13 +291,13 @@ $$ language sql;
 --
 
 create or replace function _get_commit_rows( _commit_id uuid, _relation_id_filter meta.relation_id default null )
-returns table(commit_id uuid, row_id meta.row_id)
+returns table(_position integer, row_id meta.row_id)
 as $$
-    select commit_id, row_id
+    select position, row_id
     from (
-        select id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
-        from delta.commit
-        where id = _commit_id
+        select row_number() over (order by ord) as position, elem::meta.row_id as row_id -- id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
+        from delta.commit c, lateral jsonb_array_elements_text(c.jsonb_rows) with ordinality as u(elem, ord)
+        where c.id = _commit_id
     ) as subquery
     where (row_id)::meta.relation_id = _relation_id_filter or _relation_id_filter is null;
 $$ language sql;
@@ -307,12 +307,12 @@ $$ language sql;
 --
 
 create or replace function _get_head_commit_rows( _repository_id uuid, _relation_id_filter meta.relation_id default null )
- returns table(commit_id uuid, row_id meta.row_id) as $$
+ returns table(_position integer, row_id meta.row_id) as $$
     select * from delta._get_commit_rows(delta._head_commit_id(_repository_id), _relation_id_filter);
 $$ language sql;
 
 create or replace function get_head_commit_rows( repository_name text, _relation_id_filter meta.relation_id default null )
- returns table(commit_id uuid, row_id meta.row_id) as $$
+ returns table(_position integer, row_id meta.row_id) as $$
     select *
     from delta._get_commit_rows(
         delta._head_commit_id(delta.repository_id(repository_name)),

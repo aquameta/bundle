@@ -192,7 +192,8 @@ begin
     literals_stmt := format('
         select
             meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
-            delta.hash((keyval).value)::text as value_hash
+            -- TODO delta.hash((keyval).value)::text as value_hash
+            ((keyval).value)::text as value_hash
         from (%s) fields;',
         literals_stmt
     );
@@ -306,7 +307,8 @@ begin
 
     -- hash values into hashed_obj, for return
     for key, value in select * from jsonb_each_text(obj) loop
-        hashed_obj := hashed_obj || jsonb_build_object(key, delta.hash(value));
+        -- hashed_obj := hashed_obj || jsonb_build_object(key, TODO delta.hash(value));
+        hashed_obj := hashed_obj || jsonb_build_object(key, value::text);
     end loop;
 
     return hashed_obj;
@@ -331,7 +333,8 @@ create or replace function _get_db_stage_fields_to_change(_repository_id uuid)
 returns setof field_hash as $$
     select
         field_id::meta.field_id,
-        delta.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
+        -- TODO: delta.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
+        meta.field_id_literal_value(field_id::meta.field_id) as field_hash
     from (
         select jsonb_array_elements_text(stage_fields_to_change) as field_id
         from delta.repository

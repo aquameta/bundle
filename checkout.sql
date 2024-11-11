@@ -10,24 +10,29 @@ create or replace function _delete_checkout( _commit_id uuid ) returns void as $
 declare
         r record;
         pk_comparison_stmt text;
+        stmt text;
 begin
     -- TODO: check for uncommitted changes?
     -- TODO: there's a whole dependency chain to follow here.
     -- TODO: speed this up by grouping by relation, one delete stmt per relation
-    -- TODO: set repo.checkout_commit_id to null?  probably.
 
-    for r in select * from delta._get_commit_rows(_commit_id) loop
+    for r in select * from delta._get_commit_rows(_commit_id) order by _position desc loop
         if r.row_id is null then raise exception '_delete_checkout(): row_id is null'; end if;
 
         pk_comparison_stmt := meta._pk_stmt(r.row_id, '%1$I::text = %2$L::text');
-        execute format ('delete from %I.%I where %s',
+        stmt := format ('delete from %I.%I where %s',
             (r.row_id).schema_name,
             (r.row_id).relation_name,
             pk_comparison_stmt);
+        -- raise notice 'delete_checkout() stmt: %', stmt;
+        execute stmt;
     end loop;
 end;
 $$ language plpgsql;
 
+create or replace function delete_checkout( repository_name text ) returns void as $$
+    select delta._delete_checkout(delta.checkout_commit_id(repository_name));
+$$ language sql;
 
 
 --
@@ -71,13 +76,15 @@ begin
     -- TODO: single insert stmt per relation, smart dependency traversing etc
 
     for commit_row in
-        select r.row_id, jsonb_object_agg((f.field_id).column_name, b.value) as fields
+        select r.row_id, jsonb_object_agg((f.field_id).column_name, f.value_hash) as fields
         from delta._get_commit_rows(_commit_id) r
             join delta._get_commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
-            join delta.blob b on f.value_hash = b.hash
-        group by r.row_id
+            -- TODO: undisable hash
+            -- join delta.blob b on f.value_hash = b.hash
+        group by r.row_id, r._position
+        order by r._position
     loop
-        raise notice 'CHECKING OUT ROW: %', commit_row;
+        -- raise notice 'CHECKING OUT ROW: % ===> %', (commit_row.row_id)::text, (commit_row.fields)::text;
         perform delta._checkout_row(commit_row.row_id, commit_row.fields);
     end loop;
 
@@ -110,14 +117,45 @@ end
 $$ language plpgsql;
 
 
-/*
- * _checkout_row()
- */
+--
+-- _checkout_row()
+--
+-- Checks out a single row given a row_id and a jsonb fields object
 
 create or replace function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
 declare
+    stmt text;
+    cols text[] := '{}';
+    vals text[] := '{}';
+    row record;
 begin
     raise notice '_checkout_row( %, % )', row_id, fields;
+
+    for row in select key, value from jsonb_each_text(fields) loop
+        cols := cols || row.key;
+        vals := vals || row.value;
+    end loop;
+
+    stmt := format('insert into %I.%I (%s) values (%s)',
+        (row_id).schema_name,
+        (row_id).relation_name,
+        -- cols stmt
+        (select array_to_string(
+            array_agg(quote_ident(col)), ', ')
+        from unnest(cols) as col),
+        -- vals stmt
+        (select array_to_string(
+            array_agg(
+                case when val is null then 'null' else quote_literal(val::text) end
+            ), ', ')
+        from unnest(vals) as val)
+    );
+
+    raise notice 'checkout_row stmt: %', stmt;
+
+    execute stmt;
+
     return;
 end
 $$ language plpgsql;
+

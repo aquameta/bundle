@@ -118,6 +118,10 @@ create or replace function status(repository_name text default null, detailed bo
             from delta._get_commit_row_count_by_relation(delta._head_commit_id(_repository_id))
             into row_count_summary;
 
+            -- more ideas:
+            -- topology status
+            -- check for dirty stage status
+
 
 
             /*

@@ -183,7 +183,8 @@ create or replace function _commit(
                         r.field_id::meta.row_id::text,
                         jsonb_build_object (
                             (r.field_id).column_name,
-                            delta.hash(meta.field_id_literal_value(r.field_id))
+                            -- TODO: delta.hash(meta.field_id_literal_value(r.field_id))
+                            meta.field_id_literal_value(r.field_id)
                         )
                     )
                 );
