@@ -36,14 +36,14 @@ select isa_ok(
 
 do $$ begin
     perform delta.track_untracked_row('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
-    from pt.periodic_table where "Element" ilike 'b%' order by "Element" limit 1;
+    from pt.periodic_table; -- where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin
     perform delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
-    from pt.periodic_table where "Element" ilike 'b%' order by "Element" limit 1;
+    from pt.periodic_table; --  where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin
-    perform delta.commit('io.pgdelta.unittest', 'Second commit', 'Joe User', 'joe@example.com');
+    perform delta.commit('io.pgdelta.unittest', 'All of periodic table', 'Joe User', 'joe@example.com');
 end $$ language plpgsql;
