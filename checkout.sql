@@ -129,8 +129,6 @@ declare
     vals text[] := '{}';
     row record;
 begin
-    raise notice '_checkout_row( %, % )', row_id, fields;
-
     for row in select key, value from jsonb_each_text(fields) loop
         cols := cols || row.key;
         vals := vals || row.value;
@@ -150,8 +148,6 @@ begin
             ), ', ')
         from unnest(vals) as val)
     );
-
-    raise notice 'checkout_row stmt: %', stmt;
 
     execute stmt;
 

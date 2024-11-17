@@ -72,7 +72,7 @@ create table repository (
 
     stage_rows_to_add      jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_add) = 'array'),
     stage_rows_to_remove   jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_remove) = 'array'),
-    stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(stage_fields_to_change) = 'array')
+    stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(stage_fields_to_change) = 'array') -- {} ?
 );
 -- TODO: stage_commit can't be checkout_commit or head_commit
 

@@ -1,1 +1,1 @@
-psql -c 'select * from pg_stat_user_functions order by total_time desc' delta
+psql -c 'select * from pg_stat_user_functions order by self_time desc' delta
