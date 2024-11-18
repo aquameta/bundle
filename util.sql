@@ -39,3 +39,9 @@ begin
     return result;
 end;
 $$;
+
+
+
+create or replace function clock_diff(start_time timestamp) returns text as $$
+    select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 1) as seconds;
+$$ language sql;
