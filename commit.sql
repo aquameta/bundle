@@ -96,10 +96,9 @@ begin
     end if;
 
 
+/*
     -- topo sort relations
     -- raise notice '  - Computing topological relation sort @ % ...', delta.clock_diff(start_time);
-    /*
-    stage_row_relations := delta._topological_sort_relations(delta._get_rowset_relations(_jsonb_rows));
     -- raise notice 'stage_row_relations: %', stage_row_relations;
 
     -- FIXME: _jsonb_rows is not in use anymore
@@ -112,7 +111,7 @@ begin
             order by array_position(stage_row_relations, elem.r::meta.relation_id)
         ) sorted_rows
     ), '[]'::jsonb);
-    */
+*/
 
 end;
 $$ language plpgsql;
@@ -280,7 +279,7 @@ begin
     raise notice '  - parent_commit_id: %', parent_commit_id;
 
     -- create commit, without jsonb_fields object, to be set later
-    raise notice '  - Creating commit @ % ...', delta.clock_diff(start_time);
+    raise notice '  - Creating commit @ %', delta.clock_diff(start_time);
     insert into delta.commit (
         repository_id,
         parent_id,
@@ -295,16 +294,18 @@ begin
         _author_email
     ) returning id into new_commit_id;
 
-    raise notice '    - stage_blobs() @ % ...', delta.clock_diff(start_time);
+    raise notice '  - New commit with id %', new_commit_id;
+
+    raise notice '    - stage_blobs() @ %', delta.clock_diff(start_time);
     perform delta.__commit_stage_blobs(_repository_id, new_commit_id, parent_commit_id);
 
-    raise notice '    - stage_rows() @ % ...', delta.clock_diff(start_time);
+    raise notice '    - stage_rows() @ %', delta.clock_diff(start_time);
     perform delta.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id);
 
-    raise notice '    - stage_fields() @ % ...', delta.clock_diff(start_time);
+    raise notice '    - stage_fields() @ %', delta.clock_diff(start_time);
     perform delta.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id);
 
-    raise notice '  - New commit with id %', new_commit_id;
+--    return new_commit_id;
 
     -- clear this repo's stage
     perform delta._empty_stage(_repository_id);
@@ -319,6 +320,7 @@ begin
     return new_commit_id;
 end;
 $$ language plpgsql;
+
 
 create or replace function commit(
     repository_name text,

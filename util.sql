@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION random_string(int) RETURNS TEXT as $$
-    SELECT substr(md5(random()::text), 0, $1+1);                 
-$$ language sql;  
+    SELECT substr(md5(random()::text), 0, $1+1);
+$$ language sql;
 
 create or replace function jsonb_merge_recurse(orig jsonb, delta jsonb)
 returns jsonb language sql as $$
@@ -18,7 +18,7 @@ returns jsonb language sql as $$
     full join jsonb_each(delta) e2(keyDelta, valDelta) on keyOrig = keyDelta
 $$;
 
-create or replace function jsonb_deep_merge(json1 jsonb, json2 jsonb) 
+create or replace function jsonb_deep_merge(json1 jsonb, json2 jsonb)
 returns jsonb language plpgsql as $$
 declare
     result jsonb := json1;
@@ -41,7 +41,6 @@ end;
 $$;
 
 
-
 create or replace function clock_diff(start_time timestamp) returns text as $$
-    select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 1) as seconds;
+    select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 2) as seconds;
 $$ language sql;

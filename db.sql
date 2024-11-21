@@ -79,7 +79,7 @@ begin
 
     literals_stmt := array_to_string(stmts,E'\nunion\n');
 
-    raise debug 'literals_stmt: %', literals_stmt;
+    -- raise notice 'literals_stmt: %', literals_stmt;
 
     if literals_stmt != '' then
         return query execute literals_stmt;
