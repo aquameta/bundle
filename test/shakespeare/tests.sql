@@ -114,11 +114,12 @@ select set_counts.refresh_counters();
 select delta.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.relation_id(schema_name, name))
 from meta.table
 where schema_name='shakespeare'
-    and name in ('character', 'work', 'chapter', 'character_work'); -- 'paragraph', 'wordform'
+--    and name in ('character', 'work', 'chapter', 'character_work') -- 'paragraph', 'wordform'
+;
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('tracked_rows=>3600, untracked_rows=>-3600, tracked_rows_added=>3600'::hstore),
+    row ('tracked_rows=>67895, untracked_rows=>-67895, tracked_rows_added=>67895'::hstore),
     'Track all of shakespeare'
 );
 
@@ -130,7 +131,7 @@ select delta.stage_tracked_rows('org.opensourceshakespeare.db');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('stage_rows=>3600, stage_rows_to_add=>3600, tracked_rows_added=>-3600'::hstore),
+    row ('stage_rows=>67895, stage_rows_to_add=>67895, tracked_rows_added=>-67895'::hstore),
     'Stage all of shakespeare'
 );
 
@@ -142,7 +143,7 @@ select delta.commit('org.opensourceshakespeare.db','Third commit, add all of sha
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
-    row ('commit_fields=>14134, commit_ancestry=>1, head_commit_rows=>3600, stage_rows_to_add=>-3600, head_commit_fields=>14134, db_head_commit_rows=>3600, db_head_commit_fields=>14134, commit_row_count_by_relation=>3'::hstore),
+    row ('commit_fields=>583864, commit_ancestry=>1, head_commit_rows=>67895, stage_rows_to_add=>-67895, head_commit_fields=>583864, db_head_commit_rows=>67895, db_head_commit_fields=>583864, commit_row_count_by_relation=>5'::hstore),
     'Commit all of shakespeare'
 );
 

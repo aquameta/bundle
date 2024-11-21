@@ -11,7 +11,7 @@ returns jsonb language sql as $$
                 when valOrig isnull then valDelta
                 when valDelta isnull then valOrig
                 when (jsonb_typeof(valOrig) <> 'object' or jsonb_typeof(valDelta) <> 'object') then valDelta
-                else jsonb_merge_recurse(valOrig, valDelta)
+                else delta.jsonb_merge_recurse(valOrig, valDelta)
             end
         )
     from jsonb_each(orig) e1(keyOrig, valOrig)
@@ -44,3 +44,14 @@ $$;
 create or replace function clock_diff(start_time timestamp) returns text as $$
     select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 2) as seconds;
 $$ language sql;
+
+
+-- https://wiki.postgresql.org/wiki/Array_reverse
+CREATE OR REPLACE FUNCTION array_reverse(anyarray) RETURNS anyarray AS $$
+SELECT ARRAY(
+    SELECT $1[i]
+        FROM generate_subscripts($1,1) AS s(i)
+            ORDER BY i DESC
+            );
+$$ LANGUAGE 'sql' STRICT IMMUTABLE;
+

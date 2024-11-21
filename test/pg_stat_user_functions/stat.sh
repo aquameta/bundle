@@ -1,0 +1,1 @@
+psql -c "select sum(calls) as calls, sum(total_exec_time) as total_exec_time, sum(mean_exec_time) / sum(calls) as mean_exec_time, query from public.pg_stat_statements group by query order by 3 desc;" delta

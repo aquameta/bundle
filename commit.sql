@@ -50,9 +50,7 @@ begin
         update delta.commit set jsonb_rows = stage_rows_to_add 
         from delta.repository
         where repository.id=_repository_id and commit.id = new_commit_id;
-
-        -- WAS: _jsonb_rows := (select stage_rows_to_add from delta.repository where id = _repository_id);
-
+        -- TODO: sort
 
     -- else not first commit:
     -- jsonb_rows is parent commit's rows + stage_rows_to_add - stage_rows_to_remove
@@ -66,16 +64,6 @@ begin
             where commit.id = parent_commit_id
         )
         where commit.id = new_commit_id;
-
-        /*
-        was:
-        _jsonb_rows := (
-            select delta._get_commit_jsonb_rows(parent_commit_id)
-                || repository.stage_rows_to_add
-            from delta.repository
-            where id = _repository_id
-        );
-        */
 
         -- get topo sorted relations
         select delta._topological_sort_relations(delta._get_rowset_relations(jsonb_rows))
@@ -99,25 +87,6 @@ begin
         ), '[]'::jsonb)
         where id = new_commit_id;
     end if;
-
-
-/*
-    -- topo sort relations
-    -- raise notice '  - Computing topological relation sort @ % ...', delta.clock_diff(start_time);
-    -- raise notice 'stage_row_relations: %', stage_row_relations;
-
-    -- FIXME: _jsonb_rows is not in use anymore
-    -- sort rows
-    _jsonb_rows := coalesce((
-        select jsonb_agg(rr)
-        from (
-            select elem.r::jsonb as rr
-            from jsonb_array_elements(_jsonb_rows) elem(r)
-            order by array_position(stage_row_relations, elem.r::meta.relation_id)
-        ) sorted_rows
-    ), '[]'::jsonb);
-*/
-
 end;
 $$ language plpgsql;
 
@@ -181,58 +150,33 @@ begin
         ) parent_commit
         where id = new_commit_id;
 
-        /*
-        --
-        -- plus stage_rows_to_add
-        -- TODO  copy pasta from above
-        raise notice '    - adding fields for rows_to_add on jsonb_fields @ % ...', delta.clock_diff(start_time);
-        for rec in
-            select rep.id, elem.row_id::meta.row_id as row_id
-            from delta.repository rep
-                cross join lateral jsonb_array_elements_text(rep.stage_rows_to_add) elem(row_id)
-            where rep.id=_repository_id
-        loop
-            update delta.commit set jsonb_fields = jsonb_fields || jsonb_build_object(
-                rec.row_id::text,
-                delta._get_db_row_fields_obj(rec.row_id)
-            )
-            where id = new_commit_id;
-        end loop;
-        */
-
         --
         -- fields_to_change
         --
 
-        -- raise notice '    - apply fields_to_change @ % ...', delta.clock_diff(start_time);
-        -- apply fields_to_change
-        for rec in
-            select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
-            from delta.repository
-            where id=_repository_id
-        loop
-            /*
-            row_str := (rec.field_id)::text;
-            _jsonb_fields_patch := jsonb_set(
-                _jsonb_fields_patch,
-                array[row_str, (rec.field_id).column_name], -- JSONPath
-                to_jsonb(meta.field_id_literal_value(rec.field_id)),
-                true
-            );
-            */
 
-            -- TODO: figure out how to do this with a single update
-            update delta.commit set jsonb_fields = delta.jsonb_deep_merge(
-                jsonb_fields,
-                jsonb_build_object(
-                    rec.field_id::meta.row_id::text,
-                    jsonb_build_object (
-                        (rec.field_id).column_name,
-                        meta.field_id_literal_value(rec.field_id)
-                    )
-                )
-            ) where id = new_commit_id;
-        end loop;
+		with fields as (
+			select
+				field_text::meta.field_id::meta.row_id as row_id,
+				jsonb_object_agg(
+					(field_text::meta.field_id).column_name,
+					meta.field_id_literal_value(field_text::meta.field_id)
+				) as fields_obj
+			from delta.repository
+				cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
+			where id = _repository_id
+			group by 1
+		),
+		fields_obj as (
+			select jsonb_object_agg(row_id::text, fields_obj) as obj from fields
+        )
+        update delta.commit set jsonb_fields = delta.jsonb_merge_recurse(
+            jsonb_fields,
+            fields_obj.obj
+		)
+		from fields_obj
+        where commit.id = new_commit_id;
+
     end if;
 end;
 $$ language plpgsql;
@@ -435,7 +379,7 @@ begin
         raise exception 'Input graph contains cycles: %', edges;
         -- TODO: break cycles if possible w/ deferrable fks?
     end if;
-    return l;
+    return delta.array_reverse(l);
 end
 $$ language plpgsql;
 
