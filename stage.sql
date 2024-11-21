@@ -400,12 +400,13 @@ create or replace function _stage_updated_fields( _repository_id uuid ) returns 
     declare
         updated_fields jsonb;
     begin
-        -- TODO: use a CTE instead?
-        updated_fields := (select jsonb_agg(f.field_id::text) from delta._get_offstage_updated_fields(_repository_id) f);
-        -- raise notice 'updated_fields: %', updated_fields;
-
+        with updated_fields as (
+            select jsonb_agg(f.field_id::text) field
+            from delta._get_offstage_updated_fields(_repository_id) f
+        )
         update delta.repository
-        set stage_fields_to_change = stage_fields_to_change || updated_fields
+        set stage_fields_to_change = stage_fields_to_change || updated_fields.field
+        from updated_fields
         where id = _repository_id;
 
     end;
