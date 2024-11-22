@@ -21,8 +21,8 @@ create or replace function _blob_hash_gen_trigger() returns trigger as $$
             return NEW;
         end if;
 
-        NEW.hash = delta.hash(NEW.value);
-        if exists (select 1 from delta.blob b where b.hash = NEW.hash) then
+        NEW.hash = ditty.hash(NEW.value);
+        if exists (select 1 from ditty.blob b where b.hash = NEW.hash) then
             return NULL;
         end if;
 
@@ -114,7 +114,7 @@ create table dependency (
 --
 
 create or replace function repository_id( repository_name text ) returns uuid as $$
-    select id from delta.repository where name=repository_name;
+    select id from ditty.repository where name=repository_name;
 $$ stable language sql;
 
 
@@ -123,7 +123,7 @@ $$ stable language sql;
 --
 
 create or replace function _repository_name( repository_id uuid ) returns text as $$
-    select name from delta.repository where id=repository_id;
+    select name from ditty.repository where id=repository_id;
 $$ stable language sql;
 
 
@@ -132,11 +132,11 @@ $$ stable language sql;
 --
 
 create or replace function _head_commit_id( repository_id uuid ) returns uuid as $$
-    select head_commit_id from delta.repository where id=repository_id;
+    select head_commit_id from ditty.repository where id=repository_id;
 $$ stable language sql;
 
 create or replace function head_commit_id( repository_name text ) returns uuid as $$
-    select head_commit_id from delta.repository where name=repository_name;
+    select head_commit_id from ditty.repository where name=repository_name;
 $$ stable language sql;
 
 
@@ -145,11 +145,11 @@ $$ stable language sql;
 --
 
 create or replace function _checkout_commit_id( repository_id uuid ) returns uuid as $$
-    select checkout_commit_id from delta.repository where id=repository_id;
+    select checkout_commit_id from ditty.repository where id=repository_id;
 $$ stable language sql;
 
 create or replace function checkout_commit_id( repository_name text ) returns uuid as $$
-    select checkout_commit_id from delta.repository where name=repository_name;
+    select checkout_commit_id from ditty.repository where name=repository_name;
 $$ stable language sql;
 
 
@@ -176,7 +176,7 @@ begin
     end if;
 
     -- create repository
-    insert into delta.repository (name) values (repository_name) returning id into _repository_id;
+    insert into ditty.repository (name) values (repository_name) returning id into _repository_id;
 
     return _repository_id;
 exception
@@ -193,22 +193,22 @@ $$ language plpgsql;
 
 create or replace function _delete_repository( repository_id uuid ) returns void as $$
     begin
-        if not delta._repository_exists(repository_id) then
+        if not ditty._repository_exists(repository_id) then
             raise exception 'Repository with id % does not exist.', repository_id;
         end if;
 
-        delete from delta.repository where id = repository_id;
+        delete from ditty.repository where id = repository_id;
     end;
 $$ language plpgsql;
 
 create or replace function delete_repository( repository_name text ) returns void as $$
     begin
     raise notice 'Delete repository %', repository_name;
-        if not delta.repository_exists(repository_name) then
+        if not ditty.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._delete_repository(delta.repository_id(repository_name));
+        perform ditty._delete_repository(ditty.repository_id(repository_name));
 
     end;
 $$ language plpgsql;
@@ -220,10 +220,10 @@ $$ language plpgsql;
 
 /*
 create or replace function garbage_collect() returns setof text as $$
-    delete from delta.blob
+    delete from ditty.blob
     using (
-        select b.hash as bad_hash from delta.blob b
-            left join GONE: delta.commit_field_changed cfc on cfc.value_hash = b.hash
+        select b.hash as bad_hash from ditty.blob b
+            left join GONE: ditty.commit_field_changed cfc on cfc.value_hash = b.hash
         where  cfc.value_hash is null
     )
     where hash = bad_hash
@@ -240,11 +240,11 @@ $$ language sql;
 --
 
 create or replace function repository_exists( _name text ) returns boolean as $$
-    select exists (select 1 from delta.repository where name = _name);
+    select exists (select 1 from ditty.repository where name = _name);
 $$ language sql;
 
 create or replace function _repository_exists( repository_id uuid ) returns boolean as $$
-    select exists (select 1 from delta.repository where id = repository_id);
+    select exists (select 1 from ditty.repository where id = repository_id);
 $$ language sql;
 
 
@@ -253,7 +253,7 @@ $$ language sql;
 --
 
 create or replace function _repository_has_commits( _repository_id uuid ) returns boolean as $$
-    select exists (select 1 from delta.commit where repository_id = _repository_id);
+    select exists (select 1 from ditty.commit where repository_id = _repository_id);
 $$ language sql;
 
 
@@ -266,7 +266,7 @@ create or replace function _repository_has_uncommitted_changes( _repository_id u
         is_checked_out boolean;
     begin
         -- if it isn't checked out, it doesn't have uncommitted changes
-        select (checkout_commit_id is not null) from delta.repository where id=_repository_id
+        select (checkout_commit_id is not null) from ditty.repository where id=_repository_id
         into is_checked_out;
 
         if is_checked_out then return false; end if;
@@ -282,7 +282,7 @@ $$ language plpgsql;
 --
 
 create or replace function _commit_exists(commit_id uuid) returns boolean as $$
-    select exists (select 1 from delta.commit where id=commit_id);
+    select exists (select 1 from ditty.commit where id=commit_id);
 $$ language sql;
 
 
@@ -296,7 +296,7 @@ as $$
     select position, row_id
     from (
         select row_number() over (order by ord) as position, elem::meta.row_id as row_id -- id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
-        from delta.commit c, lateral jsonb_array_elements_text(c.jsonb_rows) with ordinality as u(elem, ord)
+        from ditty.commit c, lateral jsonb_array_elements_text(c.jsonb_rows) with ordinality as u(elem, ord)
         where c.id = _commit_id
     ) as subquery
     where (row_id)::meta.relation_id = _relation_id_filter or _relation_id_filter is null;
@@ -308,14 +308,14 @@ $$ language sql;
 
 create or replace function _get_head_commit_rows( _repository_id uuid, _relation_id_filter meta.relation_id default null )
  returns table(_position integer, row_id meta.row_id) as $$
-    select * from delta._get_commit_rows(delta._head_commit_id(_repository_id), _relation_id_filter);
+    select * from ditty._get_commit_rows(ditty._head_commit_id(_repository_id), _relation_id_filter);
 $$ language sql;
 
 create or replace function get_head_commit_rows( repository_name text, _relation_id_filter meta.relation_id default null )
  returns table(_position integer, row_id meta.row_id) as $$
     select *
-    from delta._get_commit_rows(
-        delta._head_commit_id(delta.repository_id(repository_name)),
+    from ditty._get_commit_rows(
+        ditty._head_commit_id(ditty.repository_id(repository_name)),
         _relation_id_filter
     );
 $$ language sql;
@@ -330,7 +330,7 @@ create type field_hash as ( field_id meta.field_id, value_hash text);
 
 create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
-    select meta.field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key), (jsonb_each_text(e.value)).value as val from delta.commit, lateral jsonb_each(jsonb_fields) e where id=_commit_id;
+    select meta.field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key), (jsonb_each_text(e.value)).value as val from ditty.commit, lateral jsonb_each(jsonb_fields) e where id=_commit_id;
 $$ language sql;
 
 
@@ -338,7 +338,7 @@ $$ language sql;
 -- get_head_commit_fields()
 --
 create or replace function _get_head_commit_fields( _repository_id uuid ) returns setof field_hash as $$
-    select * from delta._get_commit_fields(delta._head_commit_id(_repository_id));
+    select * from ditty._get_commit_fields(ditty._head_commit_id(_repository_id));
 $$ language sql;
 
 
@@ -347,7 +347,7 @@ $$ language sql;
 --
 
 create or replace function _get_commit_jsonb_rows( _commit_id uuid ) returns jsonb as $$
-    select jsonb_rows from delta.commit where id = _commit_id;
+    select jsonb_rows from ditty.commit where id = _commit_id;
 $$ language sql;
 
 
@@ -355,7 +355,7 @@ $$ language sql;
 --
 
 create or replace function _get_commit_jsonb_fields( _commit_id uuid ) returns jsonb as $$
-    select jsonb_fields from delta.commit where id = _commit_id;
+    select jsonb_fields from ditty.commit where id = _commit_id;
 $$ language sql;
 
 
@@ -366,6 +366,6 @@ $$ language sql;
 create or replace function _get_commit_row_count_by_relation( _commit_id uuid )
 returns table( relation_id meta.relation_id, row_count integer ) as $$
     select row_id::meta.relation_id as relation_id, count(*) as row_count
-    from delta._get_commit_rows(_commit_id)
+    from ditty._get_commit_rows(_commit_id)
     group by row_id::meta.relation_id
 $$ language sql;

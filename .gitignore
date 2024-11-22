@@ -1,4 +1,4 @@
-pg_delta--*.sql
+ditty--*.sql
 *.swp
 *.swo
 .idea

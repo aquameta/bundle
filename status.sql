@@ -6,13 +6,13 @@
 this would be nice:
 
 
-                    io.aquadelta.core.repository 
+                    io.ditty.core.repository 
              +----------------------------------------+
              | 12 commits                             |
              +----------------------------------------+
  head commit | "Ignore rules." - 2024-12-25 4:20pm    |
-    contents | (4) delta.ignored_table                |
-             | (3) delta.ignored_schema               |
+    contents | (4) ditty.ignored_table                |
+             | (3) ditty.ignored_schema               |
              +----------------------------------------+
           db | 0 tracked  | 0 deleted   | 0 updated   |
              +----------------------------------------+
@@ -57,17 +57,17 @@ create or replace function status(repository_name text default null, detailed bo
     begin
         if repository_name is not null then
             -- assert repository exists
-            if not delta.repository_exists(repository_name) then
+            if not ditty.repository_exists(repository_name) then
                 raise exception 'Repository with name % does not exist.', repository_name;
             end if;
-            _repository_ids := array[(select delta.repository_id(repository_name))];
+            _repository_ids := array[(select ditty.repository_id(repository_name))];
         else
-            select array_agg(id order by name) from delta.repository into _repository_ids;
+            select array_agg(id order by name) from ditty.repository into _repository_ids;
             -- statii := statii || E'STATUS\n======\n';
         end if;
 
         -- untracked rows
-        select count(*) as c from delta._get_untracked_rows() into untracked_row_count;
+        select count(*) as c from ditty._get_untracked_rows() into untracked_row_count;
         statii := statii || format(E'+ Untracked rows: %s\n', untracked_row_count);
         statii := statii || format(E'+------------------------------------------------------------------------------\n');
 
@@ -78,8 +78,8 @@ create or replace function status(repository_name text default null, detailed bo
 
             -- commit details
             select r.name, r.checkout_commit_id, r.head_commit_id, c.author_name, c.author_email, c.message, c.commit_time
-            from delta.repository r
-                left join delta.commit c on r.checkout_commit_id = c.id
+            from ditty.repository r
+                left join ditty.commit c on r.checkout_commit_id = c.id
             where r.id = _repository_id
             into repository_name, checkout_commit_id, head_commit_id, author_name, author_email, message, commit_time;
 
@@ -91,23 +91,23 @@ create or replace function status(repository_name text default null, detailed bo
             end if;
 
             -- head_branch_commits
-            select count(*) from delta._get_commit_ancestry (delta._head_commit_id(_repository_id)) into head_branch_commits;
+            select count(*) from ditty._get_commit_ancestry (ditty._head_commit_id(_repository_id)) into head_branch_commits;
 
             -- total_commits
-            select count(*) from delta.commit where repository_id = _repository_id into total_commits;
+            select count(*) from ditty.commit where repository_id = _repository_id into total_commits;
 
             -- head_commit_rows
-            select count(*) from delta._get_head_commit_rows(_repository_id) into head_commit_rows;
+            select count(*) from ditty._get_head_commit_rows(_repository_id) into head_commit_rows;
 
             -- offstage changes
-            select count(*) from delta._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
-            select count(*) from delta._get_offstage_deleted_rows(_repository_id)    into offstage_deleted_rows;
-            select count(*) from delta._get_offstage_updated_fields(_repository_id)  into offstage_updated_fields;
+            select count(*) from ditty._get_tracked_rows_added(_repository_id)       into tracked_rows_added;
+            select count(*) from ditty._get_offstage_deleted_rows(_repository_id)    into offstage_deleted_rows;
+            select count(*) from ditty._get_offstage_updated_fields(_repository_id)  into offstage_updated_fields;
 
             -- staged changes
-            select count(*) from delta._get_stage_rows_to_add(_repository_id)     into stage_rows_to_add;
-            select count(*) from delta._get_stage_rows_to_remove(_repository_id)   into stage_rows_to_remove;
-            select count(*) from delta._get_stage_fields_to_change(_repository_id) into stage_fields_to_change;
+            select count(*) from ditty._get_stage_rows_to_add(_repository_id)     into stage_rows_to_add;
+            select count(*) from ditty._get_stage_rows_to_remove(_repository_id)   into stage_rows_to_remove;
+            select count(*) from ditty._get_stage_fields_to_change(_repository_id) into stage_fields_to_change;
 
             select string_agg(
                 '(' || row_count || ') '
@@ -115,7 +115,7 @@ create or replace function status(repository_name text default null, detailed bo
                     || (relation_id).name,
                 E'\n+             | ' -- delim
             )
-            from delta._get_commit_row_count_by_relation(delta._head_commit_id(_repository_id))
+            from ditty._get_commit_row_count_by_relation(ditty._head_commit_id(_repository_id))
             into row_count_summary;
 
             -- more ideas:
@@ -173,13 +173,13 @@ create or replace function status(repository_name text default null, detailed bo
 
             -------------- detailed section ---------------------
             if detailed is true then
-                _tracked_rows_added      := (select r.tracked_rows_added from delta.repository r where r.id = _repository_id);
-                _offstage_deleted_rows   := (select string_agg(r::text, ',') from delta._get_offstage_deleted_rows(_repository_id) r);
-                _offstage_updated_fields := (select string_agg(r::text, ',') from delta._get_offstage_updated_fields(_repository_id) r);
+                _tracked_rows_added      := (select r.tracked_rows_added from ditty.repository r where r.id = _repository_id);
+                _offstage_deleted_rows   := (select string_agg(r::text, ',') from ditty._get_offstage_deleted_rows(_repository_id) r);
+                _offstage_updated_fields := (select string_agg(r::text, ',') from ditty._get_offstage_updated_fields(_repository_id) r);
 
-                _stage_rows_to_add       := (select r.stage_rows_to_add from delta.repository r where r.id = _repository_id);
-                _stage_fields_to_change  := (select r.stage_fields_to_change from delta.repository r where r.id = _repository_id);
-                _stage_rows_to_remove    := (select r.stage_rows_to_remove from delta.repository r where r.id = _repository_id);
+                _stage_rows_to_add       := (select r.stage_rows_to_add from ditty.repository r where r.id = _repository_id);
+                _stage_fields_to_change  := (select r.stage_fields_to_change from ditty.repository r where r.id = _repository_id);
+                _stage_rows_to_remove    := (select r.stage_rows_to_remove from ditty.repository r where r.id = _repository_id);
 
                 statii := statii || E'\n OFFSTAGE:';
                 statii := statii || E'\n track:' || coalesce(_tracked_rows_added, 'NULL');

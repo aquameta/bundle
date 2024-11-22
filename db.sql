@@ -14,7 +14,7 @@ declare
     literals_stmt text;
     pk_comparison_stmt text;
 begin
-    if not delta._commit_exists( _commit_id ) then
+    if not ditty._commit_exists( _commit_id ) then
         -- raise warning 'get_db_commit_rows(): Commit with id % does not exist.', _commit_id;
         return;
     end if;
@@ -24,11 +24,11 @@ begin
 
     -- is the supplied commit the head commit?  if so, use head_commit_row mat view instead of
     -- commit_rows() for much speed
-    select repository_id from delta.commit where commit_id = _commit_id into _repository_id;
-    if _commit_id = delta._head_commit_id(repository_id) then
-        commit_rows_stmt := 'delta.get_head_commit_rows';
+    select repository_id from ditty.commit where commit_id = _commit_id into _repository_id;
+    if _commit_id = ditty._head_commit_id(repository_id) then
+        commit_rows_stmt := 'ditty.get_head_commit_rows';
     else
-        commit_rows_stmt := 'delta._get_commit_rows(_commit_id) row_id'
+        commit_rows_stmt := 'ditty._get_commit_rows(_commit_id) row_id'
     end if;
 */
 
@@ -38,7 +38,7 @@ begin
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_names as pk_column_names
-        from delta._get_commit_rows(_commit_id) row_id
+        from ditty._get_commit_rows(_commit_id) row_id
         where row_id::meta.relation_id =
             case
                 when _relation_id is null then row_id::meta.relation_id
@@ -59,7 +59,7 @@ begin
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
-            from delta._get_commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from ditty._get_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -95,7 +95,7 @@ $$ language plpgsql;
 --
 
 create or replace function _get_db_head_commit_rows( repository_id uuid ) returns setof row_exists as $$
-    select * from delta._get_db_commit_rows(delta._head_commit_id(repository_id))
+    select * from ditty._get_db_commit_rows(ditty._head_commit_id(repository_id))
 $$ language sql;
 
 
@@ -142,7 +142,7 @@ JOIN, it'll pick up new fields (from new columns presumably).
 */
 
 
-create or replace function _get_db_commit_fields(commit_id uuid) returns setof delta.field_hash as $$
+create or replace function _get_db_commit_fields(commit_id uuid) returns setof ditty.field_hash as $$
 declare
     rel record;
     stmts text[] = '{}';
@@ -155,7 +155,7 @@ begin
             (row_id::meta.relation_id).name as relation_name,
             (row_id::meta.relation_id).schema_name as schema_name,
             (row_id).pk_column_names as pk_column_names
-        from delta._get_commit_rows(commit_id) row_id
+        from ditty._get_commit_rows(commit_id) row_id
     loop
         -- for each relation, select head commit rows in this relation and also
         -- in this repository, and inner join them with the relation's data,
@@ -167,7 +167,7 @@ begin
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
-            from delta._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from ditty._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -192,7 +192,7 @@ begin
     literals_stmt := format('
         select
             meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
-            -- TODO delta.hash((keyval).value)::text as value_hash
+            -- TODO ditty.hash((keyval).value)::text as value_hash
             ((keyval).value)::text as value_hash
         from (%s) fields;',
         literals_stmt
@@ -208,8 +208,8 @@ $$ language plpgsql;
 
 --
 -- _get_db_head_commit_fields()
-create or replace function _get_db_head_commit_fields(_repository_id uuid) returns setof delta.field_hash as $$
-    select * from delta._get_db_commit_fields(delta._head_commit_id(_repository_id));
+create or replace function _get_db_head_commit_fields(_repository_id uuid) returns setof ditty.field_hash as $$
+    select * from ditty._get_db_commit_fields(ditty._head_commit_id(_repository_id));
 $$ language sql;
 
 --
@@ -272,7 +272,7 @@ begin
         meta._pk_stmt(_row_id, '%1$I = %2$L')
     );
 
-    obj := delta.row_to_jsonb_text(stmt);
+    obj := ditty.row_to_jsonb_text(stmt);
     return obj;
 end;
 $$ language plpgsql;
@@ -307,7 +307,7 @@ begin
 
     -- hash values into hashed_obj, for return
     for key, value in select * from jsonb_each_text(obj) loop
-        -- hashed_obj := hashed_obj || jsonb_build_object(key, TODO delta.hash(value));
+        -- hashed_obj := hashed_obj || jsonb_build_object(key, TODO ditty.hash(value));
         hashed_obj := hashed_obj || jsonb_build_object(key, value::text);
     end loop;
 
@@ -320,9 +320,9 @@ $$ language plpgsql;
 create or replace function _get_db_stage_fields_to_change( _repository_id uuid ) returns setof field_hash as $$
     with fields as
         select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
-        from delta.repository where id = _repository_id
+        from ditty.repository where id = _repository_id
     select
-        field_id, delta.hash(meta.field_id_literal_value(field_id))
+        field_id, ditty.hash(meta.field_id_literal_value(field_id))
     from field;
 end;
 $$ language sql;
@@ -333,11 +333,11 @@ create or replace function _get_db_stage_fields_to_change(_repository_id uuid)
 returns setof field_hash as $$
     select
         field_id::meta.field_id,
-        -- TODO: delta.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
+        -- TODO: ditty.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
         meta.field_id_literal_value(field_id::meta.field_id) as field_hash
     from (
         select jsonb_array_elements_text(stage_fields_to_change) as field_id
-        from delta.repository
+        from ditty.repository
         where id = _repository_id
     ) as fields
 $$ language sql;
@@ -364,16 +364,16 @@ declare
 begin
     raise notice 'rowset: %', rowset;
     -- relations in the rowset
-    foreach rel_id in array delta._get_rowset_relations(rowset) loop
+    foreach rel_id in array ditty._get_rowset_relations(rowset) loop
 
         -- builds a key/val to pass to jsonb_build_object
         -- e.g.
-        -- 'id', delta.hash(r.id::text),               -- "id": '\x123123123'
-        -- 'schema_id', delta.hash(r.schema_id::text)
+        -- 'id', ditty.hash(r.id::text),               -- "id": '\x123123123'
+        -- 'schema_id', ditty.hash(r.schema_id::text)
 
         col_stmts := '{}';
         foreach col_id in array meta.get_columns(rel_id) loop
-            col_stmts := array_append(col_stmts, format('%L, delta.hash(r.%I::text)',
+            col_stmts := array_append(col_stmts, format('%L, ditty.hash(r.%I::text)',
                 col_id.name,
                 col_id.name,
                 col_id.name)
@@ -432,8 +432,8 @@ $$ language plpgsql;
 big diff queries:
 
 select *
-from get_db_commit_fields(head_commit_id('io.aquadelta.test')) dbcf
-full outer join commit_fields(head_commit_id('io.aquadelta.test')) cf on dbcf.field_id = cf.field_id
+from get_db_commit_fields(head_commit_id('io.ditty.test')) dbcf
+full outer join commit_fields(head_commit_id('io.ditty.test')) cf on dbcf.field_id = cf.field_id
 where
     dbcf.value_hash != cf.value_hash or
     dbcf.field_id is null
@@ -441,8 +441,8 @@ where
 
 
 
-select * from _get_db_commit_rows(head_commit_id('io.aquadelta.test')) dbcr
-full outer join _get_commit_rows(head_commit_id('io.aquadelta.test')) cr on dbcr.row_id = cr.row_id
+select * from _get_db_commit_rows(head_commit_id('io.ditty.test')) dbcr
+full outer join _get_commit_rows(head_commit_id('io.ditty.test')) cr on dbcr.row_id = cr.row_id
 where
     dbcr.row_id is null
     or cr.row_id is null

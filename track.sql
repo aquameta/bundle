@@ -10,7 +10,7 @@ create or replace function _is_newly_tracked( repository_id uuid, row_id meta.ro
 declare
     row_count integer;
 begin
-    select count(*) into row_count from delta.repository
+    select count(*) into row_count from ditty.repository
     where id = repository_id
         and tracked_rows_added ? row_id::text;
 
@@ -34,13 +34,13 @@ create or replace function _track_untracked_row( _repository_id uuid, row_id met
     begin
 
         -- assert repository exists
-        if not delta._repository_exists(_repository_id) then
+        if not ditty._repository_exists(_repository_id) then
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
 
         /*
         TODO: cruft from pre-json days, refactor this to check repository.tracked_rows_added
-        if meta.row_exists(meta.row_id('delta','tracked_row_added', 'row_id', row_id::text)) then
+        if meta.row_exists(meta.row_id('ditty','tracked_row_added', 'row_id', row_id::text)) then
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
         */
@@ -51,11 +51,11 @@ create or replace function _track_untracked_row( _repository_id uuid, row_id met
         end if;
 
         -- assert row is not already tracked
-        if delta._is_newly_tracked(_repository_id, row_id) then
+        if ditty._is_newly_tracked(_repository_id, row_id) then
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
 
-        update delta.repository set tracked_rows_added = tracked_rows_added || to_jsonb(row_id::text) where id = _repository_id;
+        update ditty.repository set tracked_rows_added = tracked_rows_added || to_jsonb(row_id::text) where id = _repository_id;
     end;
 $$ language plpgsql;
 
@@ -65,12 +65,12 @@ create or replace function track_untracked_row( repository_name text, row_id met
     begin
 
         -- assert repository exists
-        if not delta.repository_exists(repository_name) then
+        if not ditty.repository_exists(repository_name) then
             raise exception 'Repository with name % does not exist.', repository_name;
         end if;
 
-        perform delta._track_untracked_row(
-            delta.repository_id(repository_name),
+        perform ditty._track_untracked_row(
+            ditty.repository_id(repository_name),
             row_id
         );
     end;
@@ -87,19 +87,19 @@ create or replace function _untrack_tracked_row( _repository_id uuid, _row_id me
         c integer;
     begin
         
-        select count(*) into c from delta.repository where id = _repository_id and tracked_rows_added ? _row_id::text;
+        select count(*) into c from ditty.repository where id = _repository_id and tracked_rows_added ? _row_id::text;
         if c < 1 then
             raise exception 'Row with row_id % cannot be removed because it is not tracked by supplied repository.', _row_id::text;
         end if;
 
-        update delta.repository set tracked_rows_added = tracked_rows_added - _row_id::text where id = _repository_id;
+        update ditty.repository set tracked_rows_added = tracked_rows_added - _row_id::text where id = _repository_id;
 
         return tracked_row_id;
     end;
 $$ language plpgsql;
 
 create or replace function untrack_tracked_row( name text, row_id meta.row_id ) returns uuid as $$
-    select delta._untrack_tracked_row(delta.repository_id(name), row_id);
+    select ditty._untrack_tracked_row(ditty.repository_id(name), row_id);
 $$ language sql;
 
 
@@ -108,7 +108,7 @@ $$ language sql;
 --
 
 create or replace function _untrack_tracked_rows_added( _repository_id uuid ) returns void as $$
-    update delta.repository set tracked_rows_added='[]'::jsonb where id = _repository_id;
+    update ditty.repository set tracked_rows_added='[]'::jsonb where id = _repository_id;
 $$ language sql;
 
 
@@ -119,17 +119,17 @@ $$ language sql;
 create or replace function _get_tracked_rows_added( _repository_id uuid )
 returns table(repository_id uuid, row_id meta.row_id) as $$
     select id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id
-    from delta.repository
+    from ditty.repository
     where id = _repository_id;
 $$ language sql;
 
 create or replace function get_tracked_rows_added( repository_name text )
 returns table(repository_id uuid, row_id meta.row_id) as $$
-    select delta._get_Tracked_rows_added(
-        delta.repository_id(repository_name)
+    select ditty._get_Tracked_rows_added(
+        ditty.repository_id(repository_name)
     );
 $$ language sql;
 
 create or replace view tracked_row_added as
     select id as repository_id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id as row_id
-    from delta.repository;
+    from ditty.repository;

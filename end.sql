@@ -7,9 +7,9 @@ do $$
     begin
         for r in
             -- ignore all internal tables, except for ignore rules, which are version-controlled.
-            select * from meta.table where schema_name = 'delta' and name not like 'ignored%'
+            select * from meta.table where schema_name = 'ditty' and name not like 'ignored%'
         loop
-            insert into delta.ignored_table(relation_id) values (meta.relation_id(r.schema_name, r.name));
+            insert into ditty.ignored_table(relation_id) values (meta.relation_id(r.schema_name, r.name));
         end loop;
 
         -- ignore system catalogs, pg_temp*, pg_toast*
@@ -19,21 +19,21 @@ do $$
                     or name like 'pg_toast%'
                     or name like 'pg_temp%'
         loop
-            insert into delta.ignored_schema(schema_id) values (meta.schema_id(r.name));
+            insert into ditty.ignored_schema(schema_id) values (meta.schema_id(r.name));
         end loop;
     end;
 $$ language plpgsql;
 
 
--- track the ignore rules in the core delta repo
+-- track the ignore rules in the core ditty repo
 do $$
     begin
-        perform delta.create_repository('io.aquadelta.core.repository');
-        perform delta.track_untracked_row('io.aquadelta.core.repository', meta.row_id('delta','ignored_table','id',id::text)) from delta.ignored_table;
-        perform delta.track_untracked_row('io.aquadelta.core.repository', meta.row_id('delta','ignored_schema','id',id::text)) from delta.ignored_schema;
+        perform ditty.create_repository('io.ditty.core.repository');
+        perform ditty.track_untracked_row('io.ditty.core.repository', meta.row_id('ditty','ignored_table','id',id::text)) from ditty.ignored_table;
+        perform ditty.track_untracked_row('io.ditty.core.repository', meta.row_id('ditty','ignored_schema','id',id::text)) from ditty.ignored_schema;
 
-        perform delta.stage_tracked_rows('io.aquadelta.core.repository');
-        perform delta.commit('io.aquadelta.core.repository', 'Ignore rules.', 'Eric Hanson', 'eric@aquameta.com');
+        perform ditty.stage_tracked_rows('io.ditty.core.repository');
+        perform ditty.commit('io.ditty.core.repository', 'Ignore rules.', 'Eric Hanson', 'eric@aquameta.com');
     end;
 $$ language plpgsql;
 

@@ -1,5 +1,5 @@
-pg_delta - Version Control for PostgreSQL
-=========================================
+DiTTY - Data Version Control for PostgreSQL
+===========================================
 
 This is a SQL-only extension for PostgreSQL that provides version control for data and schema in
 PostgreSQL.  The repository is stored inside the database, and actions are implemented as PostgreSQL
@@ -22,8 +22,8 @@ Features:
 ```sh
 # clone repository, including submodules
 
-git clone --recurse-submodules git@github.com:erichanson/pg_delta.git
-cd pg_delta
+git clone --recurse-submodules git@github.com:erichanson/ditty.git
+cd ditty
 
 # install required extensions
 
@@ -31,7 +31,7 @@ cd extensions/meta && make && sudo make install && cd ../../
 cd extensions/meta_triggers && make && sudo make install && cd ../../
 cd extensions/pg_uuidv7 && make && sudo make install && cd ../../
 
-# make pg_delta--0.1.0.sql
+# make ditty--0.1.0.sql
 ./make.sh
-cat pg_delta--0.1.0.sql | psql _your_db_
+cat ditty--0.1.0.sql | psql _your_db_
 ```

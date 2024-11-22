@@ -24,11 +24,11 @@ create table trackable_nontable_relation(
 --
 
 create or replace function _track_nontable_relation(_relation_id meta.relation_id, _pk_column_names text[]) returns void as $$
-    insert into delta.trackable_nontable_relation (relation_id, pk_column_names) values (_relation_id, _pk_column_names);
+    insert into ditty.trackable_nontable_relation (relation_id, pk_column_names) values (_relation_id, _pk_column_names);
 $$ language sql;
 
 create or replace function _untrack_nontable_relation(_relation_id meta.relation_id) returns void as $$
-    delete from delta.trackable_nontable_relation where _relation_id = relation_id;
+    delete from ditty.trackable_nontable_relation where _relation_id = relation_id;
 $$ language sql;
 
 
@@ -67,41 +67,41 @@ create table ignored_column (
 
 -- schema
 create or replace function ignore_schema( _schema_id meta.schema_id ) returns void as $$
-    insert into delta.ignored_schema(schema_id) values (_schema_id);
+    insert into ditty.ignored_schema(schema_id) values (_schema_id);
 $$ language sql;
 
 create or replace function unignore_schema( _schema_id meta.schema_id ) returns void as $$
-    delete from delta.ignored_schema where schema_id = _schema_id;
+    delete from ditty.ignored_schema where schema_id = _schema_id;
 $$ language sql;
 
 
 -- table
 create or replace function ignore_table( _relation_id meta.relation_id ) returns void as $$
-    insert into delta.ignored_table(relation_id) values (_relation_id);
+    insert into ditty.ignored_table(relation_id) values (_relation_id);
 $$ language sql;
 
 create or replace function unignore_table( _relation_id meta.relation_id ) returns void as $$
-    delete from delta.ignored_table where relation_id = _relation_id;
+    delete from ditty.ignored_table where relation_id = _relation_id;
 $$ language sql;
 
 
 -- row
 create or replace function ignore_row( _row_id meta.row_id ) returns void as $$
-    insert into delta.ignored_row(row_id) values (_row_id);
+    insert into ditty.ignored_row(row_id) values (_row_id);
 $$ language sql;
 
 create or replace function unignore_row( _row_id meta.row_id ) returns void as $$
-    delete from delta.ignored_row where row_id = _row_id;
+    delete from ditty.ignored_row where row_id = _row_id;
 $$ language sql;
 
 
 -- column
 create or replace function ignore_column( _column_id meta.column_id ) returns void as $$
-    insert into delta.ignored_column(column_id) values (_column_id);
+    insert into ditty.ignored_column(column_id) values (_column_id);
 $$ language sql;
 
 create or replace function unignore_column( _column_id meta.column_id ) returns void as $$
-    delete from delta.ignored_column where column_id = _column_id;
+    delete from ditty.ignored_column where column_id = _column_id;
 $$ language sql;
 
 
@@ -140,19 +140,19 @@ create or replace view trackable_relation as
         select
             relation_id,
             pk_column_names as primary_key_column_names
-        from delta.trackable_nontable_relation
+        from ditty.trackable_nontable_relation
     ) r
 
     -- ...that is not ignored
 
     where relation_id not in (
-        select relation_id from delta.ignored_table
+        select relation_id from ditty.ignored_table
     )
 
     -- ...and is not in an ignored schema
 
         and relation_id::meta.schema_id not in (
-            select schema_id from delta.ignored_schema
+            select schema_id from ditty.ignored_schema
         )
     ;
 
@@ -177,28 +177,28 @@ select *, 'select meta.row_id(' ||
     case
         -- schemas
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) = 'schema' then
-           ' where id not in (select schema_id from delta.ignored_schema) '
+           ' where id not in (select schema_id from ditty.ignored_schema) '
         -- relations
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('table', 'view', 'relation') then
-           ' where id not in (select relation_id from delta.ignored_table) and schema_id not in (select schema_id from delta.ignored_schema)'
+           ' where id not in (select relation_id from ditty.ignored_table) and schema_id not in (select schema_id from ditty.ignored_schema)'
         -- functions
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) = 'function' then
-           ' where id::meta.schema_id not in (select schema_id from delta.ignored_schema)'
+           ' where id::meta.schema_id not in (select schema_id from ditty.ignored_schema)'
         -- columns
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) = 'column' then
-           ' where id not in (select column_id from delta.ignored_column) and id::meta.relation_id not in (select relation_id from delta.ignored_table) and id::meta.schema_id not in (select schema_id from delta.ignored_schema)'
+           ' where id not in (select column_id from ditty.ignored_column) and id::meta.relation_id not in (select relation_id from ditty.ignored_table) and id::meta.schema_id not in (select schema_id from ditty.ignored_schema)'
 
         -- objects that exist in schema scope
 
         -- operator
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('operator') then
-           ' where meta.schema_id(schema_name) not in (select schema_id from delta.ignored_schema)'
+           ' where meta.schema_id(schema_name) not in (select schema_id from ditty.ignored_schema)'
         -- type
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('type') then
-           ' where id::meta.schema_id not in (select schema_id from delta.ignored_schema)'
+           ' where id::meta.schema_id not in (select schema_id from ditty.ignored_schema)'
         -- constraint_unique, constraint_check, table_privilege
         when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('constraint_check','constraint_unique','table_privilege') then
-           ' where meta.schema_id(schema_name) not in (select schema_id from delta.ignored_schema) and table_id not in (select relation_id from delta.ignored_table)'
+           ' where meta.schema_id(schema_name) not in (select schema_id from ditty.ignored_schema) and table_id not in (select relation_id from ditty.ignored_table)'
         else ''
     end
 
@@ -206,7 +206,7 @@ select *, 'select meta.row_id(' ||
     -- rows from meta that are in trackable non-table tables that are ignored
 
     as stmt
-from delta.trackable_relation r;
+from ditty.trackable_relation r;
 
 
 
@@ -217,9 +217,9 @@ from delta.trackable_relation r;
 create or replace function _get_untracked_rows(_relation_id meta.relation_id default null) returns setof meta.row_id as $$
 -- all rows that aren't ignored by an ignore rule
 select r.row_id
-from delta.exec((
+from ditty.exec((
     select array_agg (stmt)
-    from delta.not_ignored_row_stmt
+    from ditty.not_ignored_row_stmt
     where relation_id = coalesce(_relation_id, relation_id)
 )) r (row_id meta.row_id)
 
@@ -228,21 +228,21 @@ except
 -- ...except the following:
 select * from (
     -- stage_rows_to_add
-    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id from delta.repository r -- where relation_id=....?
+    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id from ditty.repository r -- where relation_id=....?
 
     union
     -- tracked rows
-    -- select t.row_id from delta.track_untracked_rowed t
-    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from delta.repository r -- where relation_id=....?
+    -- select t.row_id from ditty.track_untracked_rowed t
+    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from ditty.repository r -- where relation_id=....?
 
     union
     -- stage_rows_to_remove
-    -- select d.row_id from delta.stage_row_to_remove
-    select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id from delta.repository r-- where relation_id=....?
+    -- select d.row_id from ditty.stage_row_to_remove
+    select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id from ditty.repository r-- where relation_id=....?
 
     union
     -- head_commit_rows for all tables
     select hcr.row_id as row_id
-    from delta.repository r, delta._get_head_commit_rows(r.id) hcr
+    from ditty.repository r, ditty._get_head_commit_rows(r.id) hcr
 ) r;
 $$ language sql;

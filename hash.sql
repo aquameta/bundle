@@ -24,7 +24,7 @@ begin
     if length(_hash) < 32 then -- length(public.digest('foo','sha256')) then
         return _hash;
     else
-        select value into val from delta.blob where hash = _hash;
+        select value into val from ditty.blob where hash = _hash;
         return val;
     end if;
 end;

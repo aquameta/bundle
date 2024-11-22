@@ -9,9 +9,9 @@
 create type _commit_ancestor as( commit_id uuid, position integer );
 create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestor as $$
     with recursive parent as (
-        select c.id, c.parent_id, 1 as position from delta.commit c where c.id=_commit_id
+        select c.id, c.parent_id, 1 as position from ditty.commit c where c.id=_commit_id
         union
-        select c.id, c.parent_id, p.position + 1 from delta.commit c join parent p on c.id = p.parent_id
+        select c.id, c.parent_id, p.position + 1 from ditty.commit c join parent p on c.id = p.parent_id
     ) select id, position from parent
 $$ language sql;
 
@@ -31,9 +31,9 @@ begin
         3. for each relation join stage_rows_to_add on pks=pks
         4.     for every row also in stage_rows_to_add
 
-        insert into delta.blob (value)
+        insert into ditty.blob (value)
         select distinct (jsonb_each(sra.value)).value
-        from delta._get_stage_rows_to_add(_repository_id); -- FIXME
+        from ditty._get_stage_rows_to_add(_repository_id); -- FIXME
         */
 end;
 $$ language plpgsql;
@@ -47,8 +47,8 @@ begin
     -- jsonb_rows is only stage_rows_to_add
 
     if parent_commit_id is null then
-        update delta.commit set jsonb_rows = stage_rows_to_add 
-        from delta.repository
+        update ditty.commit set jsonb_rows = stage_rows_to_add 
+        from ditty.repository
         where repository.id=_repository_id and commit.id = new_commit_id;
         -- TODO: sort
 
@@ -56,30 +56,30 @@ begin
     -- jsonb_rows is parent commit's rows + stage_rows_to_add - stage_rows_to_remove
 
     else
-        update delta.commit set jsonb_rows = parent_rows
+        update ditty.commit set jsonb_rows = parent_rows
         from (
             select jsonb_rows || stage_rows_to_add as parent_rows
-            from delta.commit
-                join delta.repository on commit.repository_id = repository.id
+            from ditty.commit
+                join ditty.repository on commit.repository_id = repository.id
             where commit.id = parent_commit_id
         )
         where commit.id = new_commit_id;
 
         -- get topo sorted relations
-        select delta._topological_sort_relations(delta._get_rowset_relations(jsonb_rows))
-        from delta.commit
+        select ditty._topological_sort_relations(ditty._get_rowset_relations(jsonb_rows))
+        from ditty.commit
         where id=new_commit_id
         into stage_row_relations;
 
         raise notice '    - stage_row_relations: %', stage_row_relations;
 
         -- remove rows
-        update delta.commit
+        update ditty.commit
         set jsonb_rows = coalesce(( -- catch nulls
             select jsonb_agg(elem) from (
                 select elem from jsonb_array_elements_text(jsonb_rows) a(elem)
                 left join (
-                    select jsonb_array_elements_text(stage_rows_to_remove) from delta.repository where id=_repository_id
+                    select jsonb_array_elements_text(stage_rows_to_remove) from ditty.repository where id=_repository_id
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
                 order by array_position(stage_row_relations, elem::meta.row_id::meta.relation_id)
@@ -115,18 +115,18 @@ begin
 
     with rows as (
         select jsonb_array_elements_text(c.jsonb_rows) as row_id
-        from delta.commit c
+        from ditty.commit c
         where id=new_commit_id
     ),
     fields as (
         select
             jsonb_object_agg(
                 row_id,
-                delta._get_db_row_fields_obj(row_id::meta.row_id) -- can we go even faster??
+                ditty._get_db_row_fields_obj(row_id::meta.row_id) -- can we go even faster??
             ) as fields_obj
         from rows
     )
-    update delta.commit set jsonb_fields = coalesce(fields.fields_obj, '{}') -- FIXME coalesce??
+    update ditty.commit set jsonb_fields = coalesce(fields.fields_obj, '{}') -- FIXME coalesce??
     from fields
     where commit.id=new_commit_id;
 
@@ -139,13 +139,13 @@ begin
         -- parent commit fields - stage_rows_to_remove.fields
         --
 
-        -- raise notice '    - applying (parent_commit - stage_rows_to_remove) fields @ % ...', delta.clock_diff(start_time);
-        update delta.commit
+        -- raise notice '    - applying (parent_commit - stage_rows_to_remove) fields @ % ...', ditty.clock_diff(start_time);
+        update ditty.commit
         set jsonb_fields = jsonb_fields || parent_commit.parent_minus_removed_fields
         from (
             select jsonb_fields - (stage_rows_to_remove::text) as parent_minus_removed_fields
-            from delta.commit c
-                join delta.repository r on c.repository_id = r.id
+            from ditty.commit c
+                join ditty.repository r on c.repository_id = r.id
             where c.id = parent_commit_id
         ) parent_commit
         where id = new_commit_id;
@@ -162,7 +162,7 @@ begin
 					(field_text::meta.field_id).column_name,
 					meta.field_id_literal_value(field_text::meta.field_id)
 				) as fields_obj
-			from delta.repository
+			from ditty.repository
 				cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
 			where id = _repository_id
 			group by 1
@@ -170,7 +170,7 @@ begin
 		fields_obj as (
 			select jsonb_object_agg(row_id::text, fields_obj) as obj from fields
         )
-        update delta.commit set jsonb_fields = delta.jsonb_merge_recurse(
+        update ditty.commit set jsonb_fields = ditty.jsonb_merge_recurse(
             jsonb_fields,
             fields_obj.obj
 		)
@@ -207,19 +207,19 @@ begin
     start_time := clock_timestamp();
 
     -- repository exists
-    if not delta._repository_exists(_repository_id) then
+    if not ditty._repository_exists(_repository_id) then
         raise exception 'Repository with id % does not exist.', _repository_id;
     end if;
 
     -- if no parent_commit_id is supplied, use head pointer
     if parent_commit_id is null then
-        select head_commit_id from delta.repository where id = _repository_id into parent_commit_id;
+        select head_commit_id from ditty.repository where id = _repository_id into parent_commit_id;
     end if;
 
     -- if repository has no head commit and one is not supplied, either this is the first
     -- commit, or there is a problem
     if parent_commit_id is null then
-        if delta._repository_has_commits(_repository_id) then
+        if ditty._repository_has_commits(_repository_id) then
             raise exception 'No parent_commit_id supplied, and repository''s head_commit_id is null.  Please specify a parent commit_id for this commit.';
         else
             raise notice 'First commit!';
@@ -230,8 +230,8 @@ begin
     raise notice '  - parent_commit_id: %', parent_commit_id;
 
     -- create commit, without jsonb_fields object, to be set later
-    raise notice '  - Creating commit @ %', delta.clock_diff(start_time);
-    insert into delta.commit (
+    raise notice '  - Creating commit @ %', ditty.clock_diff(start_time);
+    insert into ditty.commit (
         repository_id,
         parent_id,
         message,
@@ -247,27 +247,27 @@ begin
 
     raise notice '  - New commit with id %', new_commit_id;
 
-    raise notice '    - stage_blobs() @ %', delta.clock_diff(start_time);
-    perform delta.__commit_stage_blobs(_repository_id, new_commit_id, parent_commit_id);
+    raise notice '    - stage_blobs() @ %', ditty.clock_diff(start_time);
+    perform ditty.__commit_stage_blobs(_repository_id, new_commit_id, parent_commit_id);
 
-    raise notice '    - stage_rows() @ %', delta.clock_diff(start_time);
-    perform delta.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id);
+    raise notice '    - stage_rows() @ %', ditty.clock_diff(start_time);
+    perform ditty.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id);
 
-    raise notice '    - stage_fields() @ %', delta.clock_diff(start_time);
-    perform delta.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id);
+    raise notice '    - stage_fields() @ %', ditty.clock_diff(start_time);
+    perform ditty.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id);
 
 --    return new_commit_id;
 
     -- clear this repo's stage
-    perform delta._empty_stage(_repository_id);
+    perform ditty._empty_stage(_repository_id);
 
 
     -- update head pointer, checkout pointer
-    update delta.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
+    update ditty.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
 
     -- TODO: unset search_path
 
-    raise notice '  - Done @ %', delta.clock_diff(start_time);
+    raise notice '  - Done @ %', ditty.clock_diff(start_time);
     return new_commit_id;
 end;
 $$ language plpgsql;
@@ -281,10 +281,10 @@ create or replace function commit(
     parent_commit_id uuid default null
 ) returns uuid as $$
 begin
-    if not delta.repository_exists(repository_name) then
+    if not ditty.repository_exists(repository_name) then
         raise exception 'Repository with name % does not exists', repository_name;
     end if;
-    return delta._commit(delta.repository_id(repository_name), message, author_name, author_email, parent_commit_id);
+    return ditty._commit(ditty.repository_id(repository_name), message, author_name, author_email, parent_commit_id);
 end;
 $$ language plpgsql;
 
@@ -329,21 +329,21 @@ Approach:
 
 */
 
-create type delta.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
-create or replace function delta._topological_sort_relations( _relations meta.relation_id[] )
+create type ditty.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
+create or replace function ditty._topological_sort_relations( _relations meta.relation_id[] )
 returns meta.relation_id[] as $$
 declare
     start_time timestamp := clock_timestamp();
-    edges delta.schema_edge[];
+    edges ditty.schema_edge[];
     s meta.relation_id[];
     l meta.relation_id[] = '{}';
     n meta.relation_id;
     m meta.relation_id;
-    m_edge delta.schema_edge;
+    m_edge ditty.schema_edge;
 begin
     -- edges
     raise debug '  - Building edges @ % ...', clock_timestamp() - start_time;
-    select array_agg(distinct row(r,meta.relation_id(fk.to_schema_name, fk.to_table_name))::delta.schema_edge)
+    select array_agg(distinct row(r,meta.relation_id(fk.to_schema_name, fk.to_table_name))::ditty.schema_edge)
     from meta.foreign_key fk
         join unnest(_relations) r on r.schema_name = fk.schema_name and r.name = fk.table_name
     into edges;
@@ -379,7 +379,7 @@ begin
         raise exception 'Input graph contains cycles: %', edges;
         -- TODO: break cycles if possible w/ deferrable fks?
     end if;
-    return delta.array_reverse(l);
+    return ditty.array_reverse(l);
 end
 $$ language plpgsql;
 
@@ -404,7 +404,7 @@ begin
     -- stage_row relations as jsonb object keys, value is empty array
     raise notice '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
     select distinct jsonb_object_agg(row_id::meta.relation_id::text, '[]'::jsonb)
-        from delta.stage_row_to_add
+        from ditty.stage_row_to_add
         where repository_id =  _repository_id
     into stage_row_relations;
 

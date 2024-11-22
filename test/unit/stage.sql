@@ -3,7 +3,7 @@ select '------------ stage.sql -----------------------------------------------';
  *
  * stage tests
  *
- * Assumes that an empty repository `io.pgdelta.unittest` has been created, and
+ * Assumes that an empty repository `io.pgditty.unittest` has been created, and
  * that the periodic table dataset has been loaded.
  */
 
@@ -12,20 +12,20 @@ select '------------ stage.sql -----------------------------------------------';
 -- stage_tracked_row()
 --
 
--- select delta.status();
+-- select ditty.status();
 
 -- track and stage one row
 do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.track_untracked_row(
-            'io.pgdelta.unittest',
+        perform ditty.track_untracked_row(
+            'io.pgditty.unittest',
             row_id
         );
 
-        perform delta.stage_tracked_row(
-            'io.pgdelta.unittest',
+        perform ditty.stage_tracked_row(
+            'io.pgditty.unittest',
             row_id
         );
     end;
@@ -37,16 +37,16 @@ $$ language plpgsql;
 --
 
 select ok(
-    (select delta._is_staged(
-        delta.repository_id('io.pgdelta.unittest'),
+    (select ditty._is_staged(
+        ditty.repository_id('io.pgditty.unittest'),
         meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1'))
      ),
     '_is_staged() finds staged row.'
 );
 
 select ok(
-    (select not delta._is_staged(
-        delta.repository_id('io.pgdelta.unittest'),
+    (select not ditty._is_staged(
+        ditty.repository_id('io.pgditty.unittest'),
         meta.row_id('pt', 'periodic_table', 'AtomicNumber', '2'))
      ),
     '_is_staged() does not find off-stage row.'
@@ -58,7 +58,7 @@ select ok(
 --
 
 select results_eq(
-   $$ select row_id::text from delta._get_stage_rows_to_add(delta.repository_id('io.pgdelta.unittest')) $$,
+   $$ select row_id::text from ditty._get_stage_rows_to_add(ditty.repository_id('io.pgditty.unittest')) $$,
    array['(pt,periodic_table,{AtomicNumber},{1})'],
    '_get_stage_rows_to_add() finds staged row'
 );
@@ -66,17 +66,17 @@ select results_eq(
 
 do $$ begin
     -- commit the single row change
-    perform delta.commit('io.pgdelta.unittest', 'first element', 'Test User', 'test@example.com');
+    perform ditty.commit('io.pgditty.unittest', 'first element', 'Test User', 'test@example.com');
     -- update pt.periodic_table set "Discoverer" = 'Don Henley' where "AtomicNumber" = 1;
 end; $$ language plpgsql;
 
 select results_eq(
-   $$ select row_id::text from delta._get_stage_rows_to_add(delta.repository_id('io.pgdelta.unittest')) $$,
+   $$ select row_id::text from ditty._get_stage_rows_to_add(ditty.repository_id('io.pgditty.unittest')) $$,
    array[]::text[],
    '_get_stage_rows_to_add() does not find staged row after commit.'
 );
 
--- select delta.status();
+-- select ditty.status();
 
 
 --
@@ -87,8 +87,8 @@ do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.stage_row_to_remove(
-            'io.pgdelta.unittest',
+        perform ditty.stage_row_to_remove(
+            'io.pgditty.unittest',
             row_id
         );
     end;
@@ -121,14 +121,14 @@ do $$
     declare
         row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
-        perform delta.track_untracked_row(
-            'io.pgdelta.unittest',
+        perform ditty.track_untracked_row(
+            'io.pgditty.unittest',
             meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text)
         )
         from pt.periodic_table where "AtomicNumber" = 1;
 
-        perform delta.stage_tracked_row(
-            'io.pgdelta.unittest',
+        perform ditty.stage_tracked_row(
+            'io.pgditty.unittest',
             meta.row_id('pt','periodic_table','AtomicNumber', "AtomicNumber"::text)
         ) from pt.periodic_table where "AtomicNumber" = 1;
 
@@ -140,14 +140,14 @@ $$ language plpgsql;
 /*
 -- fails because row not tracked
 
-select delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
+select ditty.stage_tracked_row('io.pgditty.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
     from shakespeare.character where name ilike 'a%' order by name limit 1;
 */
 -----------------------------------------------------------
 /*
 -- stage again
 select throws_ok(
-    $$ select delta.stage_tracked_row('io.pgdelta.unittest', meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
+    $$ select ditty.stage_tracked_row('io.pgditty.unittest', meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
     format('Row with row_id %s is already staged.', meta.row_id('shakespeare', 'character', 'id', 'Aaron')),
     'Staging an already staged row throws exception'
 );

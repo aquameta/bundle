@@ -24,8 +24,8 @@ create extension if not exists meta_triggers version '0.5.0';
 
 begin;
 
-create schema delta;
-set search_path=delta;
+create schema ditty;
+set search_path=ditty;
 
 
 

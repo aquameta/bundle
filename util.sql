@@ -11,7 +11,7 @@ returns jsonb language sql as $$
                 when valOrig isnull then valDelta
                 when valDelta isnull then valOrig
                 when (jsonb_typeof(valOrig) <> 'object' or jsonb_typeof(valDelta) <> 'object') then valDelta
-                else delta.jsonb_merge_recurse(valOrig, valDelta)
+                else ditty.jsonb_merge_recurse(valOrig, valDelta)
             end
         )
     from jsonb_each(orig) e1(keyOrig, valOrig)
@@ -30,7 +30,7 @@ begin
         -- check if the key exists in the first json object and is also a json object
         if result ? key and jsonb_typeof(result->key) = 'object' and jsonb_typeof(value) = 'object' then
             -- recursively merge sub-objects
-            result := jsonb_set(result, array[key], delta.jsonb_deep_merge(result->key, value));
+            result := jsonb_set(result, array[key], ditty.jsonb_deep_merge(result->key, value));
         else
             -- otherwise, just overwrite or add the key-value pair from json2
             result := jsonb_set(result, array[key], value);
