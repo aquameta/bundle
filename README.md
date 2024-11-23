@@ -23,7 +23,7 @@ Features:
 # clone repository, including submodules
 
 git clone --recurse-submodules git@github.com:erichanson/ditty.git
-cd ditty
+cd pg_ditty
 
 # install required extensions
 

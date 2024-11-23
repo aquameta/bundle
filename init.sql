@@ -27,16 +27,3 @@ begin;
 create schema ditty;
 set search_path=ditty;
 
-
-
--- TODO: where does this go?
-create or replace function exec(statements text[]) returns setof record as $$
-   declare
-       statement text;
-   begin
-       foreach statement in array statements loop
-           raise debug 'EXEC statement: %', statement;
-           return query execute statement;
-       end loop;
-    end;
-$$ language plpgsql volatile returns null on null input;
