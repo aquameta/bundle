@@ -18,6 +18,7 @@ returns jsonb language sql as $$
     full join jsonb_each(delta) e2(keyDelta, valDelta) on keyOrig = keyDelta
 $$;
 
+-- chatGPT
 create or replace function jsonb_deep_merge(json1 jsonb, json2 jsonb)
 returns jsonb language plpgsql as $$
 declare
@@ -41,6 +42,28 @@ end;
 $$;
 
 
+-- https://www.tyil.nl/post/2020/12/15/merging-json-in-postgresql/
+CREATE OR REPLACE FUNCTION jsonb_merge(original jsonb, delta jsonb) RETURNS jsonb AS $$
+    DECLARE result jsonb;
+    BEGIN
+    SELECT
+        json_object_agg(
+            COALESCE(original_key, delta_key),
+            CASE
+                WHEN original_value IS NULL THEN delta_value
+                WHEN delta_value IS NULL THEN original_value
+                WHEN (jsonb_typeof(original_value) <> 'object' OR jsonb_typeof(delta_value) <> 'object') THEN delta_value
+                ELSE jsonb_merge(original_value, delta_value)
+            END
+        )
+        INTO result
+        FROM jsonb_each(original) e1(original_key, original_value)
+        FULL JOIN jsonb_each(delta) e2(delta_key, delta_value) ON original_key = delta_key;
+    RETURN result;
+END
+$$ LANGUAGE plpgsql;
+
+
 create or replace function clock_diff(start_time timestamp) returns text as $$
     select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 2) as seconds;
 $$ language sql;
@@ -56,8 +79,6 @@ SELECT ARRAY(
 $$ LANGUAGE 'sql' STRICT IMMUTABLE;
 
 
-
--- TODO: where does this go?
 create or replace function exec(statements text[]) returns setof record as $$
    declare
        statement text;

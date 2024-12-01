@@ -269,7 +269,7 @@ begin
     stmt := format('select * from %I.%I xx where %s',
         _row_id.schema_name,
         _row_id.relation_name,
-        meta._pk_stmt(_row_id, '%1$I = %2$L')
+        meta._pk_stmt(_row_id, '%1$I::text = %2$L')
     );
 
     obj := ditty.row_to_jsonb_text(stmt);

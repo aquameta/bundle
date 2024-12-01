@@ -62,7 +62,7 @@ begin
             from ditty.commit
                 join ditty.repository on commit.repository_id = repository.id
             where commit.id = parent_commit_id
-        )
+        ) f
         where commit.id = new_commit_id;
 
         -- get topo sorted relations
@@ -83,7 +83,7 @@ begin
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
                 order by array_position(stage_row_relations, elem::meta.row_id::meta.relation_id)
-            )
+            ) f
         ), '[]'::jsonb)
         where id = new_commit_id;
     end if;
