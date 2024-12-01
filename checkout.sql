@@ -19,7 +19,7 @@ begin
     for r in select * from ditty._get_commit_rows(_commit_id) order by _position desc loop
         if r.row_id is null then raise exception '_delete_checkout(): row_id is null'; end if;
 
-        pk_comparison_stmt := meta._pk_stmt(r.row_id, '%1$I::text = %2$L::text');
+        pk_comparison_stmt := meta._pk_stmt(r.row_id, '%1$I::text = %2$L');
         stmt := format ('delete from %I.%I where %s',
             (r.row_id).schema_name,
             (r.row_id).relation_name,

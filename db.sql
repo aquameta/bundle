@@ -55,7 +55,9 @@ begin
         -- TODO: check that each relation exists and still has the same primary key
 
         -- generate the pk comparisons line
-        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
+        -- FIXME: fails on composite keys because row('a','b','c') != '(a,b,c)':
+        -- 'ERROR:  input of anonymous composite types is not implemented' (bug in pg)
+        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, 'x.%1$I::text = (row_id).pk_values[%3$s]');
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
@@ -164,7 +166,7 @@ begin
         -- TODO: check that each relation exists and has not been deleted.
         -- currently, when that happens, this function will fail.
 
-        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
+        pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], 'x.%1$I::text = (row_id).pk_values[%3$s]');
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
             from ditty._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
