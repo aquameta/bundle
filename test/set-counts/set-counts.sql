@@ -93,7 +93,10 @@ declare
     _count integer;
     rel record;
     diff public.hstore := ''::public.hstore;
+    diff_time timestamp;
 begin
+    diff_time := clock_timestamp();
+    raise notice 'set_counts performance profile:';
     for rel in
         (select alias, set_generator_stmt, count from set_counts.set_count order by alias)
     loop
@@ -104,6 +107,10 @@ begin
         if _count != old_count then
             diff := diff operator(public.||) ((rel.alias) || '=>' || _count - old_count)::public.hstore; 
         end if;
+
+        -- display time
+        raise notice '  - %: %s', rel.alias, ditty.clock_diff(diff_time);
+        diff_time := clock_timestamp();
     end loop;
     return diff;
 end;
