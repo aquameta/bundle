@@ -58,6 +58,8 @@ begin
         -- FIXME: fails on composite keys because row('a','b','c') != '(a,b,c)':
         -- 'ERROR:  input of anonymous composite types is not implemented' (bug in pg)
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, 'x.%1$I::text = (row_id).pk_values[%3$s]');
+        -- WAS: pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, rel.pk_column_names, '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
+
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
@@ -167,6 +169,8 @@ begin
         -- currently, when that happens, this function will fail.
 
         pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], 'x.%1$I::text = (row_id).pk_values[%3$s]');
+        -- WAS: pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
+
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(to_jsonb(x)) as keyval
             from ditty._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
@@ -271,7 +275,10 @@ begin
     stmt := format('select * from %I.%I xx where %s',
         _row_id.schema_name,
         _row_id.relation_name,
-        meta._pk_stmt(_row_id, '%1$I::text = %2$L')
+        -- BAD!  This slows things down like 10x:
+        -- meta._pk_stmt(_row_id, '%1$I::text = %2$L')
+        meta._pk_stmt(_row_id, '%1$I = %2$L')
+
     );
 
     obj := ditty.row_to_jsonb_text(stmt);
