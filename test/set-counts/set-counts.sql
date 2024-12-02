@@ -97,6 +97,8 @@ declare
 begin
     diff_time := clock_timestamp();
     raise notice 'set_counts performance profile:';
+    raise notice '%', format('    %-30s %-7s %s', 'Function', 'Count', 'Time');
+
     for rel in
         (select alias, set_generator_stmt, count from set_counts.set_count order by alias)
     loop
@@ -108,8 +110,12 @@ begin
             diff := diff operator(public.||) ((rel.alias) || '=>' || _count - old_count)::public.hstore; 
         end if;
 
-        -- display time
-        raise notice '  - %: %s', rel.alias, ditty.clock_diff(diff_time);
+        -- display
+        raise notice '%', format('    %-30s %-7s %s',
+            rel.alias,
+            _count,
+            ditty.clock_diff(diff_time) || 's'
+        );
         diff_time := clock_timestamp();
     end loop;
     return diff;

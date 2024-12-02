@@ -80,7 +80,7 @@ $$ LANGUAGE plpgsql;
 --
 
 create or replace function clock_diff(start_time timestamp) returns text as $$
-    select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 2) as seconds;
+    select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 3) as seconds;
 $$ language sql;
 
 
