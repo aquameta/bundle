@@ -1,3 +1,7 @@
+--
+-- random_string()
+--
+
 CREATE OR REPLACE FUNCTION random_string(int) RETURNS TEXT as $$
     SELECT substr(md5(random()::text), 0, $1+1);
 $$ language sql;
@@ -18,7 +22,10 @@ returns jsonb language sql as $$
     full join jsonb_each(delta) e2(keyDelta, valDelta) on keyOrig = keyDelta
 $$;
 
--- chatGPT
+--
+-- jsonb_deep_merge()
+--
+-- via chatGPT
 create or replace function jsonb_deep_merge(json1 jsonb, json2 jsonb)
 returns jsonb language plpgsql as $$
 declare
@@ -42,6 +49,10 @@ end;
 $$;
 
 
+--
+-- jsonb_merge
+--
+
 -- https://www.tyil.nl/post/2020/12/15/merging-json-in-postgresql/
 CREATE OR REPLACE FUNCTION jsonb_merge(original jsonb, delta jsonb) RETURNS jsonb AS $$
     DECLARE result jsonb;
@@ -64,10 +75,18 @@ END
 $$ LANGUAGE plpgsql;
 
 
+--
+-- clock_diff()
+--
+
 create or replace function clock_diff(start_time timestamp) returns text as $$
     select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 2) as seconds;
 $$ language sql;
 
+
+--
+-- array_reverse()
+--
 
 -- https://wiki.postgresql.org/wiki/Array_reverse
 CREATE OR REPLACE FUNCTION array_reverse(anyarray) RETURNS anyarray AS $$
@@ -89,3 +108,52 @@ create or replace function exec(statements text[]) returns setof record as $$
        end loop;
     end;
 $$ language plpgsql volatile returns null on null input;
+
+
+--
+-- row_to_jsonb_text()
+--
+
+create or replace function row_to_jsonb_text(query text)
+returns jsonb language plpgsql as $$
+declare
+    result_row jsonb;
+begin
+    -- execute the query and convert the result row to jsonb
+    execute format('select to_jsonb(t)::jsonb from (%s) as t', query) into result_row;
+
+    return (
+        select jsonb_object_agg(
+            key,
+            /*
+            case
+                when jsonb_typeof(value) in ('string', 'array', 'object') then value--::text::jsonb
+                else value
+            end
+            */
+            value
+        ) from jsonb_each(result_row)
+    );
+end;
+$$;
+
+
+/*
+miserable failures.
+it's not casting things to text properly.  numbers are coming through as numbers.  jsonb coming through as jsonb.
+
+create or replace function row_to_jsonb_text(query text)
+returns jsonb language plpgsql as $$
+declare
+    result_row jsonb;
+begin
+    -- execute the query and convert the result row to jsonb, converting all values to text
+    execute format('select row_to_json(t)::jsonb from (%s) as t', query) into result_row;
+
+    -- convert all values to text within the jsonb object
+    return (select jsonb_object_agg(key, value::text::jsonb)
+            from jsonb_each(result_row));
+end;
+$$;
+
+*/

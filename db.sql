@@ -218,54 +218,13 @@ create or replace function _get_db_head_commit_fields(_repository_id uuid) retur
     select * from ditty._get_db_commit_fields(ditty._head_commit_id(_repository_id));
 $$ language sql;
 
+
+
 --
 -- get_db_row_fields_obj()
 --
 -- returns a jsonb object whose keys are column names and values are live db values.
 -- one-row at a time.  called from commit().  slow and crappy, shouldn't be used
-
-
-/*
-miserable failures.
-it's not casting things to text properly.  numbers are coming through as numbers.  jsonb coming through as jsonb.
-
-create or replace function row_to_jsonb_text(query text)
-returns jsonb language plpgsql as $$
-declare
-    result_row jsonb;
-begin
-    -- execute the query and convert the result row to jsonb, converting all values to text
-    execute format('select row_to_json(t)::jsonb from (%s) as t', query) into result_row;
-
-    -- convert all values to text within the jsonb object
-    return (select jsonb_object_agg(key, value::text::jsonb)
-            from jsonb_each(result_row));
-end;
-$$;
-
-*/
-
-
--- also doesn't work right.
-create or replace function row_to_jsonb_text(query text)
-returns jsonb language plpgsql as $$
-declare
-    result_row jsonb;
-begin
-    -- execute the query and convert the result row to jsonb
-    execute format('select to_jsonb(t)::jsonb from (%s) as t', query) into result_row;
-
-    return (
-        select jsonb_object_agg(
-            key,
-            case
-                when jsonb_typeof(value) in ('string', 'array', 'object') then value--::text::jsonb
-                else value
-            end
-        ) from jsonb_each(result_row)
-    );
-end;
-$$;
 
 create or replace function _get_db_row_fields_obj(_row_id meta.row_id) returns jsonb as $$
 declare
@@ -285,9 +244,6 @@ begin
     return obj;
 end;
 $$ language plpgsql;
-
-
-
 
 
 
