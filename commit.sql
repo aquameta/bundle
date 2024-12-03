@@ -135,7 +135,7 @@ begin
         where c.id=%L
             and (row_id_text::meta.row_id).relation_name=%L
     )
-    select row_ids.row_id_text, to_jsonb(x)
+    select row_ids.row_id_text, ditty.row_to_jsonb_text(x) as row_obj
         from %I.%I x
             join row_ids on %s -- x.id::text = (row_ids.row_id).pk_values[1]
 )',
@@ -154,7 +154,7 @@ begin
         stmts := stmts || stmt;
     end loop;
 
-    stmt := format('update ditty.commit c set jsonb_fields = coalesce((select jsonb_object_agg (row_id_text, to_jsonb) from (%s) where c.id = %L), ''{}''::jsonb)',
+    stmt := format('update ditty.commit c set jsonb_fields = coalesce((select jsonb_object_agg (row_id_text, row_obj) from (%s) where c.id = %L), ''{}''::jsonb)',
         array_to_string(stmts, E'\n\nunion\n\n'),
         new_commit_id
     );

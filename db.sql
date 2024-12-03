@@ -172,7 +172,7 @@ begin
         -- WAS: pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
 
         stmts := array_append(stmts, format('
-            select row_id, jsonb_each_text(to_jsonb(x)) as keyval
+            select row_id, jsonb_each_text(ditty.row_to_jsonb_text(x)) as keyval
             from ditty._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
@@ -220,6 +220,7 @@ $$ language sql;
 
 
 
+/*
 --
 -- get_db_row_fields_obj()
 --
@@ -240,7 +241,7 @@ begin
 
     );
 
-    obj := ditty.row_to_jsonb_text(stmt);
+    obj := ditty.query_to_jsonb_text(stmt);
     return obj;
 end;
 $$ language plpgsql;
@@ -279,6 +280,7 @@ begin
     return hashed_obj;
 end;
 $$ language plpgsql;
+*/
 
 
 /*
@@ -294,7 +296,7 @@ $$ language sql;
 */
 
 
-create or replace function _get_db_stage_fields_to_change(_repository_id uuid)
+create or replace function _get_db_stage_fields_to_change(_repository_id uuid, relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
     select
         field_id::meta.field_id,
@@ -305,6 +307,7 @@ returns setof field_hash as $$
         from ditty.repository
         where id = _repository_id
     ) as fields
+    where (relation_id_filter is null or fields.field_id::meta.field_id::meta.relation_id = relation_id_filter)
 $$ language sql;
 
 

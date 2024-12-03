@@ -8,9 +8,10 @@
 
 create or replace function _delete_checkout( _commit_id uuid ) returns void as $$
 declare
-        r record;
-        pk_comparison_stmt text;
-        stmt text;
+    r record;
+    pk_comparison_stmt text;
+    stmt text;
+    start_time timestamp := clock_timestamp();
 begin
     -- TODO: check for uncommitted changes?
     -- TODO: there's a whole dependency chain to follow here.
@@ -27,6 +28,8 @@ begin
         -- raise notice 'delete_checkout() stmt: %', stmt;
         execute stmt;
     end loop;
+
+    raise notice '_delete_checkout() ... %s', ditty.clock_diff(start_time);
 end;
 $$ language plpgsql;
 
@@ -48,6 +51,7 @@ declare
     commit_message text;
 
     commit_row record;
+    start_time timestamp := clock_timestamp();
 begin
     -- commit exists
     if not ditty._commit_exists(_commit_id) then
@@ -88,6 +92,7 @@ begin
         perform ditty._checkout_row(commit_row.row_id, commit_row.fields);
     end loop;
 
+    raise notice '_checkout() ... %s', ditty.clock_diff(start_time);
     return format('Commit %s was checked out.', _commit_id);
 end
 $$ language plpgsql;

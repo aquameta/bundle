@@ -300,7 +300,7 @@ $$ language sql;
 -- get_offstage_updated_fields()
 --
 
-create or replace function _get_offstage_updated_fields( _repository_id uuid ) returns setof ditty.field_hash as $$
+create or replace function _get_offstage_updated_fields( _repository_id uuid, relation_id_filter meta.relation_id default null ) returns setof ditty.field_hash as $$
     -- fields whos commit hash is different from db hash
     select hcf.field_id, dbf.value_hash
     -- fields from head commit
@@ -309,10 +309,12 @@ create or replace function _get_offstage_updated_fields( _repository_id uuid ) r
         left join ditty._get_db_head_commit_fields(_repository_id) dbf on dbf.field_id = hcf.field_id
     -- where value is different
     where hcf.value_hash != dbf.value_hash
+    -- relation filter
+    and (relation_id_filter is null or (hcf.field_id)::meta.relation_id = relation_id_filter)
 
     except
 
-    select field_id, value_hash from ditty._get_db_stage_fields_to_change(_repository_id);
+    select field_id, value_hash from ditty._get_db_stage_fields_to_change(_repository_id, relation_id_filter);
 $$ language sql;
 
 
@@ -355,12 +357,18 @@ $$ language sql;
 --
 
 create or replace function _track_untracked_rows_by_relation( repository_id uuid, _relation_id meta.relation_id ) returns void as $$ -- returns setof uuid?
+declare
+    start_time timestamp := clock_timestamp();
+begin
     update ditty.repository
     set tracked_rows_added = tracked_rows_added || (
         select jsonb_agg(row_id::text)
         from ditty._get_untracked_rows(_relation_id) row_id
     ) where id = repository_id;
-$$ language sql;
+
+    raise notice '_track_untracked_rows_by_relation() ... %s', ditty.clock_diff(start_time);
+end;
+$$ language plpgsql;
 
 create or replace function track_untracked_rows_by_relation( repository_name text, relation_id meta.relation_id ) returns void as $$ -- setof uuid?
     select ditty._track_untracked_rows_by_relation(ditty.repository_id(repository_name), relation_id);
@@ -396,9 +404,10 @@ $$ language sql;
 -- stage_updated_fields()
 -- stages all changed unstaged field changes on a repository
 
-create or replace function _stage_updated_fields( _repository_id uuid ) returns void as $$
+create or replace function _stage_updated_fields( _repository_id uuid, relation_id_filter meta.relation_id default null ) returns void as $$
     declare
         updated_fields jsonb;
+        start_time timestamp := clock_timestamp();
     begin
         -- assert repository exists
         if not ditty._repository_exists(_repository_id) then
@@ -408,17 +417,19 @@ create or replace function _stage_updated_fields( _repository_id uuid ) returns 
         with updated_fields as (
             select jsonb_agg(f.field_id::text) field
             from ditty._get_offstage_updated_fields(_repository_id) f
+            where (relation_id_filter is null or f.field_id::meta.relation_id = relation_id_filter)
         )
         update ditty.repository
         set stage_fields_to_change = stage_fields_to_change || updated_fields.field
         from updated_fields
         where id = _repository_id;
 
+        raise notice '_stage_updated_fields() ... %s', ditty.clock_diff(start_time);
     end;
 $$ language plpgsql;
 
-create or replace function stage_updated_fields( repository_name text ) returns void as $$
-    select ditty._stage_updated_fields(ditty.repository_id(repository_name));
+create or replace function stage_updated_fields( repository_name text, relation_id_filter meta.relation_id default null ) returns void as $$
+    select ditty._stage_updated_fields(ditty.repository_id(repository_name), relation_id_filter);
 $$ language sql;
 
 
@@ -427,7 +438,9 @@ $$ language sql;
 -- stage all off-stage deleted rows for removal
 --
 
-create or replace function _stage_deleted_rows( _repository_id uuid ) returns void as $$
+create or replace function _stage_deleted_rows( _repository_id uuid, relation_id_filter meta.relation_id default null ) returns void as $$
+    declare
+        start_time timestamp := clock_timestamp();
     begin
         -- assert repository exists
         if not ditty._repository_exists(_repository_id) then
@@ -436,13 +449,13 @@ create or replace function _stage_deleted_rows( _repository_id uuid ) returns vo
 
         update ditty.repository
         set stage_rows_to_remove = stage_rows_to_remove || (
-            select to_jsonb(array_agg(r::text)) lateral from ditty._get_offstage_deleted_rows (_repository_id) r
+            select to_jsonb(array_agg(r::text)) lateral from ditty._get_offstage_deleted_rows (_repository_id, relation_id_filter) r
         )
         where id = _repository_id;
+        raise notice '_stage_deleted_rows() ... %s', ditty.clock_diff(start_time);
     end;
 $$ language plpgsql;
 
-create or replace function stage_deleted_rows( repository_name text ) returns void as $$
-    select _stage_deleted_rows(ditty.repository_id(repository_name));
+create or replace function stage_deleted_rows( repository_name text, relation_id_filter meta.relation_id default null ) returns void as $$
+    select _stage_deleted_rows(ditty.repository_id(repository_name), relation_id_filter);
 $$ language sql;
-

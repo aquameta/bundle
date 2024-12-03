@@ -1,3 +1,8 @@
+------------------------------------------------------------------------------
+-- UTIL / MISC FUNCTIONS
+-- General purpose utils that probably belong somewhere else.
+------------------------------------------------------------------------------
+
 --
 -- random_string()
 --
@@ -64,7 +69,7 @@ CREATE OR REPLACE FUNCTION jsonb_merge(original jsonb, delta jsonb) RETURNS json
                 WHEN original_value IS NULL THEN delta_value
                 WHEN delta_value IS NULL THEN original_value
                 WHEN (jsonb_typeof(original_value) <> 'object' OR jsonb_typeof(delta_value) <> 'object') THEN delta_value
-                ELSE jsonb_merge(original_value, delta_value)
+                ELSE ditty.jsonb_merge(original_value, delta_value)
             END
         )
         INTO result
@@ -111,10 +116,10 @@ $$ language plpgsql volatile returns null on null input;
 
 
 --
--- row_to_jsonb_text()
+-- query_to_jsonb_text()
 --
 
-create or replace function row_to_jsonb_text(query text)
+create or replace function query_to_jsonb_text(query text)
 returns jsonb language plpgsql as $$
 declare
     result_row jsonb;
@@ -138,49 +143,23 @@ end;
 $$;
 
 
-/*
-miserable failures.
-it's not casting things to text properly.  numbers are coming through as numbers.  jsonb coming through as jsonb.
+--
+-- row_to_jsonb_text()
+--
 
-create or replace function row_to_jsonb_text(query text)
-returns jsonb language plpgsql as $$
-declare
-    result_row jsonb;
-begin
-    -- execute the query and convert the result row to jsonb, converting all values to text
-    execute format('select row_to_json(t)::jsonb from (%s) as t', query) into result_row;
-
-    -- convert all values to text within the jsonb object
-    return (select jsonb_object_agg(key, value::text::jsonb)
-            from jsonb_each(result_row));
-end;
+create or replace function row_to_jsonb_text(input_record anyelement)
+returns jsonb language sql stable as $$
+    select jsonb_object_agg(key, value::text)
+    from (
+        select key, value
+        from jsonb_each_text(to_jsonb(input_record))
+    ) subquery;
 $$;
 
-*/
 
-create or replace function row_to_jsonb_text(r anyelement)
-returns jsonb as $$
-declare
-    result jsonb := '{}';
-    field_name text;
-    field_value text;
-begin
-    -- loop through each field in the row
-    for field_name, field_value in
-        select key, value::text
-        from json_each_text(to_json(r))
-    loop
-        -- build the jsonb object with field values cast to text
-        result := jsonb_set(result, array[field_name], to_jsonb(field_value));
-    end loop;
-
-    return result;
-end;
-$$ language plpgsql;
-
-
-
-
+--
+-- _get_pk_column_names()
+--
 
 create or replace function _get_pk_column_names(relation_id meta.relation_id)
 returns text[] as $$
@@ -204,4 +183,3 @@ begin
     return pk_column_names;
 end;
 $$ language plpgsql;
-

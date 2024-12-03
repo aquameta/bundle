@@ -163,7 +163,7 @@ select row_eq(
 -- stage updated fields
 ---------------------------------------
 select set_counts.refresh_counters();
-select ditty.stage_updated_fields('org.opensourceshakespeare.db');
+select ditty.stage_updated_fields('org.opensourceshakespeare.db', meta.relation_id('shakespeare','character'));
 select row_eq(
     $$ select set_counts.count_diff() $$,
     row ('stage_fields_to_change=>1887, offstage_updated_fields=>-1887, db_stage_fields_to_change=>1887'::hstore),
@@ -181,6 +181,19 @@ select row_eq(
     row ('commit_ancestry=>1, stage_fields_to_change=>-1887, db_stage_fields_to_change=>-1887'::hstore),
 
     'Commit shakespeare'
+);
+
+---------------------------------------
+-- delete_checkout() + checkout() TODO split up
+---------------------------------------
+
+select ditty.delete_checkout('org.opensourceshakespeare.db');
+select ditty.checkout('org.opensourceshakespeare.db');
+select set_counts.refresh_counters();
+select row_eq(
+    $$ select set_counts.count_diff() $$,
+    row (''::hstore),
+    'Delete checkout + checkout does nothing.'
 );
 
 select finish();
