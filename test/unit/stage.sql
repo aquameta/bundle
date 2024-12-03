@@ -94,16 +94,14 @@ do $$
     end;
 $$ language plpgsql;
 
--- TODO: test??
 -- TODO: unstage_row_to_remove()
 
-
-
-
+/*
 --
 -- fields
 --
 
+TODO: this should fail because you can't change a removed row (and it is removed above)
 do $$ begin
     -- commit the single row change
     update pt.periodic_table set "Discoverer" = 'Don Henley' where "AtomicNumber" = 1;
@@ -112,6 +110,7 @@ end; $$ language plpgsql;
 
 
 
+*/
 
 
 

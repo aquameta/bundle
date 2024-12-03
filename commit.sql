@@ -39,7 +39,7 @@ end;
 $$ language plpgsql;
 
 
-create or replace function __commit_stage_rows( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns void as $$
+create or replace function __commit_stage_rows( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns meta.relation_id[] as $$
 declare
     stage_row_relations meta.relation_id[];
 begin
@@ -50,12 +50,25 @@ begin
         update ditty.commit set jsonb_rows = stage_rows_to_add 
         from ditty.repository
         where repository.id=_repository_id and commit.id = new_commit_id;
-        -- TODO: sort
+
+        -- get topo sorted relations
+        select ditty._topological_sort_relations(ditty._get_rowset_relations(jsonb_rows))
+        from ditty.commit
+        where id=new_commit_id
+        into stage_row_relations;
+
+        -- check for empty stage
+        if array_length(stage_row_relations,1) is null then -- zero length array returns NULL! :/
+            raise exception 'Stage is empty.  Aborting.';
+        end if;
+
+        raise notice '    - stage_row_relations: %', stage_row_relations;
 
     -- else not first commit:
     -- jsonb_rows is parent commit's rows + stage_rows_to_add - stage_rows_to_remove
 
     else
+        -- set to parent rows + stage_rows_to_add
         update ditty.commit set jsonb_rows = parent_rows
         from (
             select jsonb_rows || stage_rows_to_add as parent_rows
@@ -66,6 +79,7 @@ begin
         where commit.id = new_commit_id;
 
         -- get topo sorted relations
+        -- COPY PASTA from above.
         select ditty._topological_sort_relations(ditty._get_rowset_relations(jsonb_rows))
         from ditty.commit
         where id=new_commit_id
@@ -73,7 +87,7 @@ begin
 
         raise notice '    - stage_row_relations: %', stage_row_relations;
 
-        -- remove rows
+        -- rewrite, removing rows and sorting
         update ditty.commit
         set jsonb_rows = coalesce(( -- catch nulls
             select jsonb_agg(elem) from (
@@ -87,6 +101,8 @@ begin
         ), '[]'::jsonb)
         where id = new_commit_id;
     end if;
+
+    return stage_row_relations;
 end;
 $$ language plpgsql;
 
@@ -94,11 +110,13 @@ $$ language plpgsql;
 -- __commit_stage_fields
 --
 
-create or replace function __commit_stage_fields( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns void as $$
+create or replace function __commit_stage_fields( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid, stage_row_relations meta.relation_id[] ) returns void as $$
 declare
     rec record;
+    rel meta.relation_id;
+    stmt text;
+    stmts text[] := '{}';
 begin
-
     /*
     1. Set commit.jsonb_fields to repo.rows_to_add.fields
     2. If this is not the first commit:
@@ -106,29 +124,43 @@ begin
         b) Merge in repo.fields_to_change
     */
 
-        /*
-         * FIRST COMMIT
-         */
-
-    -- apply fields for rows_to_add
-    -- optimize attempt failure in db._get_db_rowset_fields_obj()
-
-    with rows as (
-        select jsonb_array_elements_text(c.jsonb_rows) as row_id
+    -- 1. Set commit.jsonb_fields to repo.rows_to_add.fields
+	foreach rel in array stage_row_relations loop
+        stmt := format('
+(
+    with row_ids as (
+        select row_id_text, row_id_text::meta.row_id as row_id
         from ditty.commit c
-        where id=new_commit_id
-    ),
-    fields as (
-        select
-            jsonb_object_agg(
-                row_id,
-                ditty._get_db_row_fields_obj(row_id::meta.row_id) -- can we go even faster??
-            ) as fields_obj
-        from rows
+        cross join lateral jsonb_array_elements_text(c.jsonb_rows) row_id_text
+        where c.id=%L
+            and (row_id_text::meta.row_id).relation_name=%L
     )
-    update ditty.commit set jsonb_fields = coalesce(fields.fields_obj, '{}') -- FIXME coalesce??
-    from fields
-    where commit.id=new_commit_id;
+    select row_ids.row_id_text, to_jsonb(x)
+        from %I.%I x
+            join row_ids on %s -- x.id::text = (row_ids.row_id).pk_values[1]
+)',
+            new_commit_id,
+            (rel).name,
+            (rel).schema_name,
+            (rel).name,
+            meta._pk_stmt(
+                ditty._get_pk_column_names(rel),
+                null,
+                'x.%1$I::text = (row_ids.row_id).pk_values[%3$L]'
+            )
+        );
+
+        -- raise notice '__commit_fields stmt: %', stmt;
+        stmts := stmts || stmt;
+    end loop;
+
+    stmt := format('update ditty.commit c set jsonb_fields = coalesce((select jsonb_object_agg (row_id_text, to_jsonb) from (%s) where c.id = %L), ''{}''::jsonb)',
+        array_to_string(stmts, E'\n\nunion\n\n'),
+        new_commit_id
+    );
+
+    -- raise notice 'FULL stmt: %', stmt;
+    execute stmt;
 
     if parent_commit_id is not null then
         /*
@@ -150,17 +182,17 @@ begin
         ) parent_commit
         where id = new_commit_id;
 
+
         --
         -- fields_to_change
         --
-
 
 		with fields as (
 			select
 				field_text::meta.field_id::meta.row_id as row_id,
 				jsonb_object_agg(
 					(field_text::meta.field_id).column_name,
-					meta.field_id_literal_value(field_text::meta.field_id)
+					meta.field_id_literal_value(field_text::meta.field_id) -- optimize?
 				) as fields_obj
 			from ditty.repository
 				cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
@@ -170,10 +202,13 @@ begin
 		fields_obj as (
 			select jsonb_object_agg(row_id::text, fields_obj) as obj from fields
         )
-        update ditty.commit set jsonb_fields = ditty.jsonb_merge_recurse(
-            jsonb_fields,
-            fields_obj.obj
-		)
+        update ditty.commit set jsonb_fields = coalesce(
+            ditty.jsonb_merge_recurse(
+                jsonb_fields,
+                fields_obj.obj
+            ),
+            '{}'::jsonb
+        )
 		from fields_obj
         where commit.id = new_commit_id;
 
@@ -196,6 +231,7 @@ create or replace function _commit(
 declare
     new_commit_id uuid;
     parent_commit_id uuid;
+    commit_row_relations meta.relation_id[];
     _jsonb_rows jsonb := '[]';
 --    _jsonb_fields jsonb := '{}';
 --    _jsonb_fields_patch jsonb := '{}';
@@ -251,10 +287,10 @@ begin
     perform ditty.__commit_stage_blobs(_repository_id, new_commit_id, parent_commit_id);
 
     raise notice '    - stage_rows() @ %', ditty.clock_diff(start_time);
-    perform ditty.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id);
+    select ditty.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id) into commit_row_relations;
 
     raise notice '    - stage_fields() @ %', ditty.clock_diff(start_time);
-    perform ditty.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id);
+    perform ditty.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id, commit_row_relations);
 
 --    return new_commit_id;
 

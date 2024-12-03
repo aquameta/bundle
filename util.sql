@@ -157,3 +157,51 @@ end;
 $$;
 
 */
+
+create or replace function row_to_jsonb_text(r anyelement)
+returns jsonb as $$
+declare
+    result jsonb := '{}';
+    field_name text;
+    field_value text;
+begin
+    -- loop through each field in the row
+    for field_name, field_value in
+        select key, value::text
+        from json_each_text(to_json(r))
+    loop
+        -- build the jsonb object with field values cast to text
+        result := jsonb_set(result, array[field_name], to_jsonb(field_value));
+    end loop;
+
+    return result;
+end;
+$$ language plpgsql;
+
+
+
+
+
+create or replace function _get_pk_column_names(relation_id meta.relation_id)
+returns text[] as $$
+declare
+    pk_column_names text[];
+begin
+    select array_agg(a.attname order by array_position(c.conkey, a.attnum))
+    into pk_column_names
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = t.oid
+    where n.nspname = (relation_id).schema_name
+      and t.relname = (relation_id).name
+      and c.contype = 'p';
+
+    if pk_column_names is null then
+        raise exception 'No primary key found for table %.%', schema_name, table_name;
+    end if;
+
+    return pk_column_names;
+end;
+$$ language plpgsql;
+

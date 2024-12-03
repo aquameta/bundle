@@ -400,6 +400,11 @@ create or replace function _stage_updated_fields( _repository_id uuid ) returns 
     declare
         updated_fields jsonb;
     begin
+        -- assert repository exists
+        if not ditty._repository_exists(_repository_id) then
+            raise exception 'Repository with id % does not exist.', _repository_id;
+        end if;
+
         with updated_fields as (
             select jsonb_agg(f.field_id::text) field
             from ditty._get_offstage_updated_fields(_repository_id) f
@@ -424,6 +429,11 @@ $$ language sql;
 
 create or replace function _stage_deleted_rows( _repository_id uuid ) returns void as $$
     begin
+        -- assert repository exists
+        if not ditty._repository_exists(_repository_id) then
+            raise exception 'Repository with id % does not exist.', _repository_id;
+        end if;
+
         update ditty.repository
         set stage_rows_to_remove = stage_rows_to_remove || (
             select to_jsonb(array_agg(r::text)) lateral from ditty._get_offstage_deleted_rows (_repository_id) r
