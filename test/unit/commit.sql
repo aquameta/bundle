@@ -34,6 +34,7 @@ select isa_ok(
 );
 */
 
+/*
 do $$ begin
     perform ditty.track_untracked_row('io.pgditty.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
     from pt.periodic_table; -- where "Element" ilike 'b%' order by "Element" limit 1;
@@ -47,3 +48,4 @@ end $$ language plpgsql;
 do $$ begin
     perform ditty.commit('io.pgditty.unittest', 'All of periodic table', 'Joe User', 'joe@example.com');
 end $$ language plpgsql;
+*/

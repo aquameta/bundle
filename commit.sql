@@ -41,33 +41,51 @@ $$ language plpgsql;
 
 create or replace function __commit_stage_rows( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns meta.relation_id[] as $$
 declare
-    stage_row_relations meta.relation_id[];
+    commit_relations meta.relation_id[];
+    tmp jsonb;
 begin
-    -- if first commit:
-    -- jsonb_rows is only stage_rows_to_add
-
     if parent_commit_id is null then
-        update ditty.commit set jsonb_rows = stage_rows_to_add 
+        /*
+         * First Commit
+         * Set jsonb_rows to sort(stage_rows_to_add)
+         */
+
+        -- Compute sorted commit_relations from stage_rows_to_add
+        select ditty._topological_sort_relations(ditty._get_rowset_relations(stage_rows_to_add))
         from ditty.repository
-        where repository.id=_repository_id and commit.id = new_commit_id;
+        where id=_repository_id
+        into commit_relations;
 
-        -- get topo sorted relations
-        select ditty._topological_sort_relations(ditty._get_rowset_relations(jsonb_rows))
-        from ditty.commit
-        where id=new_commit_id
-        into stage_row_relations;
-
-        -- check for empty stage
-        if array_length(stage_row_relations,1) is null then -- zero length array returns NULL! :/
+        -- Check for empty stage
+        if array_length(commit_relations,1) is null then -- zero length array returns NULL! :/
             raise exception 'Stage is empty.  Aborting.';
         end if;
 
-        raise notice '    - stage_row_relations: %', stage_row_relations;
+        -- write sorted stage_rows_to_add to commit.jsonb_rows
+        update ditty.commit
+        set jsonb_rows = (select jsonb_agg(r.row_id_text) from (
+                select row_id_text
+                from ditty.repository
+                    cross join lateral jsonb_array_elements_text(stage_rows_to_add) row_id_text
+                where id=_repository_id
+                -- order by array_position(commit_relations, r::meta.row_id::meta.relation_id)
+            ) r
+        ) where id = new_commit_id;
 
-    -- else not first commit:
-    -- jsonb_rows is parent commit's rows + stage_rows_to_add - stage_rows_to_remove
+        /*
+        old:
+        update ditty.commit set jsonb_rows = stage_rows_to_add
+        from ditty.repository
+        where repository.id=_repository_id and commit.id = new_commit_id;
+        */
 
     else
+
+        /*
+         * not first commit
+         * jsonb_rows is parent commit's rows + stage_rows_to_add - stage_rows_to_remove
+         */
+
         -- set to parent rows + stage_rows_to_add
         update ditty.commit set jsonb_rows = parent_rows
         from (
@@ -78,14 +96,11 @@ begin
         ) f
         where commit.id = new_commit_id;
 
-        -- get topo sorted relations
-        -- COPY PASTA from above.
+        -- get topo sorted relations *before* row removal/rewrite
         select ditty._topological_sort_relations(ditty._get_rowset_relations(jsonb_rows))
         from ditty.commit
         where id=new_commit_id
-        into stage_row_relations;
-
-        raise notice '    - stage_row_relations: %', stage_row_relations;
+        into commit_relations;
 
         -- rewrite, removing rows and sorting
         update ditty.commit
@@ -93,16 +108,26 @@ begin
             select jsonb_agg(elem) from (
                 select elem from jsonb_array_elements_text(jsonb_rows) a(elem)
                 left join (
-                    select jsonb_array_elements_text(stage_rows_to_remove) from ditty.repository where id=_repository_id
+                    select jsonb_array_elements_text(stage_rows_to_remove)
+                    from ditty.repository where id=_repository_id
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
-                order by array_position(stage_row_relations, elem::meta.row_id::meta.relation_id)
+                order by array_position(commit_relations, elem::meta.row_id::meta.relation_id)
             ) f
         ), '[]'::jsonb)
         where id = new_commit_id;
+
     end if;
 
-    return stage_row_relations;
+    -- get topo-sorted commit_relations
+    select ditty._topological_sort_relations(ditty._get_rowset_relations(jsonb_rows))
+    from ditty.commit
+    where id=new_commit_id
+    into commit_relations;
+
+    raise notice '    - commit_relations: %', commit_relations;
+
+    return commit_relations;
 end;
 $$ language plpgsql;
 
@@ -110,7 +135,7 @@ $$ language plpgsql;
 -- __commit_stage_fields
 --
 
-create or replace function __commit_stage_fields( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid, stage_row_relations meta.relation_id[] ) returns void as $$
+create or replace function __commit_stage_fields( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid, commit_relations meta.relation_id[] ) returns void as $$
 declare
     rec record;
     rel meta.relation_id;
@@ -124,8 +149,13 @@ begin
         b) Merge in repo.fields_to_change
     */
 
+    -- no rows?  can occur if all rows are removed.
+    if array_length(commit_relations, 1) is null then
+        return;
+    end if;
+
     -- 1. Set commit.jsonb_fields to repo.rows_to_add.fields
-	foreach rel in array stage_row_relations loop
+	foreach rel in array commit_relations loop
         stmt := format('
 (
     with row_ids as (
@@ -216,7 +246,7 @@ begin
 end;
 $$ language plpgsql;
 
- 
+
 --
 -- commit()
 --
@@ -231,7 +261,7 @@ create or replace function _commit(
 declare
     new_commit_id uuid;
     parent_commit_id uuid;
-    commit_row_relations meta.relation_id[];
+    commit_relations meta.relation_id[];
     _jsonb_rows jsonb := '[]';
 --    _jsonb_fields jsonb := '{}';
 --    _jsonb_fields_patch jsonb := '{}';
@@ -265,7 +295,10 @@ begin
 
     raise notice '  - parent_commit_id: %', parent_commit_id;
 
-    -- create commit, without jsonb_fields object, to be set later
+    /*
+     * create empty commit with metadata only
+     */
+
     raise notice '  - Creating commit @ %', ditty.clock_diff(start_time);
     insert into ditty.commit (
         repository_id,
@@ -287,10 +320,10 @@ begin
     perform ditty.__commit_stage_blobs(_repository_id, new_commit_id, parent_commit_id);
 
     raise notice '    - stage_rows() @ %', ditty.clock_diff(start_time);
-    select ditty.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id) into commit_row_relations;
+    select ditty.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id) into commit_relations;
 
     raise notice '    - stage_fields() @ %', ditty.clock_diff(start_time);
-    perform ditty.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id, commit_row_relations);
+    perform ditty.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id, commit_relations);
 
 --    return new_commit_id;
 

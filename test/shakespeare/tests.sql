@@ -163,7 +163,8 @@ select row_eq(
 -- stage updated fields
 ---------------------------------------
 select set_counts.refresh_counters();
-select ditty.stage_updated_fields('org.opensourceshakespeare.db', meta.relation_id('shakespeare','character'));
+-- select ditty.stage_updated_fields('org.opensourceshakespeare.db', meta.relation_id('shakespeare','character'));
+select ditty.stage_updated_fields('org.opensourceshakespeare.db');
 select row_eq(
     $$ select set_counts.count_diff() $$,
     row ('stage_fields_to_change=>1887, offstage_updated_fields=>-1887, db_stage_fields_to_change=>1887'::hstore),

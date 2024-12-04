@@ -22,10 +22,10 @@ this would be nice:
 
 */
 
-create or replace function status(repository_name text default null, detailed boolean default false) returns text as $$
+create or replace function _status(_repository_id uuid default null, detailed boolean default false) returns text as $$
     declare
+        repository_name text;
         _repository_ids uuid[];
-        _repository_id uuid;
         untracked_row_count integer;
         checkout_commit_id text; head_commit_id text; author_name text; author_email text; message text; commit_time timestamptz;
 
@@ -55,6 +55,8 @@ create or replace function status(repository_name text default null, detailed bo
 
         statii text := '';
     begin
+        repository_name := ditty._repository_name(_repository_id);
+
         if repository_name is not null then
             -- assert repository exists
             if not ditty.repository_exists(repository_name) then
@@ -201,3 +203,7 @@ create or replace function status(repository_name text default null, detailed bo
     end;
 $$ language plpgsql;
 
+
+create or replace function status(repository_name text default null, detailed boolean default false) returns text as $$
+    select ditty._status(ditty.repository_id(repository_name), detailed);
+$$ language sql;
