@@ -17,7 +17,7 @@ do $$ begin
 end $$ language plpgsql;
 
 select results_eq(
-    'select 1 from ditty.trackable_relation where relation_id = meta.relation_id(''unittest'',''not_a_table'') and primary_key_column_names = array[''a''];',
+    'select 1 from ditty.trackable_relation where relation_id = meta.relation_id(''unittest'',''not_a_table'') and pk_column_names = array[''a''];',
     'select 1',
     '_track_nontable_relation() adds relation to trackable_relations'
 );
@@ -27,7 +27,7 @@ do $$ begin
 end $$ language plpgsql;
 
 select results_ne(
-    'select 1 from ditty.trackable_relation where relation_id = meta.relation_id(''unittest'',''not_a_table'') and primary_key_column_names = array[''a''];',
+    'select 1 from ditty.trackable_relation where relation_id = meta.relation_id(''unittest'',''not_a_table'') and pk_column_names = array[''a''];',
     'select 1',
     '_untrack_nontable_relation() removes relation from trackable_relations'
 );

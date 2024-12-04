@@ -144,7 +144,7 @@ begin
             (rel).schema_name,
             (rel).name,
             meta._pk_stmt(
-                ditty._get_pk_column_names(rel),
+                ditty._get_trackable_relation_pk(rel),
                 null,
                 'x.%1$I::text = (row_ids.row_id).pk_values[%3$L]'
             )

@@ -122,7 +122,7 @@ create table tracked_query(
 --
 
 create or replace view trackable_relation as
-    select relation_id, primary_key_column_names
+    select relation_id, primary_key_column_names as pk_column_names
     from (
         -- every table that has a primary key
         select
@@ -139,7 +139,7 @@ create or replace view trackable_relation as
 
         select
             relation_id,
-            pk_column_names as primary_key_column_names
+            pk_column_names
         from ditty.trackable_nontable_relation
     ) r
 
@@ -165,9 +165,9 @@ create or replace view not_ignored_row_stmt as
 select *, 'select meta.row_id(' ||
         quote_literal((r.relation_id).schema_name) || ', ' ||
         quote_literal((r.relation_id).name) || ', ' ||
-        quote_literal(r.primary_key_column_names) || '::text[], ' ||
+        quote_literal(r.pk_column_names) || '::text[], ' ||
         'array[' ||
-            meta._pk_stmt(r.primary_key_column_names, null, '%1$I::text', ',') ||
+            meta._pk_stmt(r.pk_column_names, null, '%1$I::text', ',') ||
         ']' ||
     ') as row_id from ' ||
     quote_ident((r.relation_id).schema_name) || '.' || quote_ident((r.relation_id).name) ||
@@ -246,3 +246,41 @@ select * from (
     from ditty.repository r, ditty._get_head_commit_rows(r.id) hcr
 ) r;
 $$ language sql;
+
+
+--
+-- _get_trackable_relation_pk()
+--
+
+-- returns the pk_column_name(s) of a relation's primary key, including of nontable_relations
+
+create or replace function _get_trackable_relation_pk(_relation_id meta.relation_id)
+returns text[] as $$
+declare
+    pk_column_names text[];
+begin
+    -- first check trackable_relations view, to catch nontable_relations (and anything else)
+    select tr.pk_column_names from ditty.trackable_relation tr where relation_id = _relation_id into pk_column_names;
+
+    if pk_column_names is not null and array_length(pk_column_names, 1) is not null then
+        return pk_column_names;
+    end if;
+
+
+    select array_agg(a.attname order by array_position(c.conkey, a.attnum))
+    into pk_column_names
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = t.oid
+    where n.nspname = (_relation_id).schema_name
+      and t.relname = (_relation_id).name
+      and c.contype = 'p';
+
+    if pk_column_names is null then
+        raise exception 'No primary key found for table %.%', schema_name, table_name;
+    end if;
+
+    return pk_column_names;
+end;
+$$ language plpgsql;
