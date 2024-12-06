@@ -1,5 +1,5 @@
 select '-------------- unit/end.sql ------------------------------------------';
-select ditty.delete_repository('io.pgditty.unittest');
 
-drop schema unittest cascade;
-drop schema pt cascade;
+drop schema if exists unittest cascade;
+drop schema if exists pt cascade;
+select ditty.delete_repository('io.pgditty.unittest');

@@ -33,10 +33,9 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
         perform ditty._untrack_tracked_row(_repository_id, _row_id);
 
         -- stage
-        -- TODO: are we supposed to be using to_jsonb here or jsonb_build_object?
         update ditty.repository
         -- set stage_rows_to_add = stage_rows_to_add || jsonb_build_object(_row_id::text, ditty._get_db_row_field_hashes_obj(_row_id))
-        set stage_rows_to_add = stage_rows_to_add || to_jsonb(_row_id::text)
+        set stage_rows_to_add = stage_rows_to_add || ditty.row_to_jsonb_text(_row_id::text)
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -81,7 +80,7 @@ create or replace function _stage_row_to_remove( _repository_id uuid, _row_id me
 
         -- stage
         update ditty.repository
-        set stage_rows_to_remove = stage_rows_to_remove || to_jsonb(_row_id::text)
+        set stage_rows_to_remove = stage_rows_to_remove || ditty.row_to_jsonb_text(_row_id::text)
         where id = _repository_id;
     end;
 $$ language plpgsql;

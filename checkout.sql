@@ -70,15 +70,8 @@ begin
         raise exception 'Repository % has uncommitted changes, checkout() cannot be performed.', ditty._repository_name(_repository_id);
     end if;
 
-    -- if repo is already checked out, then delete it
-    -- TODO: instead of just deleting the checkout, do a diff between _commit_id and _checkout_commit_id, and make selective changes
-    if _checkout_commit_id is not null then
-        perform ditty._delete_checkout(_checkout_commit_id);
-    end if;
-
     -- naive.
     -- TODO: single insert stmt per relation, smart dependency traversing etc
-
     for commit_row in
         select r.row_id, jsonb_object_agg((f.field_id).column_name, f.value_hash) as fields
         from ditty._get_commit_rows(_commit_id) r

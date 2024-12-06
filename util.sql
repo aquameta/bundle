@@ -7,7 +7,7 @@
 -- random_string()
 --
 
-CREATE OR REPLACE FUNCTION random_string(int) RETURNS TEXT as $$
+CREATE OR REPLACE FUNCTION random_string( int ) RETURNS TEXT as $$
     SELECT substr(md5(random()::text), 0, $1+1);
 $$ language sql;
 
@@ -27,39 +27,12 @@ returns jsonb language sql as $$
     full join jsonb_each(delta) e2(keyDelta, valDelta) on keyOrig = keyDelta
 $$;
 
---
--- jsonb_deep_merge()
---
--- via chatGPT
-create or replace function jsonb_deep_merge(json1 jsonb, json2 jsonb)
-returns jsonb language plpgsql as $$
-declare
-    result jsonb := json1;
-    key text;
-    value jsonb;
-begin
-    -- iterate through each key-value pair in the second json object
-    for key, value in select * from jsonb_each(json2) loop
-        -- check if the key exists in the first json object and is also a json object
-        if result ? key and jsonb_typeof(result->key) = 'object' and jsonb_typeof(value) = 'object' then
-            -- recursively merge sub-objects
-            result := jsonb_set(result, array[key], ditty.jsonb_deep_merge(result->key, value));
-        else
-            -- otherwise, just overwrite or add the key-value pair from json2
-            result := jsonb_set(result, array[key], value);
-        end if;
-    end loop;
-    return result;
-end;
-$$;
 
-
---
 -- jsonb_merge
 --
 
 -- https://www.tyil.nl/post/2020/12/15/merging-json-in-postgresql/
-CREATE OR REPLACE FUNCTION jsonb_merge(original jsonb, delta jsonb) RETURNS jsonb AS $$
+CREATE OR REPLACE FUNCTION jsonb_merge( original jsonb, delta jsonb ) RETURNS jsonb AS $$
     DECLARE result jsonb;
     BEGIN
     SELECT
@@ -84,7 +57,7 @@ $$ LANGUAGE plpgsql;
 -- clock_diff()
 --
 
-create or replace function clock_diff(start_time timestamp) returns text as $$
+create or replace function clock_diff( start_time timestamp ) returns text as $$
     select round(extract(epoch from (clock_timestamp() - start_time))::numeric, 3) as seconds;
 $$ language sql;
 
@@ -94,13 +67,13 @@ $$ language sql;
 --
 
 -- https://wiki.postgresql.org/wiki/Array_reverse
-CREATE OR REPLACE FUNCTION array_reverse(anyarray) RETURNS anyarray AS $$
-SELECT ARRAY(
-    SELECT $1[i]
-        FROM generate_subscripts($1,1) AS s(i)
-            ORDER BY i DESC
+create or replace function array_reverse( anyarray ) returns anyarray as $$
+select array(
+    select $1[i]
+        from generate_subscripts($1,1) as s(i)
+            order by i desc
             );
-$$ LANGUAGE 'sql' STRICT IMMUTABLE;
+$$ language 'sql' strict immutable;
 
 
 create or replace function exec(statements text[]) returns setof record as $$
@@ -116,42 +89,22 @@ $$ language plpgsql volatile returns null on null input;
 
 
 --
--- query_to_jsonb_text()
---
-
-create or replace function query_to_jsonb_text(query text)
-returns jsonb language plpgsql as $$
-declare
-    result_row jsonb;
-begin
-    -- execute the query and convert the result row to jsonb
-    execute format('select to_jsonb(t)::jsonb from (%s) as t', query) into result_row;
-
-    return (
-        select jsonb_object_agg(
-            key,
-            /*
-            case
-                when jsonb_typeof(value) in ('string', 'array', 'object') then value--::text::jsonb
-                else value
-            end
-            */
-            value
-        ) from jsonb_each(result_row)
-    );
-end;
-$$;
-
-
---
 -- row_to_jsonb_text()
 --
 
-create or replace function row_to_jsonb_text(input_record anyelement)
-returns jsonb language sql stable as $$
-    select jsonb_object_agg(key, value::text)
+-- TODO: This is the main row serializer.  Right now it's just handing off to
+-- to_jsonb(), but to_jsonb() converts arrays, composite types and numbers to
+-- non-text values.  we need a function that takes a record and does to_jsonb
+-- except produces a flat object with all text values instead.
+
+create or replace function row_to_jsonb_text( input_record anyelement )
+returns jsonb as $$
+    select to_jsonb(input_record);
+    /*
     from (
         select key, value
         from jsonb_each_text(to_jsonb(input_record))
     ) subquery;
-$$;
+    */
+$$
+language sql stable;
