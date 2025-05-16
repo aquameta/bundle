@@ -307,7 +307,7 @@ create or replace function _get_offstage_updated_fields( _repository_id uuid, re
         -- left joined because db_fields() excludes dropped columns and columns may have been dropped
         left join ditty._get_db_head_commit_fields(_repository_id) dbf on dbf.field_id = hcf.field_id
     -- where value is different
-    where hcf.value_hash != dbf.value_hash
+    where hcf.value_hash is distinct from dbf.value_hash
     -- relation filter
     and (relation_id_filter is null or (hcf.field_id)::meta.relation_id = relation_id_filter)
 
