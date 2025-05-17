@@ -1,5 +1,5 @@
 select '------------- periodic/init.sql ------------------------------------------';
 create schema unittest;
 
-select ditty.create_repository('io.pgditty.pt');
+select bundle.create_repository('io.pgbundle.pt');
 

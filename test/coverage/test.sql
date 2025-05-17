@@ -27,6 +27,6 @@ select
 from meta.function mf
     left join pg_stat_user_functions uf on uf.funcid =  mf.id::oid
     left join stat_cache.user_functions ufc on ufc.funcid = uf.funcid
-where mf.schema_name = 'ditty'
+where mf.schema_name = 'bundle'
 order by new_calls;
 

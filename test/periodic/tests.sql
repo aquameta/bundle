@@ -3,7 +3,7 @@ select no_plan();
 -- track
 
 select refresh_counters();
-select ditty.track_untracked_rows_by_relation('io.pgditty.pt',meta.relation_id('pt','periodic_table'));
+select bundle.track_untracked_rows_by_relation('io.pgbundle.pt',meta.relation_id('pt','periodic_table'));
 select count_diff();
 
 
@@ -11,13 +11,13 @@ select count_diff();
 -- stage
 
 select refresh_counters();
-select ditty.stage_tracked_rows('io.pgditty.pt');
+select bundle.stage_tracked_rows('io.pgbundle.pt');
 select count_diff();
 
 
 -- commit
 select refresh_counters();
-select ditty.commit('io.pgditty.pt', 'Periodic table', 'Eric', 'eric@aquameta.com');
+select bundle.commit('io.pgbundle.pt', 'Periodic table', 'Eric', 'eric@aquameta.com');
 select count_diff();
 
 

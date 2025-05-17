@@ -9,7 +9,7 @@ cross join lateral
             || '(' || array_to_string(mf.type_sig, ',') || ')'
     ) as f
 where
-    mf.schema_name = 'ditty'
+    mf.schema_name = 'bundle'
     and mf.language = 'plpgsql'
     and mf.return_type <> 'trigger'; -- triggers don't work?
 
@@ -25,7 +25,7 @@ cross join lateral
             || '(' || array_to_string(mf.type_sig, ',') || ')'
     ) as f
 where
-    mf.schema_name = 'ditty'
+    mf.schema_name = 'bundle'
         and mf.language = 'plpgsql'
         and mf.return_type <> 'trigger'
 order by mf.name, f.type;

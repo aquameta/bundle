@@ -5,9 +5,9 @@ do $$
 declare returned_commit_id uuid;
 begin
     delete from pt.periodic_table;
-    perform ditty._checkout(ditty.head_commit_id('io.pgditty.unittest'));
+    perform bundle._checkout(bundle.head_commit_id('io.pgbundle.unittest'));
     perform ok(
-        exists(select 1 from ditty.commit where id = returned_commit_id),
+        exists(select 1 from bundle.commit where id = returned_commit_id),
         'Commit() creates a commit row and returns its id'
     );
 end;
@@ -27,12 +27,12 @@ begin
         );
         insert into unittest.complex_types (a,b) values (meta.row_id('sch','rel','pk_col', 'pk_val'), '{x,y,z}'::text[]);
 
-        perform ditty.create_repository('io.ditty.test_complex');
-        perform ditty.track_untracked_rows_by_relation('io.ditty.test_complex', meta.relation_id('unittest','complex_types'));
-        perform ditty.stage_tracked_rows('io.ditty.test_complex');
-        perform ditty.commit('io.ditty.test_complex', 'complex types', 'Testing User', 'test@example.com');
-        perform ditty.delete_checkout('io.ditty.test_complex');
-        perform ditty.checkout('io.ditty.test_complex');
+        perform bundle.create_repository('io.bundle.test_complex');
+        perform bundle.track_untracked_rows_by_relation('io.bundle.test_complex', meta.relation_id('unittest','complex_types'));
+        perform bundle.stage_tracked_rows('io.bundle.test_complex');
+        perform bundle.commit('io.bundle.test_complex', 'complex types', 'Testing User', 'test@example.com');
+        perform bundle.delete_checkout('io.bundle.test_complex');
+        perform bundle.checkout('io.bundle.test_complex');
 
         perform results_eq (
             $_$ select * from unittest.test_complex; $_$,
@@ -41,7 +41,7 @@ begin
         );
 
         drop table unittest.complex_types;
-        perform ditty.delete_repository('io.ditty.test_complex');
+        perform bundle.delete_repository('io.bundle.test_complex');
 
     exception
         when others then
@@ -57,8 +57,8 @@ $$ language plpgsql;
 
 
 /*
-prepare returned_commit_id as select ditty.commit('io.pgditty.unittest', 'First commit', 'Joe User', 'joe@example.com');
-prepare selected_commit_id as select id from ditty.commit where id = returned_commit_id;
+prepare returned_commit_id as select bundle.commit('io.pgbundle.unittest', 'First commit', 'Joe User', 'joe@example.com');
+prepare selected_commit_id as select id from bundle.commit where id = returned_commit_id;
 
 select results_eq(
     'returned_commit_id',
@@ -70,7 +70,7 @@ select results_eq(
 /*
 not anymore
 select isa_ok(
-    (select ditty.commit('io.pgditty.unittest', 'First commit', 'Joe User', 'joe@example.com')),
+    (select bundle.commit('io.pgbundle.unittest', 'First commit', 'Joe User', 'joe@example.com')),
     'uuid',
     'stage_row() returns a uuid'
 );
@@ -78,16 +78,16 @@ select isa_ok(
 
 /*
 do $$ begin
-    perform ditty.track_untracked_row('io.pgditty.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
+    perform bundle.track_untracked_row('io.pgbundle.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
     from pt.periodic_table where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin
-    perform ditty.stage_tracked_row('io.pgditty.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
+    perform bundle.stage_tracked_row('io.pgbundle.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
     from pt.periodic_table where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin
-    perform ditty.commit('io.pgditty.unittest', 'Second commit', 'Joe User', 'joe@example.com');
+    perform bundle.commit('io.pgbundle.unittest', 'Second commit', 'Joe User', 'joe@example.com');
 end $$ language plpgsql;
 */

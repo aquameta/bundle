@@ -17,13 +17,13 @@ create extension if not exists pgtap schema public;
 
 /*
 do $$ begin
-    if ditty.repository_exists('io.pgditty.set_counts') then
-        perform ditty.delete_repository('io.pgditty.set_counts');
+    if bundle.repository_exists('io.pgbundle.set_counts') then
+        perform bundle.delete_repository('io.pgbundle.set_counts');
         raise notice 'DELETING set_counts repo';
     end if;
 
-    if ditty.repository_exists('io.pgditty.unittest') then
-        perform ditty.delete_repository('io.pgditty.unittest');
+    if bundle.repository_exists('io.pgbundle.unittest') then
+        perform bundle.delete_repository('io.pgbundle.unittest');
         raise notice 'DELETING unittest repo';
     end if;
 end; $$ language plpgsql;

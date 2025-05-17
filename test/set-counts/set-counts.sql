@@ -17,8 +17,8 @@ declare rel record;
 begin
     delete from set_counts.set_count;
     for rel in (
-        -- all relations ditty.*
-        select name as alias, schema_name || '.' || name as set_generator_stmt from meta.relation where schema_name = 'ditty' and name in ('ZZZ') -- not in ('not_ignored_row_stmt')
+        -- all relations bundle.*
+        select name as alias, schema_name || '.' || name as set_generator_stmt from meta.relation where schema_name = 'bundle' and name in ('ZZZ') -- not in ('not_ignored_row_stmt')
 
         union
 
@@ -26,48 +26,48 @@ begin
         select * from (
             values
 /*
-                ('commit_rows',             'ditty._get_commit_rows  (ditty.head_commit_id(''io.pgditty.set_counts''))'),
-                ('commit_fields',           'ditty._get_commit_fields(ditty.head_commit_id(''io.pgditty.set_counts''))'),
+                ('commit_rows',             'bundle._get_commit_rows  (bundle.head_commit_id(''io.pgbundle.set_counts''))'),
+                ('commit_fields',           'bundle._get_commit_fields(bundle.head_commit_id(''io.pgbundle.set_counts''))'),
 
-                ('db_commit_rows',          'ditty._get_db_commit_rows  (ditty.head_commit_id(''io.pgditty.set_counts''))'),
-                ('db_commit_fields',        'ditty._get_db_commit_fields(ditty.head_commit_id(''io.pgditty.set_counts''))'),
+                ('db_commit_rows',          'bundle._get_db_commit_rows  (bundle.head_commit_id(''io.pgbundle.set_counts''))'),
+                ('db_commit_fields',        'bundle._get_db_commit_fields(bundle.head_commit_id(''io.pgbundle.set_counts''))'),
 
-                ('db_head_commit_rows',     'ditty._get_db_head_commit_rows(ditty.repository_id(''io.pgditty.set_counts''))'),
-                ('db_head_commit_fields',   'ditty._get_db_head_commit_fields(ditty.repository_id(''io.pgditty.set_counts''))'),
+                ('db_head_commit_rows',     'bundle._get_db_head_commit_rows(bundle.repository_id(''io.pgbundle.set_counts''))'),
+                ('db_head_commit_fields',   'bundle._get_db_head_commit_fields(bundle.repository_id(''io.pgbundle.set_counts''))'),
 
-                ('tracked_rows',            'ditty._get_tracked_rows(ditty.repository_id(''io.pgditty.set_counts''))'),
-                ('stage_rows',              'ditty._get_stage_rows  (ditty.repository_id(''io.pgditty.set_counts''))'),
+                ('tracked_rows',            'bundle._get_tracked_rows(bundle.repository_id(''io.pgbundle.set_counts''))'),
+                ('stage_rows',              'bundle._get_stage_rows  (bundle.repository_id(''io.pgbundle.set_counts''))'),
 
-                ('untracked_rows',          'ditty._get_untracked_rows()'),
-                ('offstage_deleted_rows',   'ditty._get_offstage_deleted_rows(ditty.repository_id(''io.pgditty.set_counts''))'),
-                ('offstage_changed_fields', 'ditty._get_offstage_updated_fields(ditty.repository_id(''io.pgditty.set_counts''))')
+                ('untracked_rows',          'bundle._get_untracked_rows()'),
+                ('offstage_deleted_rows',   'bundle._get_offstage_deleted_rows(bundle.repository_id(''io.pgbundle.set_counts''))'),
+                ('offstage_changed_fields', 'bundle._get_offstage_updated_fields(bundle.repository_id(''io.pgbundle.set_counts''))')
 */
 
 
-('commit_ancestry',              'ditty._get_commit_ancestry(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
-('commit_fields',                'ditty._get_commit_fields(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
+('commit_ancestry',              'bundle._get_commit_ancestry(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
+('commit_fields',                'bundle._get_commit_fields(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
 -- BROKEN:
--- ('commit_jsonb_fields',          'ditty._get_commit_jsonb_fields(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
--- ('commit_jsonb_rows',            'ditty._get_commit_jsonb_rows(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
-('commit_row_count_by_relation', 'ditty._get_commit_row_count_by_relation(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('commit_jsonb_fields',          'bundle._get_commit_jsonb_fields(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('commit_jsonb_rows',            'bundle._get_commit_jsonb_rows(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
+('commit_row_count_by_relation', 'bundle._get_commit_row_count_by_relation(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
 -- REDUNDANT:
--- ('commit_rows',                  'ditty._get_commit_rows(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
--- ('db_commit_fields',             'ditty._get_db_commit_fields(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
--- ('db_commit_rows',               'ditty._get_db_commit_rows(ditty.head_commit_id(''org.opensourceshakespeare.db''))'),
-('db_head_commit_fields',        'ditty._get_db_head_commit_fields(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('db_head_commit_rows',          'ditty._get_db_head_commit_rows(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('db_stage_fields_to_change',    'ditty._get_db_stage_fields_to_change(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('head_commit_fields',           'ditty._get_head_commit_fields(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('head_commit_rows',             'ditty._get_head_commit_rows(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('offstage_deleted_rows',        'ditty._get_offstage_deleted_rows(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('offstage_updated_fields',      'ditty._get_offstage_updated_fields(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('stage_fields_to_change',       'ditty._get_stage_fields_to_change(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('stage_rows',                   'ditty._get_stage_rows(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('stage_rows_to_add',            'ditty._get_stage_rows_to_add(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('stage_rows_to_remove',         'ditty._get_stage_rows_to_remove(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('tracked_rows',                 'ditty._get_tracked_rows(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('tracked_rows_added',           'ditty._get_tracked_rows_added(ditty.repository_id(''org.opensourceshakespeare.db''))'),
-('untracked_rows',               'ditty._get_untracked_rows()')
+-- ('commit_rows',                  'bundle._get_commit_rows(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('db_commit_fields',             'bundle._get_db_commit_fields(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
+-- ('db_commit_rows',               'bundle._get_db_commit_rows(bundle.head_commit_id(''org.opensourceshakespeare.db''))'),
+('db_head_commit_fields',        'bundle._get_db_head_commit_fields(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('db_head_commit_rows',          'bundle._get_db_head_commit_rows(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('db_stage_fields_to_change',    'bundle._get_db_stage_fields_to_change(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('head_commit_fields',           'bundle._get_head_commit_fields(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('head_commit_rows',             'bundle._get_head_commit_rows(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('offstage_deleted_rows',        'bundle._get_offstage_deleted_rows(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('offstage_updated_fields',      'bundle._get_offstage_updated_fields(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('stage_fields_to_change',       'bundle._get_stage_fields_to_change(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('stage_rows',                   'bundle._get_stage_rows(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('stage_rows_to_add',            'bundle._get_stage_rows_to_add(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('stage_rows_to_remove',         'bundle._get_stage_rows_to_remove(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('tracked_rows',                 'bundle._get_tracked_rows(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('tracked_rows_added',           'bundle._get_tracked_rows_added(bundle.repository_id(''org.opensourceshakespeare.db''))'),
+('untracked_rows',               'bundle._get_untracked_rows()')
 
         )
     )
@@ -114,7 +114,7 @@ begin
         raise notice '%', format('    %-30s %-7s %s',
             rel.alias,
             _count,
-            ditty.clock_diff(diff_time) || 's'
+            bundle.clock_diff(diff_time) || 's'
         );
         diff_time := clock_timestamp();
     end loop;
@@ -123,7 +123,7 @@ end;
 $$ language plpgsql;
 
 -- ignore self
-insert into ditty.ignored_schema (schema_id) values (meta.schema_id('set_counts'));
+insert into bundle.ignored_schema (schema_id) values (meta.schema_id('set_counts'));
 
 -- create testing schema
-select ditty.create_repository('io.pgditty.set_counts');
+select bundle.create_repository('io.pgbundle.set_counts');

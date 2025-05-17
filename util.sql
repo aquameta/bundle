@@ -20,7 +20,7 @@ returns jsonb language sql as $$
                 when valOrig isnull then valDelta
                 when valDelta isnull then valOrig
                 when (jsonb_typeof(valOrig) <> 'object' or jsonb_typeof(valDelta) <> 'object') then valDelta
-                else ditty.jsonb_merge_recurse(valOrig, valDelta)
+                else bundle.jsonb_merge_recurse(valOrig, valDelta)
             end
         )
     from jsonb_each(orig) e1(keyOrig, valOrig)
@@ -42,7 +42,7 @@ CREATE OR REPLACE FUNCTION jsonb_merge( original jsonb, delta jsonb ) RETURNS js
                 WHEN original_value IS NULL THEN delta_value
                 WHEN delta_value IS NULL THEN original_value
                 WHEN (jsonb_typeof(original_value) <> 'object' OR jsonb_typeof(delta_value) <> 'object') THEN delta_value
-                ELSE ditty.jsonb_merge(original_value, delta_value)
+                ELSE bundle.jsonb_merge(original_value, delta_value)
             END
         )
         INTO result

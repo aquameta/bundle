@@ -24,6 +24,6 @@ create extension if not exists meta_triggers version '0.5.0';
 
 begin;
 
-create schema ditty;
-set search_path=ditty;
+create schema bundle;
+set search_path=bundle;
 

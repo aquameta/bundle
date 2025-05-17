@@ -1,1 +1,1 @@
-select ditty.status('io.pgditty.unittest', true);
+select bundle.status('io.pgbundle.unittest', true);

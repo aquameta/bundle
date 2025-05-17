@@ -1,5 +1,5 @@
-pg_ditty--*.sql
-ditty--*.sql
+pg_bundle--*.sql
+bundle--*.sql
 *.swp
 *.swo
 .idea
