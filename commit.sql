@@ -184,7 +184,16 @@ begin
         stmts := stmts || stmt;
     end loop;
 
-    stmt := format('update ditty.commit c set jsonb_fields = coalesce((select jsonb_object_agg (row_id_text, row_obj) from (%s) where c.id = %L), ''{}''::jsonb)',
+    stmt := format('update ditty.commit c set jsonb_fields = coalesce(
+        (select jsonb_object_agg (row_id_text, row_obj) from (
+
+
+%s
+
+
+        )),
+        ''{}''::jsonb
+    ) where c.id = %L',
         array_to_string(stmts, E'\n\nunion\n\n'),
         new_commit_id
     );
