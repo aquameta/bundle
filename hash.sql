@@ -73,11 +73,12 @@ Maybe just ditch this stupid optimization.
 
 create or replace function hash( value text ) returns text as $$
 begin
+/*
     if length(value) < 32 then -- length(public.digest('foo','sha256')) then
         return value;
-    else
-        return public.digest(value, 'sha256');
     end if;
+*/
+    return public.digest(value, 'sha256');
 end;
 $$ language plpgsql;
 
@@ -87,9 +88,11 @@ create or replace function unhash( _hash text ) returns text as $$
 declare
     val text;
 begin
+    /*
     if length(_hash) < 32 then -- length(public.digest('foo','sha256')) then
         return _hash;
     end if;
+    */
 
     if _hash is null then
         return '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9';

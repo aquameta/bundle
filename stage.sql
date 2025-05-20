@@ -182,7 +182,7 @@ $$ language sql;
 -- get_stage_rows_to_add()
 --
 
-create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid,row_id meta.row_id) as $$
+create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid, row_id meta.row_id) as $$
     select id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id
     from bundle.repository
     where id = _repository_id;
@@ -299,21 +299,39 @@ $$ language sql;
 -- get_offstage_updated_fields()
 --
 
-create or replace function _get_offstage_updated_fields( _repository_id uuid, relation_id_filter meta.relation_id default null ) returns setof bundle.field_hash as $$
+create type field_hash_diff as (
+    field_id meta.field_id,
+    db_value_hash text,
+    commit_value_hash text
+);
+
+create or replace function _get_offstage_updated_fields(
+    _repository_id uuid,
+    relation_id_filter meta.relation_id default null
+) returns setof bundle.field_hash_diff as $$
     -- fields whos commit hash is different from db hash
-    select hcf.field_id, dbf.value_hash
+    select
+        hcf.field_id as field_id,
+        dbf.value_hash as db_value_hash,
+        hcf.value_hash as commit_value_hash
     -- fields from head commit
     from bundle._get_head_commit_fields(_repository_id) hcf
         -- left joined because db_fields() excludes dropped columns and columns may have been dropped
         left join bundle._get_db_head_commit_fields(_repository_id) dbf on dbf.field_id = hcf.field_id
+        -- exclude staged fields
+        left join bundle._get_db_stage_fields_to_change(_repository_id, relation_id_filter) sfc on sfc.field_id = hcf.field_id
     -- where value is different
-    where hcf.value_hash is distinct from dbf.value_hash
+    where hcf.value_hash != dbf.value_hash -- hash should never be NULL so we can use != here
+    -- and it's not on the stage
+    and sfc.field_id is null
     -- relation filter
     and (relation_id_filter is null or (hcf.field_id)::meta.relation_id = relation_id_filter)
 
+/*
     except
 
     select field_id, value_hash from bundle._get_db_stage_fields_to_change(_repository_id, relation_id_filter);
+*/
 $$ language sql;
 
 

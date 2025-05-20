@@ -172,7 +172,7 @@ begin
         -- WAS: pk_comparison_stmt := meta._pk_stmt(rel.pk_column_names, '{}'::text[], '(row_id).pk_values[%3$s] = x.%1$I::text', ' and ');
 
         stmts := array_append(stmts, format('
-            select row_id, jsonb_each_text(bundle.row_to_jsonb_text(x)) as keyval
+            select row_id, jsonb_each_text(bundle.row_to_jsonb_hash_obj(x)) as keyval
             from bundle._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
@@ -300,8 +300,7 @@ create or replace function _get_db_stage_fields_to_change(_repository_id uuid, r
 returns setof field_hash as $$
     select
         field_id::meta.field_id,
-        -- TODO: bundle.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
-        meta.field_id_literal_value(field_id::meta.field_id) as field_hash
+        bundle.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
     from (
         select jsonb_array_elements_text(stage_fields_to_change) as field_id
         from bundle.repository
