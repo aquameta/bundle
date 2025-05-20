@@ -14,10 +14,12 @@ create table blob (
 create index blob_hash_hash_index on blob using hash (hash);
 
 -- special case for null
+/*
 insert into blob ( hash, value ) values (
     '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9',
     null
 );
+*/
 
 create function create_blob( val text ) returns boolean as $$
 declare
@@ -87,10 +89,18 @@ declare
 begin
     if length(_hash) < 32 then -- length(public.digest('foo','sha256')) then
         return _hash;
-    else
-        select value into val from bundle.blob where hash = _hash;
-        return val;
     end if;
+
+    if _hash is null then
+        return '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9';
+    end if;
+
+    if not exists (select 1 from bundle.blob b where b.hash = _hash) then
+        raise exception 'unhash(): hash % has no blob.', _hash;
+    end if;
+
+    select value into val from bundle.blob where hash = _hash;
+    return val;
 end;
 $$ language plpgsql;
 

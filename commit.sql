@@ -50,11 +50,13 @@ begin
          * Set jsonb_rows to sort(stage_rows_to_add)
          */
 
-        -- Compute sorted commit_relations from stage_rows_to_add
+        -- Compute topo-sorted commit_relations from stage_rows_to_add
         select bundle._topological_sort_relations(bundle._get_rowset_relations(stage_rows_to_add))
         from bundle.repository
         where id=_repository_id
         into commit_relations;
+
+        raise debug '__commit_stage_rows(): topo-sorted relations are: %', commit_relations;
 
         -- Check for empty stage
         if array_length(commit_relations,1) is null then -- zero length array returns NULL! :/
@@ -68,7 +70,7 @@ begin
                 from bundle.repository
                     cross join lateral jsonb_array_elements_text(stage_rows_to_add) row_id_text
                 where id=_repository_id
-                -- order by array_position(commit_relations, r::meta.row_id::meta.relation_id)
+                order by array_position(commit_relations, row_id_text::meta.row_id::meta.relation_id)
             ) r
         ) where id = new_commit_id;
 

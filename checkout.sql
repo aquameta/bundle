@@ -76,8 +76,6 @@ begin
         select r.row_id, jsonb_object_agg((f.field_id).column_name, f.value_hash) as fields
         from bundle._get_commit_rows(_commit_id) r
             join bundle._get_commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
-            -- TODO: undisable hash
-            -- join bundle.blob b on f.value_hash = b.hash
         group by r.row_id, r._position
         order by r._position
     loop
@@ -125,11 +123,13 @@ declare
     stmt text;
     cols text[] := '{}';
     vals text[] := '{}';
-    row record;
+    field_row record;
 begin
-    for row in select key, value from jsonb_each_text(fields) loop
-        cols := cols || row.key;
-        vals := vals || bundle.unhash(row.value);
+    raise debug 'checkout_row(): fields: %', fields;
+    for field_row in select key, value from jsonb_each_text(fields) loop
+    raise debug '   checkout_row(): field: %', field_row;
+        cols := cols || field_row.key;
+        vals := vals || field_row.value; -- still hashed here
     end loop;
 
     stmt := format('insert into %I.%I (%s) values (%s)',
@@ -137,15 +137,22 @@ begin
         (row_id).relation_name,
         -- cols stmt
         (select array_to_string(
-            array_agg(quote_ident(col)), ', ')
+            array_agg(quote_ident(col)),
+            ', ',
+            'null'
+        )
         from unnest(cols) as col),
         -- vals stmt
+        -- NOTE: THIS is where we *maybe* need to be casting fields to their actual type.  Anonymous text *only* doesn't work with composite types AFAICT.
         (select array_to_string(
-            array_agg(
-                case when val is null then 'null' else quote_literal(bundle.unhash(val)) end
-            ), ', ')
+            array_agg(quote_literal(bundle.unhash(val))),
+            ', ',
+            'null'
+        )
         from unnest(vals) as val)
     );
+
+    raise debug '    checkout_row(): stmt: %', stmt;
 
     execute stmt;
 
