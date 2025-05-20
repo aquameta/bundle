@@ -35,13 +35,10 @@ begin
         perform bundle.checkout('io.bundle.test_complex');
 
         perform results_eq (
-            $_$ select * from unittest.test_complex; $_$,
+            $_$ select * from unittest.complex_types; $_$,
             $_$ select row(meta.field_id('sch','rel','pk_col', 'pk_val'), '{x,y,z}'::text[]); $_$,
             'Checkout of complex types equals committed values.'
         );
-
-        drop table unittest.complex_types;
-        perform bundle.delete_repository('io.bundle.test_complex');
 
     exception
         when others then

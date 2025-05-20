@@ -129,7 +129,7 @@ declare
 begin
     for row in select key, value from jsonb_each_text(fields) loop
         cols := cols || row.key;
-        vals := vals || row.value;
+        vals := vals || bundle.unhash(row.value);
     end loop;
 
     stmt := format('insert into %I.%I (%s) values (%s)',
@@ -142,7 +142,7 @@ begin
         -- vals stmt
         (select array_to_string(
             array_agg(
-                case when val is null then 'null' else quote_literal(val::text) end
+                case when val is null then 'null' else quote_literal(bundle.unhash(val)) end
             ), ', ')
         from unnest(vals) as val)
     );

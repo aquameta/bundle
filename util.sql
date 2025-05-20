@@ -88,6 +88,7 @@ create or replace function exec(statements text[]) returns setof record as $$
 $$ language plpgsql volatile returns null on null input;
 
 
+
 --
 -- row_to_jsonb_text()
 --

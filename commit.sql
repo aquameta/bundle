@@ -154,8 +154,15 @@ begin
         return;
     end if;
 
-    -- 1. Set commit.jsonb_fields to repo.rows_to_add.fields
-	foreach rel in array commit_relations loop
+    /*
+    1. Set commit.jsonb_fields to repo.rows_to_add.fields
+    */
+
+    -- for each relation in the commit
+    foreach rel in array commit_relations loop
+        -- create a SQL stmt that does this:
+        -- for each row in the newly-created (incomplete) commit that is of this relation,
+        -- select it's row_id as a text field, and all it's col:val pairs as a jsonb row object
         stmt := format('
 (
     with row_ids as (
@@ -165,7 +172,7 @@ begin
         where c.id=%L
             and (row_id_text::meta.row_id).relation_name=%L
     )
-    select row_ids.row_id_text, bundle.row_to_jsonb_text(x) as row_obj
+    select row_ids.row_id_text, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
         from %I.%I x
             join row_ids on %s -- x.id::text = (row_ids.row_id).pk_values[1]
 )',
@@ -183,6 +190,11 @@ begin
         -- raise notice '__commit_fields stmt: %', stmt;
         stmts := stmts || stmt;
     end loop;
+
+
+    -- create a statement that does this:
+    -- update the newly created commit's jsonb_field to contain
+    -- the aggregate of all the above stmts (one per relation) into a single jsonb object
 
     stmt := format('update bundle.commit c set jsonb_fields = coalesce(
         (select jsonb_object_agg (row_id_text, row_obj) from (
@@ -226,20 +238,20 @@ begin
         -- fields_to_change
         --
 
-		with fields as (
-			select
-				field_text::meta.field_id::meta.row_id as row_id,
-				jsonb_object_agg(
-					(field_text::meta.field_id).column_name,
-					meta.field_id_literal_value(field_text::meta.field_id) -- optimize?
-				) as fields_obj
-			from bundle.repository
-				cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
-			where id = _repository_id
-			group by 1
-		),
-		fields_obj as (
-			select jsonb_object_agg(row_id::text, fields_obj) as obj from fields
+        with fields as (
+            select
+                field_text::meta.field_id::meta.row_id as row_id,
+                jsonb_object_agg(
+                    (field_text::meta.field_id).column_name,
+                    meta.field_id_literal_value(field_text::meta.field_id) -- optimize?
+                ) as fields_obj
+            from bundle.repository
+                cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
+            where id = _repository_id
+            group by 1
+        ),
+        fields_obj as (
+            select jsonb_object_agg(row_id::text, fields_obj) as obj from fields
         )
         update bundle.commit set jsonb_fields = coalesce(
             bundle.jsonb_merge_recurse(
@@ -248,7 +260,7 @@ begin
             ),
             '{}'::jsonb
         )
-		from fields_obj
+        from fields_obj
         where commit.id = new_commit_id;
 
     end if;
