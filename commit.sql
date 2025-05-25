@@ -245,7 +245,7 @@ begin
                 field_text::meta.field_id::meta.row_id as row_id,
                 jsonb_object_agg(
                     (field_text::meta.field_id).column_name,
-                    meta.field_id_literal_value(field_text::meta.field_id) -- optimize?
+                    bundle.hash(meta.field_id_literal_value(field_text::meta.field_id)) -- optimize?
                 ) as fields_obj
             from bundle.repository
                 cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
