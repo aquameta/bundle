@@ -21,7 +21,7 @@ declare returned_commit_id uuid;
 begin
     begin
         create table unittest.complex_types (
-            id uuid primary key not null default public.uuid_generate_v7(),
+            id uuid primary key not null default public.uuid_generate_v4(),
             a meta.row_id,
             b text[]
         );

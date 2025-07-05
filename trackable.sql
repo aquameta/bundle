@@ -14,7 +14,7 @@
  */
 
 create table trackable_nontable_relation(
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     relation_id meta.relation_id not null unique,
     pk_column_names text[] not null
 );
@@ -38,25 +38,25 @@ $$ language sql;
 
 -- schema
 create table ignored_schema (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     schema_id meta.schema_id not null
 );
 
 -- table
 create table ignored_table (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     relation_id meta.relation_id not null
 );
 
 -- row
 create table ignored_row (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     row_id meta.row_id
 );
 
 -- column
 create table ignored_column (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     column_id meta.column_id not null
 );
 
@@ -110,7 +110,7 @@ $$ language sql;
 --
 
 create table tracked_query(
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     repository_id uuid not null references repository(id),
     query text,
     pk_column_names text[] not null

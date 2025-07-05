@@ -7,7 +7,7 @@
 --
 
 create table commit (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     parent_id uuid references commit(id), --null means first commit
     merge_parent_id uuid references commit(id),
 
@@ -30,7 +30,7 @@ create table commit (
 --
 
 create table repository (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     name text not null unique check(name != ''),
     head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
     checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
@@ -53,7 +53,7 @@ alter table commit add column repository_id uuid /* not null FIXME why is deferr
 --
 
 create table commit_migration (
-    id uuid not null default public.uuid_generate_v7() primary key,
+    id uuid not null default public.uuid_generate_v4() primary key,
     commit_id uuid not null references commit(id),
     up_code text,
     down_code text, -- can we auto-generate a lot of this?
@@ -67,7 +67,7 @@ create table commit_migration (
 --
 
 create table dependency (
-    id uuid not null default public.uuid_generate_v7() primary key
+    id uuid not null default public.uuid_generate_v4() primary key
 );
 */
 

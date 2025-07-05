@@ -12,12 +12,15 @@
 */
 
 create extension if not exists hstore schema public;
-create extension if not exists "pg_uuidv7" schema public;
+-- NOTE: disabled for compatibility
+-- create extension if not exists "pg_uuidv7" schema public;
+create extension if not exists "uuid-ossp" schema public;
 create extension if not exists pgcrypto schema public;
 
 -- reset stats
-create extension if not exists pg_stat_statements schema public;
-select public.pg_stat_statements_reset();
+-- NOTE: disabled for compatibility
+-- create extension if not exists pg_stat_statements schema public;
+-- select public.pg_stat_statements_reset();
 
 create extension if not exists meta version '0.5.0';
 create extension if not exists meta_triggers version '0.5.0';
