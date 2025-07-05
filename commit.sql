@@ -205,7 +205,7 @@ begin
 %s
 
 
-        )),
+        ) x),
         ''{}''::jsonb
     ) where c.id = %L',
         array_to_string(stmts, E'\n\nunion\n\n'),
