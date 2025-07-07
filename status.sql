@@ -207,3 +207,10 @@ $$ language plpgsql;
 create or replace function status(repository_name text default null, detailed boolean default false) returns text as $$
     select bundle._status(bundle.repository_id(repository_name), detailed);
 $$ language sql;
+
+
+/*
+TODO:
+create view status as
+select commits, db_tracked, db_deleted, db_updated, stage_to_add, stage_to_remove, stage_to_change etc....
+*/

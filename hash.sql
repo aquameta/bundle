@@ -14,12 +14,10 @@ create table blob (
 create index blob_hash_hash_index on blob using hash (hash);
 
 -- special case for null
-/*
 insert into blob ( hash, value ) values (
     '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9',
     null
 );
-*/
 
 create function create_blob( val text ) returns boolean as $$
 declare
@@ -78,6 +76,10 @@ begin
         return value;
     end if;
 */
+    if value is null then
+        return '\xc0178022ef029933301a5585abee372c28ad47d08e3b5b6b748ace8e5263d2c9';
+    end if;
+
     return public.digest(value, 'sha256');
 end;
 $$ language plpgsql;
