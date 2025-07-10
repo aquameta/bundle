@@ -27,7 +27,7 @@ $$ language sql;
 --
 
 create or replace function _get_repository_blobs( _repository_id uuid )
-returns table(hash text, blob text) as $$
+returns table(hash text, value text) as $$
 
     select b.hash, b.value
     from bundle._get_repository_hashes(_repository_id) h
