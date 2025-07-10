@@ -52,16 +52,92 @@ create or replace function _get_repository_export( _repository_id uuid ) returns
 select jsonb_pretty(jsonb_build_object(
     'repository', to_jsonb(r),
     'commits', (
-		select jsonb_agg(to_jsonb(c))
-		from bundle.commit c
-		where c.repository_id = r.id
-	),
+        select jsonb_agg(to_jsonb(c))
+        from bundle.commit c
+        where c.repository_id = r.id
+    ),
     'blobs', (
-		select jsonb_agg(to_jsonb(b))
-		from bundle._get_repository_blobs(r.id) b
-	)
+        select jsonb_agg(to_jsonb(b))
+        from bundle._get_repository_blobs(r.id) b
+    )
 ))
 from bundle.repository r
 where r.id = _repository_id;
 
 $$ language sql;
+
+
+
+
+create or replace function bundle.import_repository(bundle text)
+returns void as $$
+declare
+    bundle_jsonb jsonb := bundle::jsonb;
+begin
+    -- repository
+    insert into bundle.repository (
+        id,
+        name,
+        head_commit_id,
+        checkout_commit_id,
+        tracked_rows_added,
+        stage_rows_to_add,
+        stage_rows_to_remove,
+        stage_fields_to_change
+    )
+    select * from jsonb_to_record(bundle_jsonb->'repository')
+    as x(
+        id uuid,
+        name text,
+        head_commit_id uuid,
+        checkout_commit_id uuid,
+        tracked_rows_added jsonb,
+        stage_rows_to_add jsonb,
+        stage_rows_to_remove jsonb,
+        stage_fields_to_change jsonb
+    )
+    on conflict (id) do nothing;
+
+    -- blob
+    insert into bundle.blob (
+        hash,
+        value
+    )
+    select * from jsonb_to_recordset(bundle_jsonb->'blobs')
+    as x(
+        hash text,
+        value text
+    )
+    on conflict (hash) do nothing;
+
+    -- commit
+    insert into bundle.commit (
+        id,
+        parent_id,
+        merge_parent_id,
+        jsonb_rows,
+        jsonb_fields,
+        author_name,
+        author_email,
+        message,
+        commit_time,
+        repository_id
+    )
+    select * from jsonb_to_recordset(bundle_jsonb->'commits')
+    as x(
+        id uuid,
+        parent_id uuid,
+        merge_parent_id uuid,
+        jsonb_rows jsonb,
+        jsonb_fields jsonb,
+        author_name text,
+        author_email text,
+        message text,
+        commit_time timestamptz,
+        repository_id uuid
+    )
+    on conflict (id) do nothing;
+
+end;
+$$ language plpgsql;
+
