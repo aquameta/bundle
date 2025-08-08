@@ -172,20 +172,20 @@ begin
         from bundle.commit c
         cross join lateral jsonb_array_elements_text(c.jsonb_rows) row_id_text
         where c.id=%L
-            and row_id_text::meta.row_id->>'relation_name'=%L
+            and row_id_text::meta.row_id->>''relation_name''=%L
     )
     select row_ids.row_id_text, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
         from %I.%I x
             join row_ids on %s -- x.id::text = (row_ids.row_id).pk_values[1]
 )',
             new_commit_id,
-            (rel).name,
-            (rel).schema_name,
-            (rel).name,
+            rel->>'name',
+            rel->>'schema_name',
+            rel->>'name',
             meta._pk_stmt(
                 bundle._get_trackable_relation_pk(rel),
                 null,
-                'x.%1$I::text = (row_ids.row_id).pk_values[%3$L]'
+                'x.%1$I::text = (row_ids.row_id)->''pk_values''->(%3$L-1)'
             )
         );
 

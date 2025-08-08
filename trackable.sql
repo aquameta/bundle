@@ -163,41 +163,41 @@ create or replace view trackable_relation as
 
 create or replace view not_ignored_row_stmt as
 select *, 'select meta.make_row_id(' ||
-        quote_literal((r.relation_id).schema_name) || ', ' ||
-        quote_literal((r.relation_id).name) || ', ' ||
+        quote_literal(r.relation_id->>'schema_name') || ', ' ||
+        quote_literal(r.relation_id->>'name') || ', ' ||
         quote_literal(r.pk_column_names) || '::text[], ' ||
         'array[' ||
             meta._pk_stmt(r.pk_column_names, null, '%1$I::text', ',') ||
         ']' ||
     ') as row_id from ' ||
-    quote_ident((r.relation_id).schema_name) || '.' || quote_ident((r.relation_id).name) ||
+    quote_ident(r.relation_id->>'schema_name') || '.' || quote_ident(r.relation_id->>'name') ||
 
     -- special case meta rows so that ignored_* cascades down to all objects in its scope:
     -- exclude rows from meta that are in "normal" tables that are ignored
     case
         -- schemas
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) = 'schema' then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'schema' then
            ' where id not in (select schema_id from bundle.ignored_schema) '
         -- relations
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('table', 'view', 'relation') then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('table', 'view', 'relation') then
            ' where id not in (select relation_id from bundle.ignored_table) and schema_id not in (select schema_id from bundle.ignored_schema)'
         -- functions
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) = 'function' then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'function' then
            ' where id::meta.schema_id not in (select schema_id from bundle.ignored_schema)'
         -- columns
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) = 'column' then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'column' then
            ' where id not in (select column_id from bundle.ignored_column) and id::meta.relation_id not in (select relation_id from bundle.ignored_table) and id::meta.schema_id not in (select schema_id from bundle.ignored_schema)'
 
         -- objects that exist in schema scope
 
         -- operator
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('operator') then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('operator') then
            ' where meta.schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
         -- type
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('type') then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('type') then
            ' where id::meta.schema_id not in (select schema_id from bundle.ignored_schema)'
         -- constraint_unique, constraint_check, table_privilege
-        when (r.relation_id).schema_name = 'meta' and ((r.relation_id).name) in ('constraint_check','constraint_unique','table_privilege') then
+        when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('constraint_check','constraint_unique','table_privilege') then
            ' where meta.schema_id(schema_name) not in (select schema_id from bundle.ignored_schema) and table_id not in (select relation_id from bundle.ignored_table)'
         else ''
     end
