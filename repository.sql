@@ -263,10 +263,11 @@ as $$
     select position, row_id
     from (
         select row_number() over (order by ord) as position, elem::meta.row_id as row_id -- id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
-        from bundle.commit c, lateral jsonb_array_elements_text(c.jsonb_rows) with ordinality as u(elem, ord)
+        from bundle.commit c, lateral jsonb_array_elements(c.jsonb_rows) with ordinality as u(elem, ord)
         where c.id = _commit_id
     ) as subquery
-    where (row_id)::meta.relation_id = _relation_id_filter or _relation_id_filter is null;
+    where (_relation_id_filter is null) or (meta.row_id_to_relation_id(row_id)::jsonb = _relation_id_filter::jsonb);
+    ;
 $$ language sql;
 
 --
@@ -298,7 +299,7 @@ create type field_hash as ( field_id meta.field_id, value_hash text);
 create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
     select
-        meta.field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key),
+        meta.make_field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key::text),
         (jsonb_each_text(e.value)).value as val
     from
         bundle.commit,

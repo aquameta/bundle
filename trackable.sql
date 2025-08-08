@@ -162,7 +162,7 @@ create or replace view trackable_relation as
 --
 
 create or replace view not_ignored_row_stmt as
-select *, 'select meta.row_id(' ||
+select *, 'select meta.make_row_id(' ||
         quote_literal((r.relation_id).schema_name) || ', ' ||
         quote_literal((r.relation_id).name) || ', ' ||
         quote_literal(r.pk_column_names) || '::text[], ' ||

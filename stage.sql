@@ -23,7 +23,7 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
         end if;
 
         -- check that it's not already staged
-        if meta.row_exists(meta.row_id('bundle','stage_row_to_add', 'row_id', _row_id::text)) then
+        if meta.row_exists(meta.make_row_id('bundle','stage_row_to_add', 'row_id', _row_id::text)) then
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
 

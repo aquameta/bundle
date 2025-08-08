@@ -63,7 +63,7 @@ begin
 
         stmts := array_append(stmts, format('
             select row_id, x.%I is not null as exists
-            from bundle._get_commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from bundle._get_commit_rows(%L, meta.make_relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -173,7 +173,7 @@ begin
 
         stmts := array_append(stmts, format('
             select row_id, jsonb_each_text(bundle.row_to_jsonb_hash_obj(x)) as keyval
-            from bundle._get_db_commit_rows(%L, meta.relation_id(%L,%L)) row_id
+            from bundle._get_db_commit_rows(%L, meta.make_relation_id(%L,%L)) row_id
                 left join %I.%I x on
                     %s and
                     (row_id).schema_name = %L and
@@ -197,7 +197,7 @@ begin
     -- wrap stmt to beautify columns
     literals_stmt := format('
         select
-            meta.field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
+            meta.make_field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
             -- TODO bundle.hash((keyval).value)::text as value_hash
             ((keyval).value)::text as value_hash
         from (%s) fields;',
@@ -350,7 +350,7 @@ begin
         col_stmt := array_to_string(col_stmts, E',\n');
         raise notice 'col_stmt: %', col_stmt;
 
-        stmt := format('select meta.row_id(%L,%L,%L,%L) row_id, jsonb_build_object(%s) obj
+        stmt := format('select meta.make_row_id(%L,%L,%L,%L) row_id, jsonb_build_object(%s) obj
                 from %I.%I r
                 join jsonb_array_elements_text(%s::jsonb) rs on %s',
 

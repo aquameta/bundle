@@ -172,7 +172,7 @@ begin
         from bundle.commit c
         cross join lateral jsonb_array_elements_text(c.jsonb_rows) row_id_text
         where c.id=%L
-            and (row_id_text::meta.row_id).relation_name=%L
+            and row_id_text::meta.row_id->>'relation_name'=%L
     )
     select row_ids.row_id_text, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
         from %I.%I x
@@ -242,9 +242,9 @@ begin
 
         with fields as (
             select
-                field_text::meta.field_id::meta.row_id as row_id,
+                meta.field_id_to_row_id(field_text::meta.field_id) as row_id,
                 jsonb_object_agg(
-                    (field_text::meta.field_id).column_name,
+                    field_text::meta.field_id->>'column_name',
                     bundle.hash(meta.field_id_literal_value(field_text::meta.field_id)) -- optimize?
                 ) as fields_obj
             from bundle.repository
@@ -435,7 +435,7 @@ declare
 begin
     -- edges
     raise debug '  - Building edges @ % ...', clock_timestamp() - start_time;
-    select array_agg(distinct row(r,meta.relation_id(fk.to_schema_name, fk.to_table_name))::bundle.schema_edge)
+    select array_agg(distinct row(r,meta.make_relation_id(fk.to_schema_name, fk.to_table_name))::bundle.schema_edge)
     from meta.foreign_key fk
         join unnest(_relations) r on r.schema_name = fk.schema_name and r.name = fk.table_name
     into edges;
