@@ -24,7 +24,7 @@ create extension if not exists pgcrypto schema public;
 
 -- meta is installed directly by run.sh, not as an extension
 
-begin;
+-- begin;
 
 create schema bundle;
 set search_path=bundle;
