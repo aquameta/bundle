@@ -36,12 +36,12 @@ select isa_ok(
 
 /*
 do $$ begin
-    perform bundle.track_untracked_row('io.pgbundle.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
+    perform bundle.track_untracked_row('io.pgbundle.unittest', meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
     from pt.periodic_table; -- where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
 do $$ begin
-    perform bundle.stage_tracked_row('io.pgbundle.unittest', meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
+    perform bundle.stage_tracked_row('io.pgbundle.unittest', meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text))
     from pt.periodic_table; --  where "Element" ilike 'b%' order by "Element" limit 1;
 end $$ language plpgsql;
 
