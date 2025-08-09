@@ -1,5 +1,7 @@
-pg_bundle--*.sql
+# Generated SQL files
 bundle--*.sql
+
+# Editor temp files
 *.swp
 *.swo
-.idea
+*~
