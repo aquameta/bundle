@@ -1,5 +1,5 @@
 EXTENSION = pg_bundle
-EXTVERSION = 0.5.0
+EXTVERSION = 0.6.0
 DATA = $(EXTENSION)--$(EXTVERSION).sql
 PG_CONFIG = pg_config
 
