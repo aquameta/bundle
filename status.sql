@@ -113,8 +113,8 @@ create or replace function _status(_repository_id uuid default null, detailed bo
 
             select string_agg(
                 '(' || row_count || ') '
-                    || (relation_id).schema_name || '.'
-                    || (relation_id).name,
+                    || (relation_id->>'schema_name') || '.'
+                    || (relation_id->>'name'),
                 E'\n+             | ' -- delim
             )
             from bundle._get_commit_row_count_by_relation(bundle._head_commit_id(_repository_id))

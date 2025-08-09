@@ -197,7 +197,7 @@ begin
     -- wrap stmt to beautify columns
     literals_stmt := format('
         select
-            meta.make_field_id(row_id->>'schema_name',row_id->>'relation_name', row_id->'pk_column_names', row_id->'pk_values', (keyval).key),
+            meta.make_field_id(row_id->>''schema_name'',row_id->>''relation_name'',row_id->''pk_column_names'',row_id->''pk_values'',(keyval).key),
             -- TODO bundle.hash((keyval).value)::text as value_hash
             ((keyval).value)::text as value_hash
         from (%s) fields;',

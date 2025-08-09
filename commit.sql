@@ -65,12 +65,12 @@ begin
 
         -- write sorted stage_rows_to_add to commit.jsonb_rows
         update bundle.commit
-        set jsonb_rows = (select jsonb_agg(r.row_id_text) from (
-                select row_id_text
+        set jsonb_rows = (select jsonb_agg(r.row_id) from (
+                select row_id
                 from bundle.repository
-                    cross join lateral jsonb_array_elements_text(stage_rows_to_add) row_id_text
+                    cross join lateral jsonb_array_elements(stage_rows_to_add) row_id
                 where id=_repository_id
-                order by array_position(commit_relations, meta.row_id_to_relation_id(row_id_text::meta.row_id))
+                order by array_position(commit_relations, meta.row_id_to_relation_id(row_id::meta.row_id))
             ) r
         ) where id = new_commit_id;
 
@@ -168,15 +168,15 @@ begin
         stmt := format('
 (
     with row_ids as (
-        select row_id_text, row_id_text::meta.row_id as row_id
+        select row_id, row_id::meta.row_id as row_id_typed
         from bundle.commit c
-        cross join lateral jsonb_array_elements_text(c.jsonb_rows) row_id_text
+        cross join lateral jsonb_array_elements(c.jsonb_rows) row_id
         where c.id=%L
-            and row_id_text::meta.row_id->>''relation_name''=%L
+            and row_id::meta.row_id->>''relation_name''=%L
     )
-    select row_ids.row_id_text, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
+    select row_ids.row_id, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
         from %I.%I x
-            join row_ids on %s -- x.id::text = (row_ids.row_id).pk_values[1]
+            join row_ids on %s -- x.id::text = (row_ids.row_id_typed).pk_values[1]
 )',
             new_commit_id,
             rel->>'name',
@@ -199,7 +199,7 @@ begin
     -- the aggregate of all the above stmts (one per relation) into a single jsonb object
 
     stmt := format('update bundle.commit c set jsonb_fields = coalesce(
-        (select jsonb_object_agg (row_id_text, row_obj) from (
+        (select jsonb_object_agg (row_id::text, row_obj) from (
 
 
 %s

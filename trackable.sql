@@ -273,8 +273,8 @@ begin
     join pg_class t on t.oid = c.conrelid
     join pg_namespace n on n.oid = t.relnamespace
     join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = t.oid
-    where n.nspname = (_relation_id).schema_name
-      and t.relname = (_relation_id).name
+    where n.nspname = _relation_id->>'schema_name'
+      and t.relname = _relation_id->>'name'
       and c.contype = 'p';
 
     if pk_column_names is null then
