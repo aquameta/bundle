@@ -73,7 +73,7 @@ begin
     -- naive.
     -- TODO: single insert stmt per relation, smart dependency traversing etc
     for commit_row in
-        select r.row_id, jsonb_object_agg((f.field_id).column_name, f.value_hash) as fields
+        select r.row_id, jsonb_object_agg(f.field_id->>'column_name', f.value_hash) as fields
         from bundle._get_commit_rows(_commit_id) r
             join bundle._get_commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
         group by r.row_id, r._position

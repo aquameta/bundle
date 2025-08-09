@@ -37,14 +37,14 @@ begin
         select
             (meta.row_id_to_relation_id(row_id))->>'name' as relation_name,
             (meta.row_id_to_relation_id(row_id))->>'schema_name' as schema_name,
-            (row_id).pk_column_names as pk_column_names
+            row_id->'pk_column_names' as pk_column_names
         from bundle._get_commit_rows(_commit_id) row_id
         where meta.row_id_to_relation_id(row_id) =
             case
                 when _relation_id is null then meta.row_id_to_relation_id(row_id)
                 else _relation_id
             end
-        group by meta.row_id_to_relation_id(row_id), (row_id).pk_column_names
+        group by meta.row_id_to_relation_id(row_id), row_id->'pk_column_names'
     loop
         -- raise notice '#### _db_commit_rows rel: %', rel;
 
@@ -158,7 +158,7 @@ begin
         select distinct
             (meta.row_id_to_relation_id(row_id))->>'name' as relation_name,
             (meta.row_id_to_relation_id(row_id))->>'schema_name' as schema_name,
-            (row_id).pk_column_names as pk_column_names
+            row_id->'pk_column_names' as pk_column_names
         from bundle._get_commit_rows(commit_id) row_id
     loop
         -- for each relation, select head commit rows in this relation and also
@@ -197,7 +197,7 @@ begin
     -- wrap stmt to beautify columns
     literals_stmt := format('
         select
-            meta.make_field_id((row_id).schema_name,(row_id).relation_name, (row_id).pk_column_names, (row_id).pk_values, (keyval).key),
+            meta.make_field_id(row_id->>'schema_name',row_id->>'relation_name', row_id->'pk_column_names', row_id->'pk_values', (keyval).key),
             -- TODO bundle.hash((keyval).value)::text as value_hash
             ((keyval).value)::text as value_hash
         from (%s) fields;',

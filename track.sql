@@ -12,7 +12,7 @@ declare
 begin
     select count(*) into row_count from bundle.repository
     where id = repository_id
-        and tracked_rows_added ? row_id::text;
+        and tracked_rows_added @> jsonb_build_array(row_id);
 
     if row_count > 0 then
         return true;
@@ -87,12 +87,16 @@ create or replace function _untrack_tracked_row( _repository_id uuid, _row_id me
         c integer;
     begin
         
-        select count(*) into c from bundle.repository where id = _repository_id and tracked_rows_added ? _row_id::text;
+        select count(*) into c from bundle.repository where id = _repository_id and tracked_rows_added @> jsonb_build_array(_row_id);
         if c < 1 then
             raise exception 'Row with row_id % cannot be removed because it is not tracked by supplied repository.', _row_id::text;
         end if;
 
-        update bundle.repository set tracked_rows_added = tracked_rows_added - _row_id::text where id = _repository_id;
+        update bundle.repository set tracked_rows_added = (
+            select coalesce(jsonb_agg(elem), '[]'::jsonb)
+            from jsonb_array_elements(tracked_rows_added) elem
+            where elem != _row_id::jsonb
+        ) where id = _repository_id;
 
         return tracked_row_id;
     end;
@@ -118,7 +122,7 @@ $$ language sql;
 
 create or replace function _get_tracked_rows_added( _repository_id uuid )
 returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id
+    select id, jsonb_array_elements(tracked_rows_added)::meta.row_id
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
@@ -131,5 +135,5 @@ returns table(repository_id uuid, row_id meta.row_id) as $$
 $$ language sql;
 
 create or replace view tracked_row_added as
-    select id as repository_id, jsonb_array_elements_text(tracked_rows_added)::meta.row_id as row_id
+    select id as repository_id, jsonb_array_elements(tracked_rows_added)::meta.row_id as row_id
     from bundle.repository;

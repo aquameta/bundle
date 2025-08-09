@@ -262,7 +262,7 @@ returns table(_position integer, row_id meta.row_id)
 as $$
     select position, row_id
     from (
-        select row_number() over (order by ord) as position, elem::meta.row_id as row_id -- id as commit_id, jsonb_array_elements_text(jsonb_rows)::meta.row_id as row_id
+        select row_number() over (order by ord) as position, elem::meta.row_id as row_id -- id as commit_id, jsonb_array_elements(jsonb_rows)::meta.row_id as row_id
         from bundle.commit c, lateral jsonb_array_elements(c.jsonb_rows) with ordinality as u(elem, ord)
         where c.id = _commit_id
     ) as subquery

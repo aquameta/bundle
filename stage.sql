@@ -182,13 +182,13 @@ $$ language sql;
 --
 
 create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id
+    select id, jsonb_array_elements(stage_rows_to_add)::meta.row_id
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_add as
-select id as repository_id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_to_add)::meta.row_id as row_id
 from bundle.repository;
 
 
@@ -197,13 +197,13 @@ from bundle.repository;
 --
 
 create or replace function _get_stage_rows_to_remove( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id
+    select id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_remove as
-select id as repository_id, jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
 from bundle.repository;
 
 
@@ -230,7 +230,7 @@ from bundle.repository;
 create or replace function _is_staged( repository_id uuid, row_id meta.row_id ) returns boolean as $$
 begin
     return (
-        select jsonb_array_elements_text(stage_rows_to_add) = row_id::text
+        select stage_rows_to_add @> jsonb_build_array(row_id)
         from bundle.repository
         where id = repository_id
     );
@@ -250,14 +250,14 @@ create or replace function _get_tracked_rows( _repository_id uuid ) returns seto
     -- ...plus newly tracked rows
     union
 
-    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id
+    select jsonb_array_elements(r.tracked_rows_added)::meta.row_id
     from bundle.repository r
     where r.id = _repository_id
 
     -- plus staged rows
     union
 
-    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id
+    select jsonb_array_elements(r.stage_rows_to_add)::meta.row_id
     from bundle.repository r
     where r.id = _repository_id
 $$ language sql;
@@ -285,7 +285,7 @@ create or replace function _get_offstage_deleted_rows( _repository_id uuid ) ret
     except
 
     -- minus those that have been staged for deletion
-    select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id
+    select jsonb_array_elements(r.stage_rows_to_remove)::meta.row_id
     from bundle.repository r where r.id = _repository_id;
 $$ language sql;
 
@@ -348,7 +348,7 @@ create or replace function _get_stage_rows( _repository_id uuid ) returns setof 
         except
 
         -- ...minus deleted rows
-        select jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id as row_id
+        select jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
         from bundle.repository r
         where r.id = _repository_id
 
@@ -357,7 +357,7 @@ create or replace function _get_stage_rows( _repository_id uuid ) returns setof 
     union
 
     -- ...plus staged rows
-    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id, true as new_row
+    select jsonb_array_elements(r.stage_rows_to_add)::meta.row_id, true as new_row
     from bundle.repository r
     where r.id = _repository_id
 

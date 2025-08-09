@@ -228,17 +228,17 @@ except
 -- ...except the following:
 select * from (
     -- stage_rows_to_add
-    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id from bundle.repository r -- where relation_id=....?
+    select jsonb_array_elements(r.stage_rows_to_add)::meta.row_id from bundle.repository r -- where relation_id=....?
 
     union
     -- tracked rows
     -- select t.row_id from bundle.track_untracked_rowed t
-    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id from bundle.repository r -- where relation_id=....?
+    select jsonb_array_elements(r.tracked_rows_added)::meta.row_id from bundle.repository r -- where relation_id=....?
 
     union
     -- stage_rows_to_remove
     -- select d.row_id from bundle.stage_row_to_remove
-    select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id from bundle.repository r-- where relation_id=....?
+    select jsonb_array_elements(r.stage_rows_to_remove)::meta.row_id from bundle.repository r-- where relation_id=....?
 
     union
     -- head_commit_rows for all tables

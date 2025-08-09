@@ -59,7 +59,7 @@ select ok(
 
 select results_eq(
    $$ select row_id::text from bundle._get_stage_rows_to_add(bundle.repository_id('io.pgbundle.unittest')) $$,
-   array['(pt,periodic_table,{AtomicNumber},{1})'],
+   array['{"pk_values": ["1"], "schema_name": "pt", "relation_name": "periodic_table", "pk_column_names": ["AtomicNumber"]}'],
    '_get_stage_rows_to_add() finds staged row'
 );
 
