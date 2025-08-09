@@ -1,3 +1,1 @@
-cd unit; ./run.sh; cd ../
-cd periodic; ./run.sh; cd ../
-cd shakespeare; ./run.sh; cd ../
+cat init.sql util.sql hash.sql rowset.sql repository.sql db.sql trackable.sql track.sql stage.sql commit.sql checkout.sql remote.sql merge.sql status.sql end.sql | psql -v ON_ERROR_STOP=1 -b bundle

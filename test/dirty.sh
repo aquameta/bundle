@@ -1,3 +1,1 @@
-cd unit; ./dirty.sh; cd ../
-# cd periodic; ./dirty.sh; cd ../
-cd shakespeare; ./dirty.sh; cd ../
+cat ../init.sql init.sql util.sql hash.sql rowset.sql repository.sql db.sql trackable.sql track.sql stage.sql commit.sql checkout.sql remote.sql merge.sql status.sql | psql -v ON_ERROR_STOP=1 -b bundle

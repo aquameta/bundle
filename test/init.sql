@@ -31,3 +31,9 @@ end; $$ language plpgsql;
 
 -- begin;
 set search_path=public;
+select '------------- unit/init.sql ------------------------------------------';
+set search_path=public;
+\i extra/periodic/data.sql
+
+create schema unittest;
+select no_plan();

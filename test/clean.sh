@@ -1,3 +1,1 @@
-cd unit; ./clean.sh; cd ../
-cd periodic; ./clean.sh; cd ../
-cd shakespeare; ./clean.sh; cd ../
+cat end.sql ../end.sql | psql -v ON_ERROR_STOP=1 -b bundle
