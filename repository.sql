@@ -339,7 +339,7 @@ $$ language sql;
 
 create or replace function _get_commit_row_count_by_relation( _commit_id uuid )
 returns table( relation_id meta.relation_id, row_count integer ) as $$
-    select row_id::meta.relation_id as relation_id, count(*) as row_count
+    select meta.row_id_to_relation_id(row_id) as relation_id, count(*) as row_count
     from bundle._get_commit_rows(_commit_id)
-    group by row_id::meta.relation_id
+    group by meta.row_id_to_relation_id(row_id)
 $$ language sql;

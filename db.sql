@@ -35,16 +35,16 @@ begin
     -- for each relation in this commit
     for rel in
         select
-            (row_id::meta.relation_id).name as relation_name,
-            (row_id::meta.relation_id).schema_name as schema_name,
+            (meta.row_id_to_relation_id(row_id))->>'name' as relation_name,
+            (meta.row_id_to_relation_id(row_id))->>'schema_name' as schema_name,
             (row_id).pk_column_names as pk_column_names
         from bundle._get_commit_rows(_commit_id) row_id
-        where row_id::meta.relation_id =
+        where meta.row_id_to_relation_id(row_id) =
             case
-                when _relation_id is null then row_id::meta.relation_id
+                when _relation_id is null then meta.row_id_to_relation_id(row_id)
                 else _relation_id
             end
-        group by row_id::meta.relation_id, (row_id).pk_column_names
+        group by meta.row_id_to_relation_id(row_id), (row_id).pk_column_names
     loop
         -- raise notice '#### _db_commit_rows rel: %', rel;
 
@@ -156,8 +156,8 @@ begin
     -- all relations in the head commit
     for rel in
         select distinct
-            (row_id::meta.relation_id).name as relation_name,
-            (row_id::meta.relation_id).schema_name as schema_name,
+            (meta.row_id_to_relation_id(row_id))->>'name' as relation_name,
+            (meta.row_id_to_relation_id(row_id))->>'schema_name' as schema_name,
             (row_id).pk_column_names as pk_column_names
         from bundle._get_commit_rows(commit_id) row_id
     loop
@@ -306,7 +306,7 @@ returns setof field_hash as $$
         from bundle.repository
         where id = _repository_id
     ) as fields
-    where (relation_id_filter is null or fields.field_id::meta.field_id::meta.relation_id = relation_id_filter)
+    where (relation_id_filter is null or meta.field_id_to_relation_id(fields.field_id::meta.field_id) = relation_id_filter)
 $$ language sql;
 
 

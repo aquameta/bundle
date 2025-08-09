@@ -151,7 +151,7 @@ create or replace view trackable_relation as
 
     -- ...and is not in an ignored schema
 
-        and relation_id::meta.schema_id not in (
+        and meta.relation_id_to_schema_id(relation_id) not in (
             select schema_id from bundle.ignored_schema
         )
     ;
@@ -183,10 +183,10 @@ select *, 'select meta.make_row_id(' ||
            ' where id not in (select relation_id from bundle.ignored_table) and schema_id not in (select schema_id from bundle.ignored_schema)'
         -- functions
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'function' then
-           ' where id::meta.schema_id not in (select schema_id from bundle.ignored_schema)'
+           ' where id not in (select schema_id from bundle.ignored_schema)'
         -- columns
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'column' then
-           ' where id not in (select column_id from bundle.ignored_column) and id::meta.relation_id not in (select relation_id from bundle.ignored_table) and id::meta.schema_id not in (select schema_id from bundle.ignored_schema)'
+           ' where id not in (select column_id from bundle.ignored_column) and meta.column_id_to_relation_id(id) not in (select relation_id from bundle.ignored_table) and meta.column_id_to_schema_id(id) not in (select schema_id from bundle.ignored_schema)'
 
         -- objects that exist in schema scope
 
@@ -195,7 +195,7 @@ select *, 'select meta.make_row_id(' ||
            ' where meta.schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
         -- type
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('type') then
-           ' where id::meta.schema_id not in (select schema_id from bundle.ignored_schema)'
+           ' where id not in (select schema_id from bundle.ignored_schema)'
         -- constraint_unique, constraint_check, table_privilege
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('constraint_check','constraint_unique','table_privilege') then
            ' where meta.schema_id(schema_name) not in (select schema_id from bundle.ignored_schema) and table_id not in (select relation_id from bundle.ignored_table)'

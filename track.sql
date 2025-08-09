@@ -55,7 +55,7 @@ create or replace function _track_untracked_row( _repository_id uuid, row_id met
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
 
-        update bundle.repository set tracked_rows_added = tracked_rows_added || to_jsonb(row_id::text) where id = _repository_id;
+        update bundle.repository set tracked_rows_added = tracked_rows_added || row_id where id = _repository_id;
     end;
 $$ language plpgsql;
 

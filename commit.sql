@@ -70,7 +70,7 @@ begin
                 from bundle.repository
                     cross join lateral jsonb_array_elements_text(stage_rows_to_add) row_id_text
                 where id=_repository_id
-                order by array_position(commit_relations, row_id_text::meta.row_id::meta.relation_id)
+                order by array_position(commit_relations, meta.row_id_to_relation_id(row_id_text::meta.row_id))
             ) r
         ) where id = new_commit_id;
 
@@ -114,7 +114,7 @@ begin
                     from bundle.repository where id=_repository_id
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
-                order by array_position(commit_relations, elem::meta.row_id::meta.relation_id)
+                order by array_position(commit_relations, meta.row_id_to_relation_id(elem::meta.row_id))
             ) f
         ), '[]'::jsonb)
         where id = new_commit_id;
@@ -185,7 +185,7 @@ begin
             meta._pk_stmt(
                 bundle._get_trackable_relation_pk(rel),
                 null,
-                'x.%1$I::text = (row_ids.row_id)->''pk_values''->(%3$L-1)'
+                'x.%1$I::text = (row_ids.row_id)->''pk_values''->>(%3$L-1)'
             )
         );
 
@@ -398,7 +398,7 @@ Approach:
         - Are those rows in this bundle?
     - else (it's data)
         - containing table, columns, and foreign keys
-            - tables: select distinct row_id::meta.relation_id
+            - tables: select distinct meta.row_id_to_relation_id(row_id)
             - columns: select .....?
         - fk_dependency_rows:  What rows does it foreign key to?
             - boolean external: Are those rows in this bundle?
@@ -437,7 +437,7 @@ begin
     raise debug '  - Building edges @ % ...', clock_timestamp() - start_time;
     select array_agg(distinct row(r,meta.make_relation_id(fk.to_schema_name, fk.to_table_name))::bundle.schema_edge)
     from meta.foreign_key fk
-        join unnest(_relations) r on r.schema_name = fk.schema_name and r.name = fk.table_name
+        join unnest(_relations) r on r->>'schema_name' = fk.schema_name and r->>'name' = fk.table_name
     into edges;
 
 
@@ -495,7 +495,7 @@ declare
 begin
     -- stage_row relations as jsonb object keys, value is empty array
     raise notice '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
-    select distinct jsonb_object_agg(row_id::meta.relation_id::text, '[]'::jsonb)
+    select distinct jsonb_object_agg(meta.row_id_to_relation_id(row_id)::text, '[]'::jsonb)
         from bundle.stage_row_to_add
         where repository_id =  _repository_id
     into stage_row_relations;
@@ -520,7 +520,7 @@ begin
                     'relation_id', r.rel_key,
                     'from_column_ids', r.from_column_ids,
                     'to_column_ids', r.to_column_ids,
-                    'to_relation_id', (r.to_column_ids[1])::meta.relation_id::text
+                    'to_relation_id', meta.row_id_to_relation_id(r.to_column_ids[1])::text
                 )
             );
         end if;
