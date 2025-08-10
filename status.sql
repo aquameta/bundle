@@ -64,7 +64,7 @@ create or replace function _status(_repository_id uuid default null, detailed bo
             end if;
             _repository_ids := array[(select bundle.repository_id(repository_name))];
         else
-            select array_agg(id order by name) from bundle.repository into _repository_ids;
+            select coalesce(array_agg(id order by name), '{}') from bundle.repository into _repository_ids;
             -- statii := statii || E'STATUS\n======\n';
         end if;
 
