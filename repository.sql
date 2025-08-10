@@ -299,7 +299,7 @@ create type field_hash as ( field_id meta.field_id, value_hash text);
 create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
     select
-        meta.make_field_id(e.key::meta.row_id, (jsonb_each_text(e.value)).key::text),
+        meta.make_field_id(e.key::jsonb, (jsonb_each_text(e.value)).key::text),
         (jsonb_each_text(e.value)).value as val
     from
         bundle.commit,

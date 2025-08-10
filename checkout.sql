@@ -75,7 +75,7 @@ begin
     for commit_row in
         select r.row_id, jsonb_object_agg(f.field_id->>'column_name', f.value_hash) as fields
         from bundle._get_commit_rows(_commit_id) r
-            join bundle._get_commit_fields(_commit_id) f on (f.field_id)::meta.row_id = r.row_id
+            join bundle._get_commit_fields(_commit_id) f on meta.field_id_to_row_id(f.field_id) = r.row_id
         group by r.row_id, r._position
         order by r._position
     loop
@@ -133,8 +133,8 @@ begin
     end loop;
 
     stmt := format('insert into %I.%I (%s) values (%s)',
-        (row_id).schema_name,
-        (row_id).relation_name,
+        row_id->>'schema_name',
+        row_id->>'relation_name',
         -- cols stmt
         (select array_to_string(
             array_agg(quote_ident(col)),

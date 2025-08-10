@@ -108,9 +108,9 @@ begin
         update bundle.commit
         set jsonb_rows = coalesce(( -- catch nulls
             select jsonb_agg(elem) from (
-                select elem from jsonb_array_elements_text(jsonb_rows) a(elem)
+                select elem from jsonb_array_elements(jsonb_rows) a(elem)
                 left join (
-                    select jsonb_array_elements_text(stage_rows_to_remove)
+                    select jsonb_array_elements(stage_rows_to_remove)
                     from bundle.repository where id=_repository_id
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
@@ -242,13 +242,13 @@ begin
 
         with fields as (
             select
-                meta.field_id_to_row_id(field_text::meta.field_id) as row_id,
+                meta.field_id_to_row_id(field_id) as row_id,
                 jsonb_object_agg(
-                    field_text::meta.field_id->>'column_name',
-                    bundle.hash(meta.field_id_literal_value(field_text::meta.field_id)) -- optimize?
+                    field_id->>'column_name',
+                    bundle.hash(meta.field_id_literal_value(field_id)) -- optimize?
                 ) as fields_obj
             from bundle.repository
-                cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
+                cross join lateral jsonb_array_elements(stage_fields_to_change) field_id
             where id = _repository_id
             group by 1
         ),

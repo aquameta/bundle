@@ -182,13 +182,13 @@ $$ language sql;
 --
 
 create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements(stage_rows_to_add)::meta.row_id
+    select id, jsonb_array_elements(stage_rows_to_add)
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_add as
-select id as repository_id, jsonb_array_elements(stage_rows_to_add)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_to_add) as row_id
 from bundle.repository;
 
 
@@ -197,13 +197,13 @@ from bundle.repository;
 --
 
 create or replace function _get_stage_rows_to_remove( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id
+    select id, jsonb_array_elements(stage_rows_to_remove)
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_remove as
-select id as repository_id, jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_to_remove) as row_id
 from bundle.repository;
 
 
@@ -212,14 +212,14 @@ from bundle.repository;
 --
 
 create or replace function _get_stage_fields_to_change( _repository_id uuid ) returns setof meta.field_id as $$
-    select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
+    select jsonb_array_elements(stage_fields_to_change)
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_field_to_change as
-    -- select id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
-select id as repository_id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
+    -- select id, jsonb_array_elements(stage_fields_to_change)
+select id as repository_id, jsonb_array_elements(stage_fields_to_change) as field_id
 from bundle.repository;
 
 

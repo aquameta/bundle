@@ -278,7 +278,7 @@ begin
       and c.contype = 'p';
 
     if pk_column_names is null then
-        raise exception 'No primary key found for table %.%', schema_name, table_name;
+        raise exception 'No primary key found for table %.%', _relation_id->>'schema_name', _relation_id->>'name';
     end if;
 
     return pk_column_names;

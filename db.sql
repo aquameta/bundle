@@ -298,7 +298,7 @@ $$ language plpgsql;
 /*
 create or replace function _get_db_stage_fields_to_change( _repository_id uuid ) returns setof field_hash as $$
     with fields as
-        select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
+        select jsonb_array_elements(stage_fields_to_change) as field_id
         from bundle.repository where id = _repository_id
     select
         field_id, bundle.hash(meta.field_id_literal_value(field_id))
@@ -311,10 +311,10 @@ $$ language sql;
 create or replace function _get_db_stage_fields_to_change(_repository_id uuid, relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
     select
-        field_id::meta.field_id,
-        bundle.hash(meta.field_id_literal_value(field_id::meta.field_id)) as field_hash
+        field_id,
+        bundle.hash(meta.field_id_literal_value(field_id)) as field_hash
     from (
-        select jsonb_array_elements_text(stage_fields_to_change) as field_id
+        select jsonb_array_elements(stage_fields_to_change) as field_id
         from bundle.repository
         where id = _repository_id
     ) as fields
