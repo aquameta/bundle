@@ -48,7 +48,7 @@ test:
 	@echo "==> Deploying full aquameta stack to $(TEST_DB)..."
 	cd $(AQUAMETA) && make deploy DB=$(TEST_DB)
 	@echo "==> Running $(EXTENSION) tests (stopping on first error)..."
-	@if cd test && cat $(notdir $(TEST_FILES)) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(TEST_DB); then \
+	@if cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(TEST_DB); then \
 		echo "==> Tests completed successfully, cleaning up..."; \
 	else \
 		echo "==> Tests failed, cleaning up..."; \
@@ -67,7 +67,7 @@ test-all:
 	@echo "==> Deploying full aquameta stack to $(TEST_DB)..."
 	cd $(AQUAMETA) && make deploy DB=$(TEST_DB)
 	@echo "==> Running $(EXTENSION) tests (continuing on errors)..."
-	@cd test && cat $(notdir $(TEST_FILES)) | psql $(PSQL_FLAGS) $(TEST_DB) || true
+	@cat $(TEST_FILES) | psql $(PSQL_FLAGS) $(TEST_DB) || true
 	@echo "==> Tests completed, cleaning up..."
 	@dropdb $(TEST_DB)
 	@echo "==> Temporary database $(TEST_DB) dropped."
@@ -83,7 +83,7 @@ test-dirty:
 	@echo "==> Deploying full aquameta stack to $(TEST_DB)..."
 	cd $(AQUAMETA) && make deploy DB=$(TEST_DB)
 	@echo "==> Running $(EXTENSION) tests..."
-	cd test && cat $(notdir $(TEST_FILES)) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(TEST_DB)
+	cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(TEST_DB)
 	@echo "==> Tests completed. Database $(TEST_DB) preserved for inspection."
 
 # Testing against existing database (requires DB parameter)
@@ -93,7 +93,7 @@ test-db:
 		exit 1; \
 	fi
 	@echo "==> Running $(EXTENSION) tests against existing database $(DB)..."
-	cd test && cat $(notdir $(TEST_FILES)) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(DB)
+	cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(DB)
 	@echo "==> Tests completed."
 
 # Deploy to database (requires DB parameter)
