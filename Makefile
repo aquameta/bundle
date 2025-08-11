@@ -20,7 +20,7 @@ PSQL_FLAGS ?=
 include files.mk
 
 # Declare phony targets (commands, not files)
-.PHONY: extension standalone all test test-all test-dirty test-db deploy clean help
+.PHONY: extension standalone all test test-all test-dirty test-db deploy redeploy clean help
 
 # Build targets - default is extension
 extension: $(DATA)
@@ -104,7 +104,18 @@ deploy: standalone
 	fi
 	@echo "==> Deploying $(EXTENSION) to database $(DB)..."
 	createdb $(DB) || echo "Database $(DB) already exists"
-	cat $(EXTENSION)--$(EXT_VERSION)--standalone.sql | psql $(DB)
+	cat $(EXTENSION)--$(EXT_VERSION)--standalone.sql | psql $(PSQL_FLAGS) $(DB)
+
+# Redeploy (for development - drops and recreates bundle schema)
+redeploy: standalone
+	@if [ -z "$(DB)" ]; then \
+		echo "Error: DB parameter required. Usage: make redeploy DB=mydb"; \
+		exit 1; \
+	fi
+	@echo "==> Redeploying $(EXTENSION) to database $(DB) (dropping existing schema)..."
+	@psql $(PSQL_FLAGS) $(DB) -c "DROP SCHEMA IF EXISTS $(EXTENSION) CASCADE;" 2>/dev/null || echo "Schema dropped"
+	cat $(EXTENSION)--$(EXT_VERSION)--standalone.sql | psql $(PSQL_FLAGS) $(DB)
+	@echo "==> $(EXTENSION) redeployed successfully!"
 
 # Help target
 help:
@@ -125,6 +136,7 @@ help:
 	@echo ""
 	@echo "Deploy:"
 	@echo "  deploy DB=name     - Deploy to specified database"
+	@echo "  redeploy DB=name   - Redeploy (drops schema first, for development)"
 	@echo "  clean              - Clean generated files"
 	@echo ""
 	@echo ""
