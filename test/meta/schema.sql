@@ -9,12 +9,12 @@ select bundle.create_repository('test.schema.versioning');
 
 -- Test 1: Create schema first, then track it for versioning
 -- Create the schema via meta.schema insert (schema-as-data)
-insert into meta.schema (name, id) 
+insert into meta.schema (name, id)
 values ('test_versioned_schema', meta.make_schema_id('test_versioned_schema'));
 
 -- Now track the created schema row for versioning
 select lives_ok(
-    $$select bundle.track_untracked_row('test.schema.versioning', 
+    $$select bundle.track_untracked_row('test.schema.versioning',
         meta.make_row_id('meta', 'schema', 'id', meta.make_schema_id('test_versioned_schema')::text))$$,
     'Can track a schema row for versioning'
 );
@@ -26,7 +26,7 @@ select ok(
 );
 
 -- Stage and commit the schema creation
-select bundle.stage_tracked_row('test.schema.versioning', 
+select bundle.stage_tracked_row('test.schema.versioning',
     meta.make_row_id('meta', 'schema', 'id', meta.make_schema_id('test_versioned_schema')::text));
 select bundle.commit('test.schema.versioning', 'Add test_versioned_schema', 'Test User', 'test@example.com');
 
@@ -37,8 +37,8 @@ select ok(
 );
 
 -- Test 2: Version a schema rename operation
-update meta.schema 
-set name = 'test_renamed_schema' 
+update meta.schema
+set name = 'test_renamed_schema'
 where name = 'test_versioned_schema';
 
 -- Verify rename worked in PostgreSQL
@@ -53,7 +53,7 @@ select ok(
 );
 
 -- Stage and commit the rename
-select bundle.stage_tracked_row('test.schema.versioning', 
+select bundle.stage_tracked_row('test.schema.versioning',
     meta.make_row_id('meta', 'schema', 'id', meta.make_schema_id('test_renamed_schema')::text));
 select bundle.commit('test.schema.versioning', 'Rename schema to test_renamed_schema', 'Test User', 'test@example.com');
 
@@ -96,7 +96,7 @@ select ok(
 
 -- Test commit messages are preserved
 select set_has(
-    $$select message from bundle.commit 
+    $$select message from bundle.commit
       where repository_id = bundle.repository_id('test.schema.versioning')$$,
     $$VALUES ('Add test_versioned_schema'), ('Rename schema to test_renamed_schema'), ('Delete renamed schema')$$,
     'All schema change commit messages preserved'

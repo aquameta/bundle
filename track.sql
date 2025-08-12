@@ -86,7 +86,7 @@ create or replace function _untrack_tracked_row( _repository_id uuid, _row_id me
         tracked_row_id uuid;
         c integer;
     begin
-        
+
         select count(*) into c from bundle.repository where id = _repository_id and tracked_rows_added @> jsonb_build_array(_row_id);
         if c < 1 then
             raise exception 'Row with row_id % cannot be removed because it is not tracked by supplied repository.', _row_id::text;

@@ -107,7 +107,7 @@ begin
 
         -- compare, add to diff if different
         if _count != old_count then
-            diff := diff operator(public.||) ((rel.alias) || '=>' || _count - old_count)::public.hstore; 
+            diff := diff operator(public.||) ((rel.alias) || '=>' || _count - old_count)::public.hstore;
         end if;
 
         -- display
