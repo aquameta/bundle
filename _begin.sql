@@ -22,10 +22,9 @@ create extension if not exists pgcrypto schema public;
 -- create extension if not exists pg_stat_statements schema public;
 -- select public.pg_stat_statements_reset();
 
-create extension if not exists meta version '0.5.0';
-create extension if not exists meta_triggers version '0.5.0';
+-- meta is installed directly by run.sh, not as an extension
 
-begin;
+-- begin;
 
 create schema bundle;
 set search_path=bundle;

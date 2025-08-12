@@ -17,7 +17,7 @@ select '------------ stage.sql -----------------------------------------------';
 -- track and stage one row
 do $$
     declare
-        row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
+        row_id meta.row_id := meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
         perform bundle.track_untracked_row(
             'io.pgbundle.unittest',
@@ -39,7 +39,7 @@ $$ language plpgsql;
 select ok(
     (select bundle._is_staged(
         bundle.repository_id('io.pgbundle.unittest'),
-        meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1'))
+        meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', '1'))
      ),
     '_is_staged() finds staged row.'
 );
@@ -47,7 +47,7 @@ select ok(
 select ok(
     (select not bundle._is_staged(
         bundle.repository_id('io.pgbundle.unittest'),
-        meta.row_id('pt', 'periodic_table', 'AtomicNumber', '2'))
+        meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', '2'))
      ),
     '_is_staged() does not find off-stage row.'
 );
@@ -59,7 +59,7 @@ select ok(
 
 select results_eq(
    $$ select row_id::text from bundle._get_stage_rows_to_add(bundle.repository_id('io.pgbundle.unittest')) $$,
-   array['(pt,periodic_table,{AtomicNumber},{1})'],
+   array['{"pk_values": ["1"], "schema_name": "pt", "relation_name": "periodic_table", "pk_column_names": ["AtomicNumber"]}'],
    '_get_stage_rows_to_add() finds staged row'
 );
 
@@ -85,7 +85,7 @@ select results_eq(
 
 do $$
     declare
-        row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
+        row_id meta.row_id := meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
         perform bundle.stage_row_to_remove(
             'io.pgbundle.unittest',
@@ -118,17 +118,17 @@ end; $$ language plpgsql;
 /*
 do $$
     declare
-        row_id meta.row_id := meta.row_id('pt', 'periodic_table', 'AtomicNumber', '1');
+        row_id meta.row_id := meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', '1');
     begin
         perform bundle.track_untracked_row(
             'io.pgbundle.unittest',
-            meta.row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text)
+            meta.make_row_id('pt', 'periodic_table', 'AtomicNumber', "AtomicNumber"::text)
         )
         from pt.periodic_table where "AtomicNumber" = 1;
 
         perform bundle.stage_tracked_row(
             'io.pgbundle.unittest',
-            meta.row_id('pt','periodic_table','AtomicNumber', "AtomicNumber"::text)
+            meta.make_row_id('pt','periodic_table','AtomicNumber', "AtomicNumber"::text)
         ) from pt.periodic_table where "AtomicNumber" = 1;
 
     end;
@@ -139,15 +139,15 @@ $$ language plpgsql;
 /*
 -- fails because row not tracked
 
-select bundle.stage_tracked_row('io.pgbundle.unittest', meta.row_id('shakespeare', 'character', 'id', id::text))
+select bundle.stage_tracked_row('io.pgbundle.unittest', meta.make_row_id('shakespeare', 'character', 'id', id::text))
     from shakespeare.character where name ilike 'a%' order by name limit 1;
 */
 -----------------------------------------------------------
 /*
 -- stage again
 select throws_ok(
-    $$ select bundle.stage_tracked_row('io.pgbundle.unittest', meta.row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
-    format('Row with row_id %s is already staged.', meta.row_id('shakespeare', 'character', 'id', 'Aaron')),
+    $$ select bundle.stage_tracked_row('io.pgbundle.unittest', meta.make_row_id('shakespeare', 'character', 'id', id::text)) from shakespeare.character where name ilike 'a%' order by name limit 1; $$,
+    format('Row with row_id %s is already staged.', meta.make_row_id('shakespeare', 'character', 'id', 'Aaron')),
     'Staging an already staged row throws exception'
 );
 */

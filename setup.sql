@@ -9,7 +9,7 @@ do $$
             -- ignore all internal tables, except for ignore rules, which are version-controlled.
             select * from meta.table where schema_name = 'bundle' and name not like 'ignored%'
         loop
-            insert into bundle.ignored_table(relation_id) values (meta.relation_id(r.schema_name, r.name));
+            insert into bundle.ignored_table(relation_id) values (meta.make_relation_id(r.schema_name, r.name));
         end loop;
 
         -- ignore system catalogs, pg_temp*, pg_toast*
@@ -19,8 +19,21 @@ do $$
                     or name like 'pg_toast%'
                     or name like 'pg_temp%'
         loop
-            insert into bundle.ignored_schema(schema_id) values (meta.schema_id(r.name));
+            insert into bundle.ignored_schema(schema_id) values (meta.make_schema_id(r.name));
         end loop;
+    end;
+$$ language plpgsql;
+
+
+-- add meta catalog views to trackable nontable relations for schema-as-data version control
+do $$
+    begin
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'schema'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'table'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'column'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'view'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'function'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'foreign_key'), '{id}'::text[]);
     end;
 $$ language plpgsql;
 
@@ -29,8 +42,8 @@ $$ language plpgsql;
 do $$
     begin
         perform bundle.create_repository('io.bundle.core.repository');
-        perform bundle.track_untracked_row('io.bundle.core.repository', meta.row_id('bundle','ignored_table','id',id::text)) from bundle.ignored_table;
-        perform bundle.track_untracked_row('io.bundle.core.repository', meta.row_id('bundle','ignored_schema','id',id::text)) from bundle.ignored_schema;
+        perform bundle.track_untracked_row('io.bundle.core.repository', meta.make_row_id('bundle','ignored_table','id',id::text)) from bundle.ignored_table;
+        perform bundle.track_untracked_row('io.bundle.core.repository', meta.make_row_id('bundle','ignored_schema','id',id::text)) from bundle.ignored_schema;
 
         perform bundle.stage_tracked_rows('io.bundle.core.repository');
         perform bundle.commit('io.bundle.core.repository', 'Ignore rules.', 'Eric Hanson', 'eric@aquameta.com');

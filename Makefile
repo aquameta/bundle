@@ -1,11 +1,8 @@
-EXTENSION = pg_bundle
-EXTVERSION = 0.6.0
-DATA = $(EXTENSION)--$(EXTVERSION).sql
-PG_CONFIG = pg_config
+# Extension identity
+EXTENSION = bundle
 
-$(EXTENSION)--$(EXTVERSION).sql: util.sql hash.sql rowset.sql repository.sql db.sql trackable.sql track.sql stage.sql commit.sql checkout.sql import-export.sql remote.sql merge.sql status.sql setup.sql extension.sql
-	rm -f $@
-	cat $^ > $@
+# Include centralized file list (defines SQL_FILES_STANDALONE, SQL_FILES_EXTENSION, TEST_FILES)
+include files.mk
 
-PGXS := $(shell $(PG_CONFIG) --pgxs)
-include $(PGXS)
+# Include common build logic
+include ../common.mk

@@ -1,1 +1,0 @@
-cat init.sql util.sql hash.sql rowset.sql repository.sql db.sql trackable.sql track.sql stage.sql commit.sql checkout.sql import-export.sql remote.sql merge.sql status.sql setup.sql end.sql > bundle--0.6.0.sql

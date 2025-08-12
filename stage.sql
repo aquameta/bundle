@@ -23,7 +23,7 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
         end if;
 
         -- check that it's not already staged
-        if meta.row_exists(meta.row_id('bundle','stage_row_to_add', 'row_id', _row_id::text)) then
+        if meta.row_exists(meta.make_row_id('bundle','stage_row_to_add', 'row_id', _row_id::text)) then
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
 
@@ -34,7 +34,7 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
 
         -- stage
         update bundle.repository
-        set stage_rows_to_add = stage_rows_to_add || to_jsonb(_row_id::text)
+        set stage_rows_to_add = stage_rows_to_add || _row_id
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -79,7 +79,7 @@ create or replace function _stage_row_to_remove( _repository_id uuid, _row_id me
 
         -- stage
         update bundle.repository
-        set stage_rows_to_remove = stage_rows_to_remove || to_jsonb(_row_id::text)
+        set stage_rows_to_remove = stage_rows_to_remove || _row_id
         where id = _repository_id;
     end;
 $$ language plpgsql;
@@ -139,7 +139,7 @@ create or replace function _stage_field_to_change( _repository_id uuid, _field_i
         -- TODO: assert field is changed and part of repo
         update bundle.repository
         -- obj approach: set stage_fields_to_change = stage_fields_to_change || jsonb_build_object(_field_id::text, meta.field_id_literal_value(_field_id))
-        set stage_fields_to_change = stage_fields_to_change || to_jsonb(_field_id::text)
+        set stage_fields_to_change = stage_fields_to_change || _field_id
         where id = _repository_id;
         return true;
     end;
@@ -182,13 +182,13 @@ $$ language sql;
 --
 
 create or replace function _get_stage_rows_to_add( _repository_id uuid ) returns table (repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id
+    select id, jsonb_array_elements(stage_rows_to_add)
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_add as
-select id as repository_id, jsonb_array_elements_text(stage_rows_to_add)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_to_add) as row_id
 from bundle.repository;
 
 
@@ -197,13 +197,13 @@ from bundle.repository;
 --
 
 create or replace function _get_stage_rows_to_remove( _repository_id uuid ) returns table(repository_id uuid, row_id meta.row_id) as $$
-    select id, jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id
+    select id, jsonb_array_elements(stage_rows_to_remove)
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_row_to_remove as
-select id as repository_id, jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id as row_id
+select id as repository_id, jsonb_array_elements(stage_rows_to_remove) as row_id
 from bundle.repository;
 
 
@@ -212,14 +212,14 @@ from bundle.repository;
 --
 
 create or replace function _get_stage_fields_to_change( _repository_id uuid ) returns setof meta.field_id as $$
-    select jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
+    select jsonb_array_elements(stage_fields_to_change)
     from bundle.repository
     where id = _repository_id;
 $$ language sql;
 
 create view stage_field_to_change as
-    -- select id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id
-select id as repository_id, jsonb_array_elements_text(stage_fields_to_change)::meta.field_id as field_id
+    -- select id, jsonb_array_elements(stage_fields_to_change)
+select id as repository_id, jsonb_array_elements(stage_fields_to_change) as field_id
 from bundle.repository;
 
 
@@ -230,7 +230,7 @@ from bundle.repository;
 create or replace function _is_staged( repository_id uuid, row_id meta.row_id ) returns boolean as $$
 begin
     return (
-        select jsonb_array_elements_text(stage_rows_to_add) = row_id::text
+        select stage_rows_to_add @> jsonb_build_array(row_id)
         from bundle.repository
         where id = repository_id
     );
@@ -250,14 +250,14 @@ create or replace function _get_tracked_rows( _repository_id uuid ) returns seto
     -- ...plus newly tracked rows
     union
 
-    select jsonb_array_elements_text(r.tracked_rows_added)::meta.row_id
+    select jsonb_array_elements(r.tracked_rows_added)::meta.row_id
     from bundle.repository r
     where r.id = _repository_id
 
     -- plus staged rows
     union
 
-    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id
+    select jsonb_array_elements(r.stage_rows_to_add)::meta.row_id
     from bundle.repository r
     where r.id = _repository_id
 $$ language sql;
@@ -285,7 +285,7 @@ create or replace function _get_offstage_deleted_rows( _repository_id uuid ) ret
     except
 
     -- minus those that have been staged for deletion
-    select jsonb_array_elements_text(r.stage_rows_to_remove)::meta.row_id
+    select jsonb_array_elements(r.stage_rows_to_remove)::meta.row_id
     from bundle.repository r where r.id = _repository_id;
 $$ language sql;
 
@@ -324,7 +324,7 @@ create or replace function _get_offstage_updated_fields(
     -- and it's not on the stage
     and sfc.field_id is null
     -- relation filter
-    and (relation_id_filter is null or (hcf.field_id)::meta.relation_id = relation_id_filter)
+    and (relation_id_filter is null or meta.field_id_to_relation_id(hcf.field_id) = relation_id_filter)
 
 /*
     except
@@ -348,7 +348,7 @@ create or replace function _get_stage_rows( _repository_id uuid ) returns setof 
         except
 
         -- ...minus deleted rows
-        select jsonb_array_elements_text(stage_rows_to_remove)::meta.row_id as row_id
+        select jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
         from bundle.repository r
         where r.id = _repository_id
 
@@ -357,7 +357,7 @@ create or replace function _get_stage_rows( _repository_id uuid ) returns setof 
     union
 
     -- ...plus staged rows
-    select jsonb_array_elements_text(r.stage_rows_to_add)::meta.row_id, true as new_row
+    select jsonb_array_elements(r.stage_rows_to_add)::meta.row_id, true as new_row
     from bundle.repository r
     where r.id = _repository_id
 
@@ -433,7 +433,7 @@ create or replace function _stage_updated_fields( _repository_id uuid, relation_
         with updated_fields as (
             select jsonb_agg(f.field_id::text) field
             from bundle._get_offstage_updated_fields(_repository_id) f
-            where (relation_id_filter is null or f.field_id::meta.relation_id = relation_id_filter)
+            where (relation_id_filter is null or meta.field_id_to_relation_id(f.field_id) = relation_id_filter)
         )
         update bundle.repository
         set stage_fields_to_change = stage_fields_to_change || updated_fields.field
@@ -465,7 +465,7 @@ create or replace function _stage_deleted_rows( _repository_id uuid, relation_id
 
         update bundle.repository
         set stage_rows_to_remove = stage_rows_to_remove || (
-            select to_jsonb(array_agg(r::text)) lateral from bundle._get_offstage_deleted_rows (_repository_id, relation_id_filter) r
+            select to_jsonb(array_agg(r)) lateral from bundle._get_offstage_deleted_rows (_repository_id, relation_id_filter) r
         )
         where id = _repository_id;
         raise notice '_stage_deleted_rows() ... %s', bundle.clock_diff(start_time);

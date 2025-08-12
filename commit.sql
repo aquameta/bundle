@@ -16,6 +16,44 @@ create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof
 $$ language sql;
 
 
+--
+-- commit_log()
+--
+
+create or replace function _commit_log(_repository_id uuid)
+returns table(
+    "position" integer,
+    commit_id uuid,
+    message text,
+    author_name text,
+    author_email text,
+    commit_time timestamptz
+) as $$
+    select
+        a.position,
+        a.commit_id,
+        c.message,
+        c.author_name,
+        c.author_email,
+        c.commit_time
+    from bundle._get_commit_ancestry(bundle._head_commit_id(_repository_id)) a
+    join bundle.commit c on c.id = a.commit_id
+    order by a.position;
+$$ language sql stable;
+
+create or replace function commit_log(repository_name text)
+returns table(
+    "position" integer,
+    commit_id uuid,
+    message text,
+    author_name text,
+    author_email text,
+    commit_time timestamptz
+) as $$
+    select * from bundle._commit_log(bundle.repository_id(repository_name));
+$$ language sql stable;
+
+
 create or replace function __commit_stage_blobs( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns void as $$
 begin
         --
@@ -65,12 +103,12 @@ begin
 
         -- write sorted stage_rows_to_add to commit.jsonb_rows
         update bundle.commit
-        set jsonb_rows = (select jsonb_agg(r.row_id_text) from (
-                select row_id_text
+        set jsonb_rows = (select jsonb_agg(r.row_id) from (
+                select row_id
                 from bundle.repository
-                    cross join lateral jsonb_array_elements_text(stage_rows_to_add) row_id_text
+                    cross join lateral jsonb_array_elements(stage_rows_to_add) row_id
                 where id=_repository_id
-                order by array_position(commit_relations, row_id_text::meta.row_id::meta.relation_id)
+                order by array_position(commit_relations, meta.row_id_to_relation_id(row_id::meta.row_id))
             ) r
         ) where id = new_commit_id;
 
@@ -108,13 +146,13 @@ begin
         update bundle.commit
         set jsonb_rows = coalesce(( -- catch nulls
             select jsonb_agg(elem) from (
-                select elem from jsonb_array_elements_text(jsonb_rows) a(elem)
+                select elem from jsonb_array_elements(jsonb_rows) a(elem)
                 left join (
-                    select jsonb_array_elements_text(stage_rows_to_remove)
+                    select jsonb_array_elements(stage_rows_to_remove)
                     from bundle.repository where id=_repository_id
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
-                order by array_position(commit_relations, elem::meta.row_id::meta.relation_id)
+                order by array_position(commit_relations, meta.row_id_to_relation_id(elem::meta.row_id))
             ) f
         ), '[]'::jsonb)
         where id = new_commit_id;
@@ -168,24 +206,24 @@ begin
         stmt := format('
 (
     with row_ids as (
-        select row_id_text, row_id_text::meta.row_id as row_id
+        select row_id, row_id::meta.row_id as row_id_typed
         from bundle.commit c
-        cross join lateral jsonb_array_elements_text(c.jsonb_rows) row_id_text
+        cross join lateral jsonb_array_elements(c.jsonb_rows) row_id
         where c.id=%L
-            and (row_id_text::meta.row_id).relation_name=%L
+            and row_id::meta.row_id->>''relation_name''=%L
     )
-    select row_ids.row_id_text, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
+    select row_ids.row_id, bundle.row_to_jsonb_hash_obj(x, true) as row_obj
         from %I.%I x
-            join row_ids on %s -- x.id::text = (row_ids.row_id).pk_values[1]
+            join row_ids on %s -- x.id::text = (row_ids.row_id_typed).pk_values[1]
 )',
             new_commit_id,
-            (rel).name,
-            (rel).schema_name,
-            (rel).name,
+            rel->>'name',
+            rel->>'schema_name',
+            rel->>'name',
             meta._pk_stmt(
                 bundle._get_trackable_relation_pk(rel),
                 null,
-                'x.%1$I::text = (row_ids.row_id).pk_values[%3$L]'
+                'x.%1$I::text = (row_ids.row_id)->''pk_values''->>(%3$L-1)'
             )
         );
 
@@ -199,7 +237,7 @@ begin
     -- the aggregate of all the above stmts (one per relation) into a single jsonb object
 
     stmt := format('update bundle.commit c set jsonb_fields = coalesce(
-        (select jsonb_object_agg (row_id_text, row_obj) from (
+        (select jsonb_object_agg (row_id::text, row_obj) from (
 
 
 %s
@@ -242,13 +280,13 @@ begin
 
         with fields as (
             select
-                field_text::meta.field_id::meta.row_id as row_id,
+                meta.field_id_to_row_id(field_id) as row_id,
                 jsonb_object_agg(
-                    (field_text::meta.field_id).column_name,
-                    bundle.hash(meta.field_id_literal_value(field_text::meta.field_id)) -- optimize?
+                    field_id->>'column_name',
+                    bundle.hash(meta.field_id_literal_value(field_id)) -- optimize?
                 ) as fields_obj
             from bundle.repository
-                cross join lateral jsonb_array_elements_text(stage_fields_to_change) field_text
+                cross join lateral jsonb_array_elements(stage_fields_to_change) field_id
             where id = _repository_id
             group by 1
         ),
@@ -291,7 +329,7 @@ declare
     first_commit boolean := false;
     start_time timestamp;
 begin
-    raise notice 'commit()';
+    raise notice 'commit() - %', bundle._repository_name(_repository_id);
 
     start_time := clock_timestamp();
 
@@ -398,7 +436,7 @@ Approach:
         - Are those rows in this bundle?
     - else (it's data)
         - containing table, columns, and foreign keys
-            - tables: select distinct row_id::meta.relation_id
+            - tables: select distinct meta.row_id_to_relation_id(row_id)
             - columns: select .....?
         - fk_dependency_rows:  What rows does it foreign key to?
             - boolean external: Are those rows in this bundle?
@@ -435,9 +473,9 @@ declare
 begin
     -- edges
     raise debug '  - Building edges @ % ...', clock_timestamp() - start_time;
-    select array_agg(distinct row(r,meta.relation_id(fk.to_schema_name, fk.to_table_name))::bundle.schema_edge)
+    select array_agg(distinct row(r,meta.make_relation_id(fk.to_schema_name, fk.to_table_name))::bundle.schema_edge)
     from meta.foreign_key fk
-        join unnest(_relations) r on r.schema_name = fk.schema_name and r.name = fk.table_name
+        join unnest(_relations) r on r->>'schema_name' = fk.schema_name and r->>'name' = fk.table_name
     into edges;
 
 
@@ -495,7 +533,7 @@ declare
 begin
     -- stage_row relations as jsonb object keys, value is empty array
     raise notice '  - Building stage_row_relations @ % ...', clock_timestamp() - start_time;
-    select distinct jsonb_object_agg(row_id::meta.relation_id::text, '[]'::jsonb)
+    select distinct jsonb_object_agg(meta.row_id_to_relation_id(row_id)::text, '[]'::jsonb)
         from bundle.stage_row_to_add
         where repository_id =  _repository_id
     into stage_row_relations;
@@ -520,7 +558,7 @@ begin
                     'relation_id', r.rel_key,
                     'from_column_ids', r.from_column_ids,
                     'to_column_ids', r.to_column_ids,
-                    'to_relation_id', (r.to_column_ids[1])::meta.relation_id::text
+                    'to_relation_id', meta.row_id_to_relation_id(r.to_column_ids[1])::text
                 )
             );
         end if;
