@@ -25,6 +25,19 @@ do $$
 $$ language plpgsql;
 
 
+-- add meta catalog views to trackable nontable relations for schema-as-data version control
+do $$
+    begin
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'schema'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'table'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'column'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'view'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'function'), '{id}'::text[]);
+        perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'foreign_key'), '{id}'::text[]);
+    end;
+$$ language plpgsql;
+
+
 -- track the ignore rules in the core bundle repo
 do $$
     begin

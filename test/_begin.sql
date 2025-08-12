@@ -33,7 +33,7 @@ end; $$ language plpgsql;
 set search_path=public;
 select '------------- unit/init.sql ------------------------------------------';
 set search_path=public;
-\i extra/periodic/data.sql
+\i /home/eric/dev/aquameta/0.6/core/bundle/test/extra/periodic/data.sql -- FIXME
 
 create schema unittest;
 select no_plan();

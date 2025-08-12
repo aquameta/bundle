@@ -16,6 +16,44 @@ create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof
 $$ language sql;
 
 
+--
+-- commit_log()
+--
+
+create or replace function _commit_log(_repository_id uuid)
+returns table(
+    "position" integer,
+    commit_id uuid,
+    message text,
+    author_name text,
+    author_email text,
+    commit_time timestamptz
+) as $$
+    select
+        a.position,
+        a.commit_id,
+        c.message,
+        c.author_name,
+        c.author_email,
+        c.commit_time
+    from bundle._get_commit_ancestry(bundle._head_commit_id(_repository_id)) a
+    join bundle.commit c on c.id = a.commit_id
+    order by a.position;
+$$ language sql stable;
+
+create or replace function commit_log(repository_name text)
+returns table(
+    "position" integer,
+    commit_id uuid,
+    message text,
+    author_name text,
+    author_email text,
+    commit_time timestamptz
+) as $$
+    select * from bundle._commit_log(bundle.repository_id(repository_name));
+$$ language sql stable;
+
+
 create or replace function __commit_stage_blobs( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns void as $$
 begin
         --
@@ -291,7 +329,7 @@ declare
     first_commit boolean := false;
     start_time timestamp;
 begin
-    raise notice 'commit()';
+    raise notice 'commit() - %', bundle._repository_name(_repository_id);
 
     start_time := clock_timestamp();
 

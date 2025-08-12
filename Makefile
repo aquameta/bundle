@@ -5,8 +5,7 @@ DATA = $(EXTENSION)--$(EXT_VERSION).sql
 PG_CONFIG = pg_config
 
 # Database configuration (user-configurable)
-DB ?= $(EXTENSION)_dev
-TEST_DB ?= tmp_$(EXTENSION)_test
+DB ?= tmp_$(EXTENSION)_test
 AQUAMETA ?= ../..
 
 # Global psql flags (for debugging, remote connections, etc.)
@@ -39,52 +38,70 @@ $(DATA): $(SQL_FILES_EXTENSION)
 
 # Testing with temporary database (default - fail fast)
 test:
-	@echo "==> Testing $(EXTENSION) with temporary database $(TEST_DB) (fail fast)..."
-	@if psql -lqt | cut -d \| -f 1 | grep -qw $(TEST_DB); then \
-		echo "ERROR: Temporary database $(TEST_DB) already exists. Please drop it or specify a different name."; \
-		echo "       Usage: make test TEST_DB=different_name"; \
-		exit 1; \
+	@echo "==> Testing $(EXTENSION) with temporary database $(DB) (fail fast)..."
+	@if psql -lqt | cut -d \| -f 1 | grep -qw $(DB); then \
+		if [ "$(FORCE)" = "1" ]; then \
+			echo "==> FORCE=1: Dropping existing database $(DB)..."; \
+			dropdb -f $(DB); \
+		else \
+			echo "ERROR: Temporary database $(DB) already exists. Please drop it or specify a different name."; \
+			echo "       Usage: make test DB=different_name"; \
+			echo "       Or use: make test DB=$(DB) FORCE=1 to drop existing database"; \
+			exit 1; \
+		fi \
 	fi
-	@echo "==> Deploying full aquameta stack to $(TEST_DB)..."
-	cd $(AQUAMETA) && make deploy DB=$(TEST_DB)
+	@echo "==> Deploying full aquameta stack to $(DB)..."
+	cd $(AQUAMETA) && make deploy DB=$(DB)
 	@echo "==> Running $(EXTENSION) tests (stopping on first error)..."
-	@if cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(TEST_DB); then \
+	@if cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(DB); then \
 		echo "==> Tests completed successfully, cleaning up..."; \
 	else \
 		echo "==> Tests failed, cleaning up..."; \
 	fi
-	@dropdb $(TEST_DB)
-	@echo "==> Temporary database $(TEST_DB) dropped."
+	@dropdb -f $(DB)
+	@echo "==> Temporary database $(DB) dropped."
 
 # Testing with temporary database (run all tests regardless of failures)
 test-all:
-	@echo "==> Testing $(EXTENSION) with temporary database $(TEST_DB) (run all)..."
-	@if psql -lqt | cut -d \| -f 1 | grep -qw $(TEST_DB); then \
-		echo "ERROR: Temporary database $(TEST_DB) already exists. Please drop it or specify a different name."; \
-		echo "       Usage: make test-all TEST_DB=different_name"; \
-		exit 1; \
+	@echo "==> Testing $(EXTENSION) with temporary database $(DB) (run all)..."
+	@if psql -lqt | cut -d \| -f 1 | grep -qw $(DB); then \
+		if [ "$(FORCE)" = "1" ]; then \
+			echo "==> FORCE=1: Dropping existing database $(DB)..."; \
+			dropdb -f $(DB); \
+		else \
+			echo "ERROR: Temporary database $(DB) already exists. Please drop it or specify a different name."; \
+			echo "       Usage: make test-all DB=different_name"; \
+			echo "       Or use: make test-all DB=$(DB) FORCE=1 to drop existing database"; \
+			exit 1; \
+		fi \
 	fi
-	@echo "==> Deploying full aquameta stack to $(TEST_DB)..."
-	cd $(AQUAMETA) && make deploy DB=$(TEST_DB)
+	@echo "==> Deploying full aquameta stack to $(DB)..."
+	cd $(AQUAMETA) && make deploy DB=$(DB)
 	@echo "==> Running $(EXTENSION) tests (continuing on errors)..."
-	@cat $(TEST_FILES) | psql $(PSQL_FLAGS) $(TEST_DB) || true
+	@cat $(TEST_FILES) | psql $(PSQL_FLAGS) $(DB) || true
 	@echo "==> Tests completed, cleaning up..."
-	@dropdb $(TEST_DB)
-	@echo "==> Temporary database $(TEST_DB) dropped."
+	@dropdb -f $(DB)
+	@echo "==> Temporary database $(DB) dropped."
 
 # Testing with temporary database (keep database for inspection)  
 test-dirty:
-	@echo "==> Testing $(EXTENSION) with temporary database $(TEST_DB) (dirty mode)..."
-	@if psql -lqt | cut -d \| -f 1 | grep -qw $(TEST_DB); then \
-		echo "ERROR: Temporary database $(TEST_DB) already exists. Please drop it or specify a different name."; \
-		echo "       Usage: make test-dirty TEST_DB=different_name"; \
-		exit 1; \
+	@echo "==> Testing $(EXTENSION) with temporary database $(DB) (dirty mode)..."
+	@if psql -lqt | cut -d \| -f 1 | grep -qw $(DB); then \
+		if [ "$(FORCE)" = "1" ]; then \
+			echo "==> FORCE=1: Dropping existing database $(DB)..."; \
+			dropdb -f $(DB); \
+		else \
+			echo "ERROR: Temporary database $(DB) already exists. Please drop it or specify a different name."; \
+			echo "       Usage: make test-dirty DB=different_name"; \
+			echo "       Or use: make test-dirty DB=$(DB) FORCE=1 to drop existing database"; \
+			exit 1; \
+		fi \
 	fi
-	@echo "==> Deploying full aquameta stack to $(TEST_DB)..."
-	cd $(AQUAMETA) && make deploy DB=$(TEST_DB)
+	@echo "==> Deploying full aquameta stack to $(DB)..."
+	cd $(AQUAMETA) && make deploy DB=$(DB)
 	@echo "==> Running $(EXTENSION) tests..."
-	cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(TEST_DB)
-	@echo "==> Tests completed. Database $(TEST_DB) preserved for inspection."
+	cat $(TEST_FILES) | psql $(PSQL_FLAGS) -v ON_ERROR_STOP=1 $(DB)
+	@echo "==> Tests completed. Database $(DB) preserved for inspection."
 
 # Testing against existing database (requires DB parameter)
 test-db:
@@ -131,7 +148,7 @@ help:
 	@echo "  test-dirty         - Same as test but keep database for inspection"
 	@echo "  test-db DB=name    - Run tests against existing database"
 	@echo "  Flags:"
-	@echo "      TEST_DB=name       - Temporary database name (default: tmp_$(EXTENSION)_test)"
+	@echo "      DB=name       - Temporary database name (default: tmp_$(EXTENSION)_test)"
 	@echo "      AQUAMETA=path      - Path to Aquameta root for \`make deploy\` (default: ../..)"
 	@echo ""
 	@echo "Deploy:"

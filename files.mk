@@ -1,7 +1,7 @@
 # Centralized SQL file order - single source of truth
 # This file is included by both Makefile and any scripts that need the file list
 
-SQL_FILES_STANDALONE = begin.sql \
+SQL_FILES_STANDALONE = _begin.sql \
     util.sql \
     hash.sql \
     rowset.sql \
@@ -17,9 +17,9 @@ SQL_FILES_STANDALONE = begin.sql \
     merge.sql \
     status.sql \
     setup.sql \
-    end.sql
+    _end.sql
 
-SQL_FILES_EXTENSION = begin_extension.sql \
+SQL_FILES_EXTENSION = _begin_extension.sql \
     util.sql \
     hash.sql \
     rowset.sql \
@@ -35,9 +35,9 @@ SQL_FILES_EXTENSION = begin_extension.sql \
     merge.sql \
     status.sql \
     setup.sql \
-    end_extension.sql
+    _end_extension.sql
 
-TEST_FILES = test/begin.sql \
+TEST_FILES = test/_begin.sql \
     test/util.sql \
     test/hash.sql \
     test/rowset.sql \
@@ -51,4 +51,8 @@ TEST_FILES = test/begin.sql \
     test/remote.sql \
     test/merge.sql \
     test/status.sql \
-    test/end.sql
+    test/meta.sql \
+    test/meta/schema.sql \
+    test/meta/table.sql \
+    test/meta/column.sql \
+    test/_end.sql
