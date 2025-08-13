@@ -145,14 +145,14 @@ begin
         -- rewrite, removing rows and sorting
         update bundle.commit
         set jsonb_rows = coalesce(( -- catch nulls
-            select jsonb_agg(elem) from (
-                select elem from jsonb_array_elements(jsonb_rows) a(elem)
+            select jsonb_agg(f.elem) from (
+                select a.elem from jsonb_array_elements(jsonb_rows) a(elem)
                 left join (
                     select jsonb_array_elements(stage_rows_to_remove)
                     from bundle.repository where id=_repository_id
                 ) x(rem) on x.rem = a.elem
                 where x.rem is null
-                order by array_position(commit_relations, meta.row_id_to_relation_id(elem::meta.row_id))
+                order by array_position(commit_relations, meta.row_id_to_relation_id(a.elem::meta.row_id))
             ) f
         ), '[]'::jsonb)
         where id = new_commit_id;

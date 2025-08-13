@@ -27,7 +27,12 @@ create or replace function _stage_tracked_row( _repository_id uuid, _row_id meta
             raise exception 'Row with row_id % is already staged.', _row_id;
         end if;
 
-        -- TODO: make sure the row is not already in the repository, or tracked by any other repo
+        if exists (
+            select 1 from bundle._get_head_commit_rows(_repository_id)
+            where row_id = _row_id
+        ) then
+            raise exception 'Row with row_id % is already in the repository.', _row_id;
+        end if;
 
         -- untrack
         perform bundle._untrack_tracked_row(_repository_id, _row_id);
@@ -75,7 +80,12 @@ create or replace function _stage_row_to_remove( _repository_id uuid, _row_id me
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
 
-        -- TODO: make sure the row is in the head commit
+        if not exists (
+            select 1 from bundle._get_head_commit_rows(_repository_id)
+            where row_id = _row_id
+        ) then
+            raise exception 'Row with row_id % is not in the head commit.', _row_id;
+        end if;
 
         -- stage
         update bundle.repository
@@ -117,9 +127,12 @@ create or replace function _unstage_row_to_remove( _repository_id uuid, _row_id 
             raise exception 'Row with row_id % is not staged.', _row_id;
         end if;
 
-        -- TODO: fix.
         update bundle.repository
-        set stage_rows_to_remove = stage_rows_to_remove - array[_row_id::text]
+        set stage_rows_to_remove = (
+            select coalesce(jsonb_agg(elem.value), '[]'::jsonb)
+            from jsonb_array_elements(stage_rows_to_remove) elem(value)
+            where elem.value != _row_id::jsonb
+        )
         where id = _repository_id;
     end;
 $$ language plpgsql;

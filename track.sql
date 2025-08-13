@@ -93,9 +93,9 @@ create or replace function _untrack_tracked_row( _repository_id uuid, _row_id me
         end if;
 
         update bundle.repository set tracked_rows_added = (
-            select coalesce(jsonb_agg(elem), '[]'::jsonb)
-            from jsonb_array_elements(tracked_rows_added) elem
-            where elem != _row_id::jsonb
+            select coalesce(jsonb_agg(elem.value), '[]'::jsonb)
+            from jsonb_array_elements(tracked_rows_added) elem(value)
+            where elem.value != _row_id::jsonb
         ) where id = _repository_id;
 
         return tracked_row_id;
@@ -129,7 +129,7 @@ $$ language sql;
 
 create or replace function get_tracked_rows_added( repository_name text )
 returns table(repository_id uuid, row_id meta.row_id) as $$
-    select bundle._get_Tracked_rows_added(
+    select bundle._get_tracked_rows_added(
         bundle.repository_id(repository_name)
     );
 $$ language sql;

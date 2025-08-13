@@ -44,7 +44,18 @@ create table repository (
 -- TODO: stage_commit can't be checkout_commit or head_commit
 
 -- circular fk
-alter table commit add column repository_id uuid /* not null FIXME why is deferrable not working?? */ references repository(id) on delete cascade deferrable initially deferred;
+alter table commit add column repository_id uuid not null references repository(id) on delete cascade deferrable initially deferred;
+
+TODO: put these inline by their respective tables
+-- Performance indexes
+create index repository_tracked_rows_added_idx on bundle.repository using gin (tracked_rows_added);
+create index repository_stage_rows_to_add_idx on bundle.repository using gin (stage_rows_to_add);
+create index repository_stage_rows_to_remove_idx on bundle.repository using gin (stage_rows_to_remove);
+create index repository_stage_fields_to_change_idx on bundle.repository using gin (stage_fields_to_change);
+create index commit_jsonb_rows_idx on bundle.commit using gin (jsonb_rows);
+create index commit_jsonb_fields_idx on bundle.commit using gin (jsonb_fields);
+create index commit_repository_id_idx on bundle.commit (repository_id);
+create index commit_parent_id_idx on bundle.commit (parent_id);
 
 
 /*
