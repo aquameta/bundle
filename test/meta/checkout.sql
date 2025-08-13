@@ -16,8 +16,8 @@ insert into meta.table (schema_name, name) values ('checkout_test', 'test_table'
 select has_table('checkout_test', 'test_table', 'Table created via meta.table');
 
 -- Test 3: Add columns via meta.column
-insert into meta.column (schema_name, relation_name, name, type_name) 
-values 
+insert into meta.column (schema_name, relation_name, name, type_name)
+values
     ('checkout_test', 'test_table', 'id', 'integer'),
     ('checkout_test', 'test_table', 'name', 'text'),
     ('checkout_test', 'test_table', 'created_at', 'timestamp');
@@ -58,9 +58,9 @@ select bundle.stage_tracked_rows('test.checkout.schema_as_data');
 
 -- Commit the schema objects
 select bundle.commit(
-    'test.checkout.schema_as_data', 
-    'Test checkout: schema and table', 
-    'Test User', 
+    'test.checkout.schema_as_data',
+    'Test checkout: schema and table',
+    'Test User',
     'test@example.com'
 );
 

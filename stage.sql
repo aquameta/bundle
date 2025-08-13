@@ -343,7 +343,7 @@ create or replace function _get_stage_rows( _repository_id uuid ) returns setof 
     select row_id, false as new_row from (
         -- head_commit_row
         select hcr.row_id as row_id
-        from bundle._get_head_commit_rows(_repository_id) hcr 
+        from bundle._get_head_commit_rows(_repository_id) hcr
 
         except
 

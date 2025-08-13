@@ -6,7 +6,7 @@
 this would be nice:
 
 
-                    io.bundle.core.repository 
+                    io.bundle.core.repository
              +----------------------------------------+
              | 12 commits                             |
              +----------------------------------------+

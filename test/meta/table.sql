@@ -11,14 +11,14 @@ select bundle.checkout('test.table.versioning');
 
 -- Test 1: Track and version a table creation
 select lives_ok(
-    $$select bundle.track_untracked_row('test.table.versioning', 
+    $$select bundle.track_untracked_row('test.table.versioning',
         meta.make_row_id('meta', 'table', 'id', meta.make_table_id('test_table_versioning', 'users')::text))$$,
     'Can track a table row for versioning'
 );
 
 -- Create the table via meta.table insert (schema-as-data)
-insert into meta.table (schema_name, name, schema_id, id) 
-values ('test_table_versioning', 'users', 
+insert into meta.table (schema_name, name, schema_id, id)
+values ('test_table_versioning', 'users',
         meta.make_schema_id('test_table_versioning'),
         meta.make_table_id('test_table_versioning', 'users'));
 
@@ -29,13 +29,13 @@ select ok(
 );
 
 -- Stage and commit the table creation
-select bundle.stage_tracked_row('test.table.versioning', 
+select bundle.stage_tracked_row('test.table.versioning',
     meta.make_row_id('meta', 'table', 'id', meta.make_table_id('test_table_versioning', 'users')::text));
 select bundle.commit('test.table.versioning', 'Add users table');
 
 -- Test 2: Version a table rename operation
-update meta.table 
-set name = 'people' 
+update meta.table
+set name = 'people'
 where schema_name = 'test_table_versioning' and name = 'users';
 
 -- Verify rename worked in PostgreSQL
@@ -50,26 +50,26 @@ select ok(
 );
 
 -- Stage and commit the rename (note: id changes with rename)
-select bundle.stage_tracked_row('test.table.versioning', 
+select bundle.stage_tracked_row('test.table.versioning',
     meta.make_row_id('meta', 'table', 'id', meta.make_table_id('test_table_versioning', 'people')::text));
 select bundle.commit('test.table.versioning', 'Rename users table to people');
 
 -- Test 3: Version table with row security toggle
-update meta.table 
-set rowsecurity = true 
+update meta.table
+set rowsecurity = true
 where schema_name = 'test_table_versioning' and name = 'people';
 
 -- Verify row security was enabled
 select ok(
-    (select count(*) from pg_tables 
-     where schemaname = 'test_table_versioning' 
-       and tablename = 'people' 
+    (select count(*) from pg_tables
+     where schemaname = 'test_table_versioning'
+       and tablename = 'people'
        and rowsecurity = true) = 1,
     'Row security enabled via UPDATE on meta.table'
 );
 
 -- Commit the row security change
-select bundle.stage_tracked_row('test.table.versioning', 
+select bundle.stage_tracked_row('test.table.versioning',
     meta.make_row_id('meta', 'table', 'id', meta.make_table_id('test_table_versioning', 'people')::text));
 select bundle.commit('test.table.versioning', 'Enable row security on people table');
 
@@ -100,7 +100,7 @@ select ok(
 
 -- Test commit messages are preserved
 select set_has(
-    $$select message from bundle.commit 
+    $$select message from bundle.commit
       where bundle_id = (select id from bundle.bundle where name = 'test.table.versioning')$$,
     $$VALUES ('Add users table'), ('Rename users table to people'), ('Enable row security on people table'), ('Delete people table')$$,
     'All table change commit messages preserved'

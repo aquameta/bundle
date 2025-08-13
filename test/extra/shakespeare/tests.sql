@@ -80,7 +80,7 @@ select row_eq(
 
 
 ---------------------------------------
--- stage the remove 
+-- stage the remove
 ---------------------------------------
 select set_counts.refresh_counters();
 select bundle.stage_row_to_remove('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id','9001'));
