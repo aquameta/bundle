@@ -123,7 +123,7 @@ end;
 $$ language plpgsql;
 
 -- ignore self
-insert into bundle.ignored_schema (schema_id) values (meta.schema_id('set_counts'));
+insert into bundle.ignored_schema (schema_id) values (meta.make_schema_id('set_counts'));
 
 -- create testing schema
 select bundle.create_repository('io.pgbundle.set_counts');

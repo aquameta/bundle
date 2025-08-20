@@ -127,12 +127,11 @@ create or replace view trackable_relation as
         -- every table that has a primary key
         select
             t.id as relation_id,
-            r.primary_key_column_names
-        from meta.schema s
-            join meta.table t on t.schema_id=s.id
-            join meta.relation r on r.id=t.id
+            pk.column_names as primary_key_column_names
+        from meta.table t
+            join meta.primary_key pk on pk.schema_name = t.schema_name and pk.table_name = t.name
         -- only work with relations that have a primary key
-        where primary_key_column_ids is not null and primary_key_column_ids != '{}'
+        where pk.column_names is not null and pk.column_names != '{}'
 
         -- ...plus every trackable_nontable_relation
         union
@@ -180,10 +179,10 @@ select *, 'select meta.make_row_id(' ||
            ' where id not in (select schema_id from bundle.ignored_schema) '
         -- relations
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('table', 'view', 'relation') then
-           ' where id not in (select relation_id from bundle.ignored_table) and schema_id not in (select schema_id from bundle.ignored_schema)'
+           ' where id not in (select relation_id from bundle.ignored_table) and meta.make_schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
         -- functions
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'function' then
-           ' where id not in (select schema_id from bundle.ignored_schema)'
+           ' where meta.make_schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
         -- columns
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' = 'column' then
            ' where id not in (select column_id from bundle.ignored_column) and meta.column_id_to_relation_id(id) not in (select relation_id from bundle.ignored_table) and meta.column_id_to_schema_id(id) not in (select schema_id from bundle.ignored_schema)'
@@ -192,13 +191,13 @@ select *, 'select meta.make_row_id(' ||
 
         -- operator
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('operator') then
-           ' where meta.schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
+           ' where meta.make_schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
         -- type
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('type') then
-           ' where id not in (select schema_id from bundle.ignored_schema)'
+           ' where meta.make_schema_id(schema_name) not in (select schema_id from bundle.ignored_schema)'
         -- constraint_unique, constraint_check, table_privilege
         when r.relation_id->>'schema_name' = 'meta' and r.relation_id->>'name' in ('constraint_check','constraint_unique','table_privilege') then
-           ' where meta.schema_id(schema_name) not in (select schema_id from bundle.ignored_schema) and table_id not in (select relation_id from bundle.ignored_table)'
+           ' where meta.make_schema_id(schema_name) not in (select schema_id from bundle.ignored_schema) and table_id not in (select relation_id from bundle.ignored_table)'
         else ''
     end
 

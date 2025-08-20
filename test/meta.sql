@@ -9,8 +9,8 @@
 select bundle.create_repository('test.meta.schema') as test_repository_id;
 
 -- Create the test schema first (required before creating tables in it)
-insert into meta.schema (name, id)
-values ('test', meta.make_schema_id('test'));
+insert into meta.schema (name)
+values ('test');
 
 -------------------------------------------------------------------------------
 -- Test 1: Create a table via meta.table insert

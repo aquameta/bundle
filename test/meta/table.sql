@@ -17,10 +17,8 @@ select lives_ok(
 );
 
 -- Create the table via meta.table insert (schema-as-data)
-insert into meta.table (schema_name, name, schema_id, id)
-values ('test_table_versioning', 'users',
-        meta.make_schema_id('test_table_versioning'),
-        meta.make_table_id('test_table_versioning', 'users'));
+insert into meta.table (schema_name, name)
+values ('test_table_versioning', 'users');
 
 -- Verify table was created in PostgreSQL
 select ok(
