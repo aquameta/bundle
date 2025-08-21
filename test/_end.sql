@@ -1,8 +1,7 @@
-select '-------------- end.sql -----------------------------------------------';
+select '------------- test/_end.sql ------------------------------------------';
 drop extension pgtap;
 
 -- commit;
-select '-------------- unit/end.sql ------------------------------------------';
 
 drop schema if exists unittest cascade;
 drop schema if exists pt cascade;

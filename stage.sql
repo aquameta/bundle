@@ -391,7 +391,7 @@ declare
 begin
     update bundle.repository
     set tracked_rows_added = tracked_rows_added || (
-        select jsonb_agg(row_id::text)
+        select jsonb_agg(row_id)
         from bundle._get_untracked_rows(_relation_id) row_id
     ) where id = repository_id;
 
@@ -444,7 +444,7 @@ create or replace function _stage_updated_fields( _repository_id uuid, relation_
         end if;
 
         with updated_fields as (
-            select jsonb_agg(f.field_id::text) field
+            select jsonb_agg(f.field_id) field
             from bundle._get_offstage_updated_fields(_repository_id) f
             where (relation_id_filter is null or meta.field_id_to_relation_id(f.field_id) = relation_id_filter)
         )
