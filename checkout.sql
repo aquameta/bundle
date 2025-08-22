@@ -117,46 +117,83 @@ $$ language plpgsql;
 -- _checkout_row()
 --
 -- Checks out a single row given a row_id and a jsonb fields object
+-- Uses jsonb_populate_record() for proper type conversion
+-- Optional upsert parameter for conflict handling
 
-create or replace function _checkout_row( row_id meta.row_id, fields jsonb) returns void as $$
+create or replace function _checkout_row( row_id meta.row_id, fields jsonb, upsert boolean default false) returns void as $$
 declare
     stmt text;
-    cols text[] := '{}';
-    vals text[] := '{}';
-    field_row record;
+    unhashed_fields jsonb = '{}';
+    field_key text;
+    field_value text;
+    schema_name text;
+    table_name text;
+    cols text;
+    pk_columns text[];
+    conflict_clause text := '';
 begin
-    raise debug 'checkout_row(): fields: %', fields;
-    for field_row in select key, value from jsonb_each_text(fields) loop
-    raise debug '   checkout_row(): field: %', field_row;
-        cols := cols || field_row.key;
-        vals := vals || field_row.value; -- still hashed here
+    -- Extract schema and table names
+    schema_name := row_id->>'schema_name';
+    table_name := row_id->>'relation_name';
+
+    raise debug '_checkout_row(): fields: %', fields;
+
+    -- Unhash all field values to build the JSONB object
+    for field_key, field_value in select key, value from jsonb_each_text(fields) loop
+        raise debug '   _checkout_row(): field %: %', field_key, field_value;
+        unhashed_fields := unhashed_fields || jsonb_build_object(field_key, bundle.unhash(field_value));
     end loop;
 
-    stmt := format('insert into %I.%I (%s) values (%s)',
-        row_id->>'schema_name',
-        row_id->>'relation_name',
-        -- cols stmt
-        (select array_to_string(
-            array_agg(quote_ident(col)),
-            ', ',
-            'null'
-        )
-        from unnest(cols) as col),
-        -- vals stmt
-        -- NOTE: THIS is where we *maybe* need to be casting fields to their actual type.  Anonymous text *only* doesn't work with composite types AFAICT.
-        (select array_to_string(
-            array_agg(quote_literal(bundle.unhash(val))),
-            ', ',
-            'null'
-        )
-        from unnest(vals) as val)
+    raise debug '_checkout_row(): unhashed fields: %', unhashed_fields;
+
+    -- Get column list from JSONB keys
+    select string_agg(quote_ident(key), ', ') into cols
+    from jsonb_object_keys(unhashed_fields) as key;
+
+    -- Build conflict clause if upsert is requested
+    if upsert then
+        -- Get PK column names directly from row_id
+        select array(select jsonb_array_elements_text(row_id->'pk_column_names')) into pk_columns;
+
+        if pk_columns is not null and array_length(pk_columns, 1) > 0 then
+            conflict_clause := format(
+                ' on conflict (%s) do update set %s',
+                array_to_string(array(select quote_ident(col) from unnest(pk_columns) col), ', '),
+                -- Build UPDATE SET clause (excluding PK columns)
+                (select string_agg(
+                    format('%I = excluded.%I', col, col),
+                    ', '
+                )
+                from jsonb_object_keys(unhashed_fields) col
+                where not (col = any(pk_columns)))
+            );
+        else
+            raise warning '_checkout_row(): No primary key found in row_id for %.%, using INSERT only', schema_name, table_name;
+        end if;
+    end if;
+
+    -- Build statement with optional conflict clause
+    stmt := format($sql$
+        insert into %I.%I (%s)
+        select %s from jsonb_populate_record(null::%I.%I, %L)%s
+    $sql$,
+        schema_name,
+        table_name,
+        cols,
+        cols,
+        schema_name,
+        table_name,
+        unhashed_fields,
+        conflict_clause
     );
 
-    raise debug '    checkout_row(): stmt: %', stmt;
+    raise debug '    _checkout_row(): stmt: %', stmt;
 
     execute stmt;
-
     return;
+exception
+    when others then
+        raise exception '_checkout_row() failed for %.%: %',
+            schema_name, table_name, SQLERRM;
 end
 $$ language plpgsql;
-

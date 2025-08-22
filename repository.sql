@@ -47,11 +47,12 @@ create table repository (
     stage_rows_to_remove   jsonb not null default '[]' check (jsonb_typeof(stage_rows_to_remove) = 'array'),
     stage_fields_to_change jsonb not null default '[]' check (jsonb_typeof(stage_fields_to_change) = 'array') -- {} ?
 );
+-- Add foreign key constraint on commit.repository_id now that repository table exists
+alter table bundle.commit add constraint commit_repository_id_fkey foreign key (repository_id) references bundle.repository(id) on delete cascade;
+
+-- Index the jsonbs
 create index repository_tracked_rows_added_idx on bundle.repository using gin (tracked_rows_added);
 create index repository_stage_rows_to_add_idx on bundle.repository using gin (stage_rows_to_add);
-
--- Add foreign key constraint on commit.repository_id now that repository table exists
-alter table bundle.commit add constraint commit_repository_id_fkey foreign key (repository_id) references bundle.repository(id);
 create index repository_stage_rows_to_remove_idx on bundle.repository using gin (stage_rows_to_remove);
 create index repository_stage_fields_to_change_idx on bundle.repository using gin (stage_fields_to_change);
 
