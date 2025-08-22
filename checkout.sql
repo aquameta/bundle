@@ -42,7 +42,7 @@ $$ language sql;
 -- checkout()
 --
 
-create or replace function _checkout( _commit_id uuid ) returns text as $$
+create or replace function _checkout( _commit_id uuid, upsert boolean default false ) returns text as $$
 declare
     _repository_id uuid;
     _head_commit_id uuid;
@@ -65,9 +65,9 @@ begin
     where c.id = _commit_id
     into _repository_id, repository_name, _head_commit_id, _checkout_commit_id, commit_message;
 
-    -- repo has no uncommitted changes
-    if bundle._repository_has_uncommitted_changes(_repository_id) then
-        raise exception 'Repository % has uncommitted changes, checkout() cannot be performed.', bundle._repository_name(_repository_id);
+    -- repo has no working changes
+    if bundle._repository_has_working_changes(_repository_id) then
+        raise exception 'Repository % has working changes (staged or offstage). Commit or reset changes before checkout.', bundle._repository_name(_repository_id);
     end if;
 
     -- naive.
@@ -80,8 +80,11 @@ begin
         order by r._position
     loop
         -- raise notice 'CHECKING OUT ROW: % ===> %', (commit_row.row_id)::text, (commit_row.fields)::text;
-        perform bundle._checkout_row(commit_row.row_id, commit_row.fields);
+        perform bundle._checkout_row(commit_row.row_id, commit_row.fields, upsert);
     end loop;
+
+    -- Update repository checkout_commit_id
+    update bundle.repository set checkout_commit_id = _commit_id where id = _repository_id;
 
     raise notice '_checkout() ... %s', bundle.clock_diff(start_time);
     return format('Commit %s was checked out.', _commit_id);
@@ -89,7 +92,7 @@ end
 $$ language plpgsql;
 
 
-create or replace function checkout( repository_name text ) returns void as $$
+create or replace function checkout( repository_name text, upsert boolean default false ) returns void as $$
 declare
     _head_commit_id uuid;
     _repository_id uuid;
@@ -108,7 +111,7 @@ begin
         raise notice 'Repository with name % has no head_commit_id.', repository_name;
     end if;
 
-    perform bundle._checkout(_head_commit_id);
+    perform bundle._checkout(_head_commit_id, upsert);
 end
 $$ language plpgsql;
 

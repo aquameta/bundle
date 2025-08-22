@@ -241,23 +241,92 @@ $$ language sql;
 
 
 --
--- repository_has_uncommitted_changes()
+-- repository_has_staged_changes()
+-- Returns true if there are any staged changes (rows to add/remove, fields to change)
 --
 
-create or replace function _repository_has_uncommitted_changes( _repository_id uuid ) returns boolean as $$
+create or replace function _repository_has_staged_changes( _repository_id uuid ) returns boolean as $$
+    select
+        jsonb_array_length(stage_rows_to_add) > 0 or
+        jsonb_array_length(stage_rows_to_remove) > 0 or
+        jsonb_array_length(stage_fields_to_change) > 0
+    from bundle.repository
+    where id = _repository_id;
+$$ language sql;
+
+
+--
+-- repository_has_offstage_changes()
+-- Returns true if there are any unstaged changes in the working database
+--
+
+create or replace function _repository_has_offstage_changes( _repository_id uuid ) returns boolean as $$
     declare
         is_checked_out boolean;
     begin
-        -- if it isn't checked out, it doesn't have uncommitted changes
+        -- if it isn't checked out, it doesn't have offstage changes
         select (checkout_commit_id is not null) from bundle.repository where id=_repository_id
         into is_checked_out;
 
-        if is_checked_out then return false; end if;
+        if not is_checked_out then return false; end if;
 
-        -- TODO: check for it
-        return false;
+        -- Check for offstage changes using the existing offstage functions
+        return exists (
+            select 1 from bundle._get_offstage_deleted_rows(_repository_id)
+            union all
+            select 1 from bundle._get_offstage_updated_fields(_repository_id) limit 1
+        );
     end;
 $$ language plpgsql;
+
+
+--
+-- repository_has_working_changes()
+-- Returns true if there are any changes in the working state (staged OR offstage)
+-- This is the renamed version of the old _repository_has_uncommitted_changes
+--
+
+create or replace function _repository_has_working_changes( _repository_id uuid ) returns boolean as $$
+    declare
+        is_checked_out boolean;
+        has_staged_changes boolean;
+        has_tracked_changes boolean;
+    begin
+        -- if it isn't checked out, it doesn't have working changes
+        select (checkout_commit_id is not null) from bundle.repository where id=_repository_id
+        into is_checked_out;
+
+        if not is_checked_out then return false; end if;
+
+        -- Check for staged changes
+        select bundle._repository_has_staged_changes(_repository_id) into has_staged_changes;
+        if has_staged_changes then return true; end if;
+
+        -- Check for offstage changes
+        return bundle._repository_has_offstage_changes(_repository_id);
+    end;
+$$ language plpgsql;
+
+
+--
+-- repository_is_clean()
+-- Returns true if the repository has no staged or offstage changes
+--
+
+create or replace function _repository_is_clean( _repository_id uuid ) returns boolean as $$
+    select not bundle._repository_has_working_changes(_repository_id);
+$$ language sql;
+
+
+--
+-- DEPRECATED: repository_has_uncommitted_changes()
+-- Use _repository_has_working_changes() instead
+--
+
+create or replace function _repository_has_uncommitted_changes( _repository_id uuid ) returns boolean as $$
+    -- Deprecated: This function name is ambiguous. Use _repository_has_working_changes() instead.
+    select bundle._repository_has_working_changes(_repository_id);
+$$ language sql;
 
 
 --
