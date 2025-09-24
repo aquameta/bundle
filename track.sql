@@ -38,12 +38,9 @@ create or replace function _track_untracked_row( _repository_id uuid, row_id met
             raise exception 'Repository with id % does not exist.', _repository_id;
         end if;
 
-        /*
-        TODO: cruft from pre-json days, refactor this to check repository.tracked_rows_added
         if meta.row_exists(meta.make_row_id('bundle','tracked_row_added', 'row_id', row_id::text)) then
             raise exception 'Row with row_id % is already tracked.', row_id;
         end if;
-        */
 
         -- assert row exists
         if not meta.row_exists(row_id) then

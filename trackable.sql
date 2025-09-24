@@ -127,11 +127,14 @@ create or replace view trackable_relation as
         -- every table that has a primary key
         select
             t.id as relation_id,
-            pk.column_names as primary_key_column_names
+            array_agg(c.name) as primary_key_column_names
         from meta.table t
-            join meta.primary_key pk on pk.schema_name = t.schema_name and pk.table_name = t.name
+            -- join meta.primary_key pk on pk.schema_name = t.schema_name and pk.table_name = t.name
+            join meta.column c on c.schema_name = t.schema_name and c.relation_name = t.name
         -- only work with relations that have a primary key
-        where pk.column_names is not null and pk.column_names != '{}'
+        -- NOT NECESSARY:
+        -- where pk.column_names is not null and pk.column_names != '{}'
+        group by t.id
 
         -- ...plus every trackable_nontable_relation
         union
