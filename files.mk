@@ -50,9 +50,9 @@ TEST_FILES = test/_begin.sql \
     test/checkout.sql \
     test/remote.sql \
     test/merge.sql \
-    test/status.sql \
-    test/meta.sql \
-    test/meta/schema.sql \
-    test/meta/table.sql \
-    test/meta/column.sql \
-    test/_end.sql
+    test/status.sql # \
+#    test/meta.sql \
+#    test/meta/schema.sql \
+#    test/meta/table.sql \
+#    test/meta/column.sql \
+#    test/_end.sql

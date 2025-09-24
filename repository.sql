@@ -330,6 +330,107 @@ $$ language sql;
 
 
 --
+-- checkout_would_conflict()
+-- Returns true if checking out the target commit would conflict with working changes
+-- A conflict occurs when checkout would modify the same rows/fields that have working changes
+--
+
+create or replace function _checkout_would_conflict(_target_commit_id uuid)
+returns boolean as $$
+declare
+    _repository_id uuid;
+    has_conflicts boolean;
+begin
+    -- Get repository from target commit
+    select repository_id from bundle.commit where id = _target_commit_id into _repository_id;
+
+    if _repository_id is null then
+        raise exception 'Commit % does not exist', _target_commit_id;
+    end if;
+
+    -- A conflict occurs when:
+    -- 1. Checkout would change a row/field (difference between target commit and current DB)
+    -- 2. AND we have working changes to that same row/field (staged or offstage)
+
+    -- Check field conflicts:
+    -- Fields that differ between target commit and DB AND have working changes
+    with checkout_field_changes as (
+        -- Fields where DB value differs from target commit value
+        select coalesce(db.field_id, commit.field_id) as field_id
+        from bundle._get_db_commit_fields(_target_commit_id) db
+        full outer join bundle._get_commit_fields(_target_commit_id) commit
+            on db.field_id = commit.field_id
+        where db.value_hash is distinct from commit.value_hash
+    ),
+    working_field_changes as (
+        -- Staged field changes
+        select jsonb_array_elements(stage_fields_to_change)::meta.field_id as field_id
+        from bundle.repository where id = _repository_id
+        union
+        -- Offstage field changes
+        select field_id from bundle._get_offstage_updated_fields(_repository_id)
+    )
+    select exists (
+        select 1
+        from checkout_field_changes cfc
+        join working_field_changes wfc using (field_id)
+    ) into has_conflicts;
+
+    if has_conflicts then
+        return true;
+    end if;
+
+    -- Check row conflicts:
+    -- Rows that would be added/deleted by checkout AND have working changes
+    with checkout_row_changes as (
+        -- Rows that exist differently between DB and target commit
+        select coalesce(dbr.row_id, cr.row_id) as row_id
+        from bundle._get_db_commit_rows(_target_commit_id) dbr
+        full outer join bundle._get_commit_rows(_target_commit_id) cr
+            on dbr.row_id = cr.row_id
+        where dbr.row_id is null     -- In commit but not in DB (would be added)
+           or cr.row_id is null       -- In DB but not in commit (would be deleted)
+           or dbr.exists = false      -- Tracked but missing from DB
+    ),
+    working_row_changes as (
+        -- Staged row additions
+        select jsonb_array_elements(stage_rows_to_add)::meta.row_id as row_id
+        from bundle.repository where id = _repository_id
+        union
+        -- Staged row removals
+        select jsonb_array_elements(stage_rows_to_remove)::meta.row_id as row_id
+        from bundle.repository where id = _repository_id
+        union
+        -- Offstage deleted rows
+        select row_id from bundle._get_offstage_deleted_rows(_repository_id)
+        union
+        -- Newly tracked rows (not yet staged)
+        select jsonb_array_elements(tracked_rows_added)::meta.row_id as row_id
+        from bundle.repository where id = _repository_id
+    )
+    select exists (
+        select 1
+        from checkout_row_changes crc
+        join working_row_changes wrc using (row_id)
+    ) into has_conflicts;
+
+    return has_conflicts;
+end;
+$$ language plpgsql;
+
+
+--
+-- checkout_is_safe()
+-- Returns true if checkout can proceed without conflicts
+--
+
+create or replace function _checkout_is_safe(_target_commit_id uuid)
+returns boolean as $$
+    select not bundle._checkout_would_conflict(_target_commit_id);
+$$ language sql;
+
+
+--
 -- commit_exists()
 --
 

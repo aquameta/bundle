@@ -3,7 +3,7 @@ select no_plan();
 -- track
 
 select refresh_counters();
-select bundle.track_untracked_rows_by_relation('io.pgbundle.pt',meta.relation_id('pt','periodic_table'));
+select bundle.track_untracked_rows_by_relation('io.pgbundle.pt',meta.make_relation_id('pt','periodic_table'));
 select count_diff();
 
 

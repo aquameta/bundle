@@ -3,6 +3,7 @@
 -- DELTA TESTING FRAMEWORK
 --
 ---------------------------------------------------------------------------------------
+drop schema if exists set_counts cascade;
 create schema set_counts;
 
 create table set_counts.set_count (
@@ -18,7 +19,7 @@ begin
     delete from set_counts.set_count;
     for rel in (
         -- all relations bundle.*
-        select name as alias, schema_name || '.' || name as set_generator_stmt from meta.relation where schema_name = 'bundle' and name in ('ZZZ') -- not in ('not_ignored_row_stmt')
+        select name as alias, schema_name || '.' || name as set_generator_stmt from meta.table where schema_name = 'bundle' and name in ('ZZZ') -- not in ('not_ignored_row_stmt')
 
         union
 

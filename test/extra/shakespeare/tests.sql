@@ -3,8 +3,9 @@
 -- TESTS
 --
 ---------------------------------------------------------------------------------------
+select '------------- shakespeare/tests.sql ------------------------------------------';
 
-select no_plan();
+-- select no_plan();
 select set_counts.refresh_counters();
 
 ---------------------------------------
@@ -33,7 +34,16 @@ select row_eq(
 -- track rows
 ---------------------------------------
 select set_counts.refresh_counters();
-select bundle.track_untracked_row('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id',id)) from shakespeare.character where id in ('9001','9002');
+select bundle.track_untracked_row(
+    'org.opensourceshakespeare.db',
+    meta.make_row_id(
+        'shakespeare',
+        'character',
+        'id',
+        c.id::text
+    )
+)
+from shakespeare.character c where c.id in ('9001','9002');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -46,7 +56,7 @@ select row_eq(
 -- stage_tracked_row()
 ---------------------------------------
 select set_counts.refresh_counters();
-select bundle.stage_tracked_row('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id',id::text)) from shakespeare.character where id in ('9001','9002');
+select bundle.stage_tracked_row('org.opensourceshakespeare.db',meta.make_row_id('shakespeare','character','id',id::text)) from shakespeare.character where id in ('9001','9002');
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -83,7 +93,7 @@ select row_eq(
 -- stage the remove
 ---------------------------------------
 select set_counts.refresh_counters();
-select bundle.stage_row_to_remove('org.opensourceshakespeare.db',meta.row_id('shakespeare','character','id','9001'));
+select bundle.stage_row_to_remove('org.opensourceshakespeare.db',meta.make_row_id('shakespeare','character','id','9001'));
 
 select row_eq(
     $$ select set_counts.count_diff() $$,
@@ -111,7 +121,7 @@ select row_eq(
 -- track all of shakespeare
 ---------------------------------------
 select set_counts.refresh_counters();
-select bundle.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.relation_id(schema_name, name))
+select bundle.track_untracked_rows_by_relation('org.opensourceshakespeare.db', meta.make_relation_id(schema_name, name))
 from meta.table
 where schema_name='shakespeare'
 --    and name in ('character', 'work', 'chapter', 'character_work') -- 'paragraph', 'wordform'
@@ -163,7 +173,7 @@ select row_eq(
 -- stage updated fields
 ---------------------------------------
 select set_counts.refresh_counters();
--- select bundle.stage_updated_fields('org.opensourceshakespeare.db', meta.relation_id('shakespeare','character'));
+-- select bundle.stage_updated_fields('org.opensourceshakespeare.db', meta.make_relation_id('shakespeare','character'));
 select bundle.stage_updated_fields('org.opensourceshakespeare.db');
 select row_eq(
     $$ select set_counts.count_diff() $$,

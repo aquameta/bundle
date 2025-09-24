@@ -33,5 +33,6 @@ end; $$ language plpgsql;
 set search_path=public;
 \i test/extra/periodic/data.sql
 
+drop schema if exists unittest cascade;
 create schema unittest;
 select no_plan();
