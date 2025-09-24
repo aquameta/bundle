@@ -124,16 +124,13 @@ create table tracked_query(
 create or replace view trackable_relation as
     select relation_id, primary_key_column_names as pk_column_names
     from (
-        -- every table that has a primary key
+        -- every table that has a primary key/keys
         select
             t.id as relation_id,
-            array_agg(c.name) as primary_key_column_names
+            array_agg(c.name order by c.position) as primary_key_column_names
         from meta.table t
-            -- join meta.primary_key pk on pk.schema_name = t.schema_name and pk.table_name = t.name
             join meta.column c on c.schema_name = t.schema_name and c.relation_name = t.name
-        -- only work with relations that have a primary key
-        -- NOT NECESSARY:
-        -- where pk.column_names is not null and pk.column_names != '{}'
+            where c.primary_key is true
         group by t.id
 
         -- ...plus every trackable_nontable_relation

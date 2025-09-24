@@ -129,22 +129,27 @@ declare
     unhashed_fields jsonb = '{}';
     field_key text;
     field_value text;
-    schema_name text;
-    table_name text;
+    unhashed_value text;
+    column_type text;
+    target_schema text;
+    target_table text;
     cols text;
     pk_columns text[];
     conflict_clause text := '';
 begin
     -- Extract schema and table names
-    schema_name := row_id->>'schema_name';
-    table_name := row_id->>'relation_name';
+    target_schema := row_id->>'schema_name';
+    target_table := row_id->>'relation_name';
 
     raise debug '_checkout_row(): fields: %', fields;
 
     -- Unhash all field values to build the JSONB object
+    -- Values are stored as JSON-serialized text, so we parse them back
     for field_key, field_value in select key, value from jsonb_each_text(fields) loop
         raise debug '   _checkout_row(): field %: %', field_key, field_value;
-        unhashed_fields := unhashed_fields || jsonb_build_object(field_key, bundle.unhash(field_value));
+
+        unhashed_value := bundle.unhash(field_value);
+        unhashed_fields := unhashed_fields || jsonb_build_object(field_key, unhashed_value::jsonb);
     end loop;
 
     raise debug '_checkout_row(): unhashed fields: %', unhashed_fields;
@@ -171,7 +176,7 @@ begin
                 where not (col = any(pk_columns)))
             );
         else
-            raise warning '_checkout_row(): No primary key found in row_id for %.%, using INSERT only', schema_name, table_name;
+            raise warning '_checkout_row(): No primary key found in row_id for %.%, using INSERT only', target_schema, target_table;
         end if;
     end if;
 
@@ -180,12 +185,12 @@ begin
         insert into %I.%I (%s)
         select %s from jsonb_populate_record(null::%I.%I, %L)%s
     $sql$,
-        schema_name,
-        table_name,
+        target_schema,
+        target_table,
         cols,
         cols,
-        schema_name,
-        table_name,
+        target_schema,
+        target_table,
         unhashed_fields,
         conflict_clause
     );
@@ -197,6 +202,6 @@ begin
 exception
     when others then
         raise exception '_checkout_row() failed for %.%: %',
-            schema_name, table_name, SQLERRM;
+            target_schema, target_table, SQLERRM;
 end
 $$ language plpgsql;

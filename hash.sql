@@ -122,7 +122,6 @@ create or replace function row_to_jsonb_hash_obj(
 ) returns jsonb as $$
 declare
     hash_obj jsonb := '{}';
-    columns text[];
     col text;
     val text;
 begin
@@ -148,7 +147,7 @@ begin
 
     -- create the object
     foreach col in array columns loop
-        execute format('select ($1).%I::text', col)
+        execute format('select to_jsonb(($1).%I)::text', col)
         into val
         using rec;
 
