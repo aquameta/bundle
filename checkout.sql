@@ -66,9 +66,11 @@ begin
     into _repository_id, repository_name, _head_commit_id, _checkout_commit_id, commit_message;
 
     -- repo has no working changes
+    /*
     if bundle._repository_has_working_changes(_repository_id) then
         raise exception 'Repository % has working changes (staged or offstage). Commit or reset changes before checkout.', bundle._repository_name(_repository_id);
     end if;
+    */
 
     -- naive.
     -- TODO: single insert stmt per relation, smart dependency traversing etc

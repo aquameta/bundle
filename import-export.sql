@@ -69,10 +69,11 @@ $$ language sql;
 
 
 
-create or replace function bundle.import_repository(bundle text)
+create or replace function bundle.import_repository(bundle text, checkout boolean default false)
 returns void as $$
 declare
     bundle_jsonb jsonb := bundle::jsonb;
+    repo_name text;
 begin
     -- repository
     insert into bundle.repository (
@@ -137,6 +138,15 @@ begin
         repository_id uuid
     )
     on conflict (id) do nothing;
+
+    -- perform checkout if requested
+    if checkout then
+        -- get the repository name from the imported data
+        repo_name := bundle_jsonb->'repository'->>'name';
+        if repo_name is not null then
+            perform bundle.checkout(repo_name);
+        end if;
+    end if;
 
 end;
 $$ language plpgsql;
