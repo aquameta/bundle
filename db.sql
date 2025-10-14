@@ -147,7 +147,7 @@ commits as well.
 
 It is useful for generating a repository's row list with change info, as well
 as the stage.  When you INNER JOIN this function's results against
-rowset_row_field, non-matching hashes will be fields changed.  When you OUTER
+get_commit_fields(), non-matching hashes will be fields changed.  When you OUTER
 JOIN, it'll pick up new fields (from new columns presumably).
 */
 
