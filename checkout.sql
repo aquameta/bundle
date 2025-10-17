@@ -151,7 +151,12 @@ begin
         raise debug '   _checkout_row(): field %: %', field_key, field_value;
 
         unhashed_value := bundle.unhash(field_value);
-        unhashed_fields := unhashed_fields || jsonb_build_object(field_key, unhashed_value::jsonb);
+        begin
+            unhashed_fields := unhashed_fields || jsonb_build_object(field_key, unhashed_value::jsonb);
+        exception when others then
+            raise exception '_checkout_row(): Failed to parse field "%" value as JSON. Unhashed value: "%". Error: %',
+                field_key, unhashed_value, SQLERRM;
+        end;
     end loop;
 
     raise debug '_checkout_row(): unhashed fields: %', unhashed_fields;

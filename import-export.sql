@@ -57,7 +57,7 @@ select jsonb_pretty(jsonb_build_object(
         where c.repository_id = r.id
     ),
     'blobs', (
-        select jsonb_agg(to_jsonb(b))
+        select jsonb_agg(jsonb_build_object('hash', b.hash, 'value', b.value))
         from bundle._get_repository_blobs(r.id) b
     )
 ))
@@ -100,11 +100,12 @@ begin
     on conflict (id) do nothing;
 
     -- blob
+    -- Value is JSON-encoded text in the export, extract as text to get the original JSON text
     insert into bundle.blob (
         hash,
         value
     )
-    select * from jsonb_to_recordset(bundle_jsonb->'blobs')
+    select hash, value from jsonb_to_recordset(bundle_jsonb->'blobs')
     as x(
         hash text,
         value text
