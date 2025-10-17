@@ -278,16 +278,31 @@ begin
         -- fields_to_change
         --
 
-        with fields as (
+        with field_values as (
             select
+                field_id,
                 meta.field_id_to_row_id(field_id) as row_id,
-                jsonb_object_agg(
-                    field_id->>'column_name',
-                    bundle.hash(meta.field_id_literal_value(field_id)) -- optimize?
-                ) as fields_obj
+                meta.field_id_literal_value(field_id) as field_value
             from bundle.repository
                 cross join lateral jsonb_array_elements(stage_fields_to_change) field_id
             where id = _repository_id
+        ),
+        field_blobs as (
+            select
+                field_id,
+                row_id,
+                field_value,
+                bundle.create_blob(field_value) as blob_created
+            from field_values
+        ),
+        fields as (
+            select
+                row_id,
+                jsonb_object_agg(
+                    field_id->>'column_name',
+                    bundle.hash(field_value)
+                ) as fields_obj
+            from field_blobs
             group by 1
         ),
         fields_obj as (
