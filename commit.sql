@@ -282,7 +282,7 @@ begin
             select
                 field_id,
                 meta.field_id_to_row_id(field_id) as row_id,
-                meta.field_id_literal_value(field_id) as field_value
+                meta.field_id_literal_value(field_id) as field_value_raw
             from bundle.repository
                 cross join lateral jsonb_array_elements(stage_fields_to_change) field_id
             where id = _repository_id
@@ -291,8 +291,8 @@ begin
             select
                 field_id,
                 row_id,
-                field_value,
-                bundle.create_blob(field_value) as blob_created
+                to_jsonb(field_value_raw)::text as field_value,
+                bundle.create_blob(to_jsonb(field_value_raw)::text) as blob_created
             from field_values
         ),
         fields as (
