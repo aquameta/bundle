@@ -31,7 +31,7 @@ returns table(hash text, value text) as $$
 
     select b.hash, b.value
     from bundle._get_repository_hashes(_repository_id) h
-        join blob b on h.hash = b.hash;
+        join bundle.blob b on h.hash = b.hash;
 
 $$ language sql;
 

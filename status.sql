@@ -219,7 +219,7 @@ $$ language sql;
 
 create type row_state as enum ('tracked', 'staged', 'in_commit');
 
-drop function _get_commit_status;
+drop function if exists _get_commit_status;
 create or replace function _get_commit_status(_commit_id uuid)
 returns table (
     -- row-level
