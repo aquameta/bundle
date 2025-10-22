@@ -295,30 +295,20 @@ $$ language plpgsql;
 */
 
 
-/*
-create or replace function _get_db_stage_fields_to_change( _repository_id uuid ) returns setof field_hash as $$
-    with fields as
-        select jsonb_array_elements(stage_fields_to_change) as field_id
-        from bundle.repository where id = _repository_id
-    select
-        field_id, bundle.hash(meta.field_id_literal_value(field_id))
-    from field;
-end;
-$$ language sql;
-*/
-
-
 create or replace function _get_db_stage_fields_to_change(_repository_id uuid, relation_id_filter meta.relation_id default null)
 returns setof field_hash as $$
     select
-        field_id,
-        bundle.hash(meta.field_id_literal_value(field_id)) as field_hash
+        fields.field_id,
+        bundle.hash(meta.field_id_literal_value(fields.field_id)) as field_hash
     from (
         select jsonb_array_elements(stage_fields_to_change) as field_id
         from bundle.repository
         where id = _repository_id
     ) as fields
-    where (relation_id_filter is null or meta.field_id_to_relation_id(fields.field_id::meta.field_id) = relation_id_filter)
+    join bundle._get_db_head_commit_rows(_repository_id) existing_rows
+        on meta.field_id_to_row_id(fields.field_id::meta.field_id) = existing_rows.row_id
+    where existing_rows.exists = true
+        and (relation_id_filter is null or meta.field_id_to_relation_id(fields.field_id::meta.field_id) = relation_id_filter)
 $$ language sql;
 
 

@@ -283,17 +283,15 @@ $$ language sql;
 
 
 
---
--- stage_deleted_rows() TODO
---
-
-
-
-create or replace function _get_offstage_deleted_rows( _repository_id uuid ) returns setof meta.row_id as $$
+create or replace function _get_offstage_deleted_rows(
+    _repository_id uuid,
+    relation_id_filter meta.relation_id default null
+) returns setof meta.row_id as $$
     -- rows deleted from head commit
     select row_id
     from bundle._get_db_head_commit_rows(_repository_id)
-        where exists = false
+    where exists = false
+    and (relation_id_filter is null or meta.row_id_to_relation_id(row_id) = relation_id_filter)
 
     except
 
@@ -496,5 +494,5 @@ create or replace function _stage_deleted_rows( _repository_id uuid, relation_id
 $$ language plpgsql;
 
 create or replace function stage_deleted_rows( repository_name text, relation_id_filter meta.relation_id default null ) returns void as $$
-    select _stage_deleted_rows(bundle.repository_id(repository_name), relation_id_filter);
+    select bundle._stage_deleted_rows(bundle.repository_id(repository_name), relation_id_filter);
 $$ language sql;
