@@ -285,7 +285,10 @@ begin
                 meta.field_id_literal_value(field_id) as field_value_raw
             from bundle.repository
                 cross join lateral jsonb_array_elements(stage_fields_to_change) field_id
+                join bundle._get_db_commit_rows(new_commit_id) existing_rows
+                    on meta.field_id_to_row_id(field_id::meta.field_id) = existing_rows.row_id
             where id = _repository_id
+                and existing_rows.exists = true
         ),
         field_blobs as (
             select

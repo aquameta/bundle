@@ -326,12 +326,16 @@ create or replace function _get_offstage_updated_fields(
         hcf.value_hash as commit_value_hash
     -- fields from head commit
     from bundle._get_head_commit_fields(_repository_id) hcf
+        -- join with existing rows to exclude deleted rows from field change detection
+        join bundle._get_db_head_commit_rows(_repository_id) existing_rows
+            on meta.field_id_to_row_id(hcf.field_id) = existing_rows.row_id
         -- left joined because db_fields() excludes dropped columns and columns may have been dropped
         left join bundle._get_db_head_commit_fields(_repository_id) dbf on dbf.field_id = hcf.field_id
         -- exclude staged fields
         left join bundle._get_db_stage_fields_to_change(_repository_id, relation_id_filter) sfc on sfc.field_id = hcf.field_id
     -- where value is different
-    where hcf.value_hash != dbf.value_hash -- hash should never be NULL so we can use != here
+    where existing_rows.exists = true
+    and hcf.value_hash != dbf.value_hash -- hash should never be NULL so we can use != here
     -- and it's not on the stage
     and sfc.field_id is null
     -- relation filter
@@ -393,12 +397,12 @@ begin
         raise exception 'Repository with id % does not exist.', _repository_id;
     end if;
 
-    -- TODO: this explodes if there are no untracked rows in _relation_id
-
+    -- if there are no untracked rows, jsonb_agg returns null, so coalesce to empty array
     update bundle.repository
-    set tracked_rows_added = tracked_rows_added || (
-        select jsonb_agg(row_id)
-        from bundle._get_untracked_rows(_relation_id) row_id
+    set tracked_rows_added = tracked_rows_added || coalesce(
+        (select jsonb_agg(row_id)
+         from bundle._get_untracked_rows(_relation_id) row_id),
+        '[]'::jsonb
     ) where id = _repository_id;
 
     raise notice '_track_untracked_rows_by_relation() ... %s', bundle.clock_diff(start_time);
@@ -457,7 +461,7 @@ create or replace function _stage_updated_fields( _repository_id uuid, relation_
             where (relation_id_filter is null or meta.field_id_to_relation_id(f.field_id) = relation_id_filter)
         )
         update bundle.repository
-        set stage_fields_to_change = stage_fields_to_change || updated_fields.field
+        set stage_fields_to_change = stage_fields_to_change || coalesce(updated_fields.field, '[]'::jsonb)
         from updated_fields
         where id = _repository_id;
 
@@ -485,8 +489,9 @@ create or replace function _stage_deleted_rows( _repository_id uuid, relation_id
         end if;
 
         update bundle.repository
-        set stage_rows_to_remove = stage_rows_to_remove || (
-            select to_jsonb(array_agg(r)) lateral from bundle._get_offstage_deleted_rows (_repository_id, relation_id_filter) r
+        set stage_rows_to_remove = stage_rows_to_remove || coalesce(
+            (select to_jsonb(array_agg(r)) lateral from bundle._get_offstage_deleted_rows (_repository_id, relation_id_filter) r),
+            '[]'::jsonb
         )
         where id = _repository_id;
         raise notice '_stage_deleted_rows() ... %s', bundle.clock_diff(start_time);
