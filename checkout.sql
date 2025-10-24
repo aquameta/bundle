@@ -6,7 +6,7 @@
 -- delete_checkout()
 --
 
-create or replace function _delete_checkout( _commit_id uuid ) returns void as $$
+create or replace function _delete_checkout( _commit_id text ) returns void as $$
 declare
     r record;
     pk_comparison_stmt text;
@@ -42,11 +42,11 @@ $$ language sql;
 -- checkout()
 --
 
-create or replace function _checkout( _commit_id uuid, upsert boolean default false ) returns text as $$
+create or replace function _checkout( _commit_id text, upsert boolean default false ) returns text as $$
 declare
     _repository_id uuid;
-    _head_commit_id uuid;
-    _checkout_commit_id uuid;
+    _head_commit_id text;
+    _checkout_commit_id text;
     repository_name text;
     commit_message text;
 
@@ -96,7 +96,7 @@ $$ language plpgsql;
 
 create or replace function checkout( repository_name text, upsert boolean default false ) returns void as $$
 declare
-    _head_commit_id uuid;
+    _head_commit_id text;
     _repository_id uuid;
 begin
     _repository_id := bundle.repository_id(repository_name);

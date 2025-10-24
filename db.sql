@@ -7,7 +7,7 @@
 --
 
 create type row_exists as( row_id meta.row_id, exists boolean );
-create or replace function _get_db_commit_rows( _commit_id uuid, _relation_id meta.relation_id default null ) returns setof row_exists as $$
+create or replace function _get_db_commit_rows( _commit_id text, _relation_id meta.relation_id default null ) returns setof row_exists as $$
 declare
     rel record;
     stmts text[] := '{}';
@@ -152,7 +152,7 @@ JOIN, it'll pick up new fields (from new columns presumably).
 */
 
 
-create or replace function _get_db_commit_fields(commit_id uuid) returns setof bundle.field_hash as $$
+create or replace function _get_db_commit_fields(commit_id text) returns setof bundle.field_hash as $$
 declare
     rel record;
     stmts text[] = '{}';

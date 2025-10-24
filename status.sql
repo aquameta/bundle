@@ -35,8 +35,8 @@ returns table (
     repository_name text,
 
     -- commit info
-    checkout_commit_id uuid,
-    head_commit_id uuid,
+    checkout_commit_id text,
+    head_commit_id text,
     author_name text,
     author_email text,
     message text,
@@ -231,7 +231,7 @@ $$ language plpgsql;
 create type row_state as enum ('tracked', 'staged', 'in_commit');
 
 drop function if exists _get_commit_status;
-create or replace function _get_commit_status(_commit_id uuid)
+create or replace function _get_commit_status(_commit_id text)
 returns table (
     -- row-level
     row_id meta.row_id,

@@ -7,10 +7,14 @@
 --
 
 create table commit (
-    id uuid not null default public.uuid_generate_v4() primary key,
+    -- Content-addressable ID (SHA256 hash of commit content)
+    id text not null primary key,
+
     repository_id uuid not null, -- will add FK constraint after repository table is created
-    parent_id uuid references commit(id), --null means first commit
-    merge_parent_id uuid references commit(id),
+
+    -- Parent references by content hash (Merkle tree)
+    parent_id text references commit(id),
+    merge_parent_id text references commit(id),
 
     -- rows jsonb array. values are row_id::text
     jsonb_rows jsonb not null default '[]' check (jsonb_typeof(jsonb_rows) = 'array'),
@@ -38,8 +42,10 @@ create index commit_parent_id_idx on bundle.commit (parent_id);
 create table repository (
     id uuid not null default public.uuid_generate_v4() primary key,
     name text not null unique check(name != ''),
-    head_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
-    checkout_commit_id uuid unique references commit(id) on delete set null deferrable initially deferred,
+
+    -- Commit references by content hash
+    head_commit_id text unique references commit(id) on delete set null deferrable initially deferred,
+    checkout_commit_id text unique references commit(id) on delete set null deferrable initially deferred,
 
     tracked_rows_added     jsonb not null default '[]' check (jsonb_typeof(tracked_rows_added) = 'array'),
 
@@ -60,6 +66,77 @@ create index repository_stage_fields_to_change_idx on bundle.repository using gi
 
 -- circular fk
 -- Repository_id column already added to commit table, constraint added above
+
+
+------------------------------------------------------------------------------
+-- CONTENT-ADDRESSABLE FUNCTIONS
+------------------------------------------------------------------------------
+
+--
+-- _compute_row_version_hash()
+--
+-- Computes content hash for a row version (row_id + field_hashes)
+-- Column names are included in the hash via JSONB canonical ordering
+--
+
+create or replace function _compute_row_version_hash(
+    row_id meta.row_id,
+    field_hashes jsonb
+) returns text as $$
+    select encode(
+        public.digest(
+            convert_to(
+                jsonb_build_object(
+                    'row_id', row_id,
+                    'fields', field_hashes
+                )::text,
+                'UTF8'
+            ),
+            'sha256'
+        ),
+        'hex'
+    );
+$$ language sql immutable;
+
+
+--
+-- _compute_commit_hash()
+--
+-- Computes content hash for a commit from its content
+-- Makes commits content-addressable (like Git)
+-- This hash becomes the commit.id
+--
+
+create or replace function _compute_commit_hash(
+    parent_hash text,
+    merge_parent_hash text,
+    jsonb_rows jsonb,
+    jsonb_fields jsonb,
+    author_name text,
+    author_email text,
+    message text,
+    commit_time timestamptz
+) returns text as $$
+    select encode(
+        public.digest(
+            convert_to(
+                jsonb_build_object(
+                    'parent', parent_hash,
+                    'merge_parent', merge_parent_hash,
+                    'rows', jsonb_rows,
+                    'fields', jsonb_fields,
+                    'author', author_name,
+                    'email', author_email,
+                    'message', message,
+                    'time', commit_time
+                )::text,
+                'UTF8'
+            ),
+            'sha256'
+        ),
+        'hex'
+    );
+$$ language sql immutable;
 
 
 
@@ -114,11 +191,11 @@ $$ stable language sql;
 -- head_commit_id()
 --
 
-create or replace function _head_commit_id( repository_id uuid ) returns uuid as $$
+create or replace function _head_commit_id( repository_id uuid ) returns text as $$
     select head_commit_id from bundle.repository where id=repository_id;
 $$ stable language sql;
 
-create or replace function head_commit_id( repository_name text ) returns uuid as $$
+create or replace function head_commit_id( repository_name text ) returns text as $$
     select head_commit_id from bundle.repository where name=repository_name;
 $$ stable language sql;
 
@@ -127,11 +204,11 @@ $$ stable language sql;
 -- checkout_commit_id()
 --
 
-create or replace function _checkout_commit_id( repository_id uuid ) returns uuid as $$
+create or replace function _checkout_commit_id( repository_id uuid ) returns text as $$
     select checkout_commit_id from bundle.repository where id=repository_id;
 $$ stable language sql;
 
-create or replace function checkout_commit_id( repository_name text ) returns uuid as $$
+create or replace function checkout_commit_id( repository_name text ) returns text as $$
     select checkout_commit_id from bundle.repository where name=repository_name;
 $$ stable language sql;
 
@@ -335,7 +412,7 @@ $$ language sql;
 -- A conflict occurs when checkout would modify the same rows/fields that have working changes
 --
 
-create or replace function _checkout_would_conflict(_target_commit_id uuid)
+create or replace function _checkout_would_conflict(_target_commit_id text)
 returns boolean as $$
 declare
     _repository_id uuid;
@@ -424,7 +501,7 @@ $$ language plpgsql;
 -- Returns true if checkout can proceed without conflicts
 --
 
-create or replace function _checkout_is_safe(_target_commit_id uuid)
+create or replace function _checkout_is_safe(_target_commit_id text)
 returns boolean as $$
     select not bundle._checkout_would_conflict(_target_commit_id);
 $$ language sql;
@@ -434,7 +511,7 @@ $$ language sql;
 -- commit_exists()
 --
 
-create or replace function _commit_exists(commit_id uuid) returns boolean as $$
+create or replace function _commit_exists(commit_id text) returns boolean as $$
     select exists (select 1 from bundle.commit where id=commit_id);
 $$ language sql;
 
@@ -443,7 +520,7 @@ $$ language sql;
 -- get_commit_rows()
 --
 
-create or replace function _get_commit_rows( _commit_id uuid, _relation_id_filter meta.relation_id default null )
+create or replace function _get_commit_rows( _commit_id text, _relation_id_filter meta.relation_id default null )
 returns table(_position integer, row_id meta.row_id)
 as $$
     select position, row_id
@@ -482,7 +559,7 @@ $$ language sql;
 
 create type field_hash as ( field_id meta.field_id, value_hash text);
 
-create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
+create or replace function _get_commit_fields(_commit_id text /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
     select
         meta.make_field_id(e.key::jsonb, (jsonb_each_text(e.value)).key::text),
@@ -506,7 +583,7 @@ $$ language sql;
 -- get_commit_jsonb_rows()
 --
 
-create or replace function _get_commit_jsonb_rows( _commit_id uuid ) returns jsonb as $$
+create or replace function _get_commit_jsonb_rows( _commit_id text ) returns jsonb as $$
     select jsonb_rows from bundle.commit where id = _commit_id;
 $$ language sql;
 
@@ -514,16 +591,16 @@ $$ language sql;
 -- get_commit_jsonb_fields()
 --
 
-create or replace function _get_commit_jsonb_fields( _commit_id uuid ) returns jsonb as $$
+create or replace function _get_commit_jsonb_fields( _commit_id text ) returns jsonb as $$
     select jsonb_fields from bundle.commit where id = _commit_id;
 $$ language sql;
 
 
 --
--- get_commit_row_count_by_relation( _commit_id uuid, relation_id uuid )
+-- get_commit_row_count_by_relation( _commit_id text, relation_id uuid )
 -- used in summary
 
-create or replace function _get_commit_row_count_by_relation( _commit_id uuid )
+create or replace function _get_commit_row_count_by_relation( _commit_id text )
 returns table( relation_id meta.relation_id, row_count integer ) as $$
     select meta.row_id_to_relation_id(row_id) as relation_id, count(*) as row_count
     from bundle._get_commit_rows(_commit_id)

@@ -6,8 +6,8 @@
 -- get_commit_ancestry()
 --
 
-create type _commit_ancestor as( commit_id uuid, position integer );
-create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestor as $$
+create type _commit_ancestor as( commit_id text, position integer );
+create or replace function _get_commit_ancestry( _commit_id text ) returns setof _commit_ancestor as $$
     with recursive parent as (
         select c.id, c.parent_id, 1 as position from bundle.commit c where c.id=_commit_id
         union
@@ -23,7 +23,7 @@ $$ language sql;
 create or replace function _commit_log(_repository_id uuid)
 returns table(
     "position" integer,
-    commit_id uuid,
+    commit_id text,
     message text,
     author_name text,
     author_email text,
@@ -44,7 +44,7 @@ $$ language sql stable;
 create or replace function commit_log(repository_name text)
 returns table(
     "position" integer,
-    commit_id uuid,
+    commit_id text,
     message text,
     author_name text,
     author_email text,
@@ -54,7 +54,7 @@ returns table(
 $$ language sql stable;
 
 
-create or replace function __commit_stage_blobs( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns void as $$
+create or replace function __commit_stage_blobs( _repository_id uuid, new_commit_id text, parent_commit_id text ) returns void as $$
 begin
         --
         -- blob
@@ -77,7 +77,7 @@ end;
 $$ language plpgsql;
 
 
-create or replace function __commit_stage_rows( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid ) returns meta.relation_id[] as $$
+create or replace function __commit_stage_rows( _repository_id uuid, new_commit_id text, parent_commit_id text ) returns meta.relation_id[] as $$
 declare
     commit_relations meta.relation_id[];
     tmp jsonb;
@@ -175,7 +175,7 @@ $$ language plpgsql;
 -- __commit_stage_fields
 --
 
-create or replace function __commit_stage_fields( _repository_id uuid, new_commit_id uuid, parent_commit_id uuid, commit_relations meta.relation_id[] ) returns void as $$
+create or replace function __commit_stage_fields( _repository_id uuid, new_commit_id text, parent_commit_id text, commit_relations meta.relation_id[] ) returns void as $$
 declare
     rec record;
     rel meta.relation_id;
@@ -335,15 +335,16 @@ create or replace function _commit(
     _message text,
     _author_name text,
     _author_email text,
-    parent_commit_id uuid default null
-) returns uuid as $$
+    _parent_commit_id text default null
+) returns text as $$
 declare
-    new_commit_id uuid;
-    parent_commit_id uuid;
+    new_commit_id text;
+    temp_commit_id text;
     commit_relations meta.relation_id[];
     _jsonb_rows jsonb := '[]';
---    _jsonb_fields jsonb := '{}';
---    _jsonb_fields_patch jsonb := '{}';
+    _jsonb_fields jsonb := '{}';
+    _merge_parent_id text;
+    _commit_time timestamptz;
     first_commit boolean := false;
     start_time timestamp;
 begin
@@ -357,13 +358,13 @@ begin
     end if;
 
     -- if no parent_commit_id is supplied, use head pointer
-    if parent_commit_id is null then
-        select head_commit_id from bundle.repository where id = _repository_id into parent_commit_id;
+    if _parent_commit_id is null then
+        select head_commit_id from bundle.repository where id = _repository_id into _parent_commit_id;
     end if;
 
     -- if repository has no head commit and one is not supplied, either this is the first
     -- commit, or there is a problem
-    if parent_commit_id is null then
+    if _parent_commit_id is null then
         if bundle._repository_has_commits(_repository_id) then
             raise exception 'No parent_commit_id supplied, and repository''s head_commit_id is null.  Please specify a parent commit_id for this commit.';
         else
@@ -372,43 +373,73 @@ begin
         end if;
     end if;
 
-    raise notice '  - parent_commit_id: %', parent_commit_id;
+    raise notice '  - parent_commit_id: %', _parent_commit_id;
 
     /*
-     * create empty commit with metadata only
+     * create temporary commit with metadata only
      */
 
-    raise notice '  - Creating commit @ %', bundle.clock_diff(start_time);
+    raise notice '  - Creating temporary commit @ %', bundle.clock_diff(start_time);
+    temp_commit_id := 'TEMP_' || gen_random_uuid()::text;
+
     insert into bundle.commit (
+        id,
         repository_id,
         parent_id,
         message,
         author_name,
         author_email
     ) values (
+        temp_commit_id,
         _repository_id,
-        parent_commit_id,
+        _parent_commit_id,
         _message,
         _author_name,
         _author_email
-    ) returning id into new_commit_id;
+    ) returning commit_time into _commit_time;
 
-    raise notice '  - New commit with id %', new_commit_id;
+    raise notice '  - Temporary commit with id %', temp_commit_id;
 
     raise notice '    - stage_blobs() @ %', bundle.clock_diff(start_time);
-    perform bundle.__commit_stage_blobs(_repository_id, new_commit_id, parent_commit_id);
+    perform bundle.__commit_stage_blobs(_repository_id, temp_commit_id, _parent_commit_id);
 
     raise notice '    - stage_rows() @ %', bundle.clock_diff(start_time);
-    select bundle.__commit_stage_rows(_repository_id, new_commit_id, parent_commit_id) into commit_relations;
+    select bundle.__commit_stage_rows(_repository_id, temp_commit_id, _parent_commit_id) into commit_relations;
 
     raise notice '    - stage_fields() @ %', bundle.clock_diff(start_time);
-    perform bundle.__commit_stage_fields(_repository_id, new_commit_id, parent_commit_id, commit_relations);
+    perform bundle.__commit_stage_fields(_repository_id, temp_commit_id, _parent_commit_id, commit_relations);
 
---    return new_commit_id;
+    /*
+     * compute content hash and update ID
+     */
+
+    raise notice '  - Computing content hash @ %', bundle.clock_diff(start_time);
+
+    -- get complete commit data
+    select jsonb_rows, jsonb_fields, merge_parent_id
+    from bundle.commit
+    where id = temp_commit_id
+    into _jsonb_rows, _jsonb_fields, _merge_parent_id;
+
+    -- compute content-addressable hash
+    new_commit_id := bundle._compute_commit_hash(
+        _parent_commit_id,
+        _merge_parent_id,
+        _jsonb_rows,
+        _jsonb_fields,
+        _author_name,
+        _author_email,
+        _message,
+        _commit_time
+    );
+
+    raise notice '  - Content hash: %', new_commit_id;
+
+    -- update commit id to content hash
+    update bundle.commit set id = new_commit_id where id = temp_commit_id;
 
     -- clear this repo's stage
     perform bundle._empty_stage(_repository_id);
-
 
     -- update head pointer, checkout pointer
     update bundle.repository set head_commit_id = new_commit_id, checkout_commit_id = new_commit_id where id=_repository_id;
@@ -426,8 +457,8 @@ create or replace function commit(
     message text,
     author_name text,
     author_email text,
-    parent_commit_id uuid default null
-) returns uuid as $$
+    parent_commit_id text default null
+) returns text as $$
 begin
     if not bundle.repository_exists(repository_name) then
         raise exception 'Repository with name % does not exists', repository_name;

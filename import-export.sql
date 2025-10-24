@@ -90,8 +90,8 @@ begin
     as x(
         id uuid,
         name text,
-        head_commit_id uuid,
-        checkout_commit_id uuid,
+        head_commit_id text,
+        checkout_commit_id text,
         tracked_rows_added jsonb,
         stage_rows_to_add jsonb,
         stage_rows_to_remove jsonb,
@@ -127,9 +127,9 @@ begin
     )
     select * from jsonb_to_recordset(bundle_jsonb->'commits')
     as x(
-        id uuid,
-        parent_id uuid,
-        merge_parent_id uuid,
+        id text,
+        parent_id text,
+        merge_parent_id text,
         jsonb_rows jsonb,
         jsonb_fields jsonb,
         author_name text,
