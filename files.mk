@@ -5,6 +5,7 @@ SQL_FILES_STANDALONE = _begin.sql \
     util.sql \
     hash.sql \
     rowset.sql \
+    semver.sql \
     repository.sql \
     db.sql \
     trackable.sql \
@@ -23,6 +24,7 @@ SQL_FILES_EXTENSION = _begin_extension.sql \
     util.sql \
     hash.sql \
     rowset.sql \
+    semver.sql \
     repository.sql \
     db.sql \
     trackable.sql \
