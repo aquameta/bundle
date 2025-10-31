@@ -76,6 +76,7 @@ create table commit_migration (
     before_checkout boolean,
     ordinal_position integer
 );
+*/
 
 
 --
@@ -83,9 +84,12 @@ create table commit_migration (
 --
 
 create table dependency (
-    id uuid not null default public.uuid_generate_v4() primary key
+    id uuid not null default public.uuid_generate_v4() primary key,
+    repository_id uuid default null references bundle.repository(id),
+    commit_id uuid default null references bundle.commit(id),
+    version_range bundle.version
 );
-*/
+
 
 
 -------------------------------
