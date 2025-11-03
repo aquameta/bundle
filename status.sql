@@ -11,8 +11,8 @@ this would be nice:
              | 12 commits                             |
              +----------------------------------------+
  head commit | "Ignore rules." - 2024-12-25 4:20pm    |
-    contents | (4) bundle.ignored_table                |
-             | (3) bundle.ignored_schema               |
+    contents | (4) bundle.ignored_table               |
+             | (3) bundle.ignored_schema              |
              +----------------------------------------+
           db | 0 tracked  | 0 deleted   | 0 updated   |
              +----------------------------------------+
@@ -221,16 +221,15 @@ $$ language plpgsql;
 
 
 --
--- _get_commit_status()
+-- _get_commit_row_status()
 --
 -- Returns a summary of a commit's rows compared to the database state
--- Groups rows by row_id and shows whether they exist in both commit and db
+-- Groups rows by row_id and shows whether they exist in db
 --
 
 
 create type row_state as enum ('tracked', 'staged', 'in_commit');
 
-drop function if exists _get_commit_status;
 create or replace function _get_commit_status(_commit_id uuid)
 returns table (
     -- row-level
@@ -256,6 +255,11 @@ as $$
             join bundle.repository r on c.repository_id=r.id
         where c.id = _commit_id
     )
+
+
+    -- commit
+
+
     select
         -- row-level
         dcr.row_id,
@@ -266,8 +270,8 @@ as $$
         -- field-level
         jsonb_agg(cf.value_hash) != jsonb_agg(dcf.value_hash) as has_field_changes,
 
-        jsonb_object_agg(cf.field_id->>'column_name', cf.value_hash) as commit_value_hashes,
-        jsonb_object_agg(dcf.field_id->>'column_name', dcf.value_hash) as db_value_hashes,
+        null, -- jsonb_object_agg(cf.field_id->>'column_name', cf.value_hash) as commit_value_hashes,
+        null, -- jsonb_object_agg(dcf.field_id->>'column_name', dcf.value_hash) as db_value_hashes,
         false,
         null::text[], -- TODO: compare db_value_hashes with commit_value_hashes for schema changes
         null::text[]
@@ -286,42 +290,44 @@ as $$
     union
 
 
-    select 
+    -- stage
+    select
         srta.row_id,
         'staged' as row_state,
-        true as row_exists, -- TODO: invent _get_db_stage_rows_row_add()
+        srta.row_exists,
         false as row_staged_to_remove,
 
         null as has_field_changes,
-        null as offstage_fields_updated,
-        null as stage_fields_to_change,
+        null::jsonb as offstage_fields_updated,
+        null::jsonb as stage_fields_to_change,
 
         false as has_schema_changes,
         null as new_columns,
         null as deleted_columns
 
         from bundle.repository r,
-        bundle._get_stage_rows_to_add(r.id) srta
+        bundle._get_db_stage_rows_added(r.id) srta
 
 
     union
 
 
-    select 
-        srta.row_id,
+    -- tracked
+    select
+        tra.row_id,
         'tracked' as row_state,
-        true as row_exists, -- TODO: invent _get_db_stage_rows_row_add()
+        tra.row_exists,
         false as row_staged_to_remove,
 
         null as has_field_changes,
-        null as offstage_fields_updated,
-        null as stage_fields_to_change,
+        null::jsonb as offstage_fields_updated,
+        null::jsonb as stage_fields_to_change,
 
         false as has_schema_changes,
         null as new_columns,
         null as deleted_columns
 
         from bundle.repository r,
-        bundle._get_tracked_rows_added(r.id) srta
+        bundle._get_db_tracked_rows_added(r.id) tra
 
 $$ language sql;
