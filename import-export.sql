@@ -50,7 +50,11 @@ $$ language sql;
 
 create or replace function _get_repository_export( _repository_id uuid ) returns text as $$
 select jsonb_pretty(jsonb_build_object(
-    'repository', to_jsonb(r),
+    'repository', jsonb_build_object(
+        'id', r.id,
+        'name', r.name,
+        'head_commit_id', r.head_commit_id
+    ),
     'commits', (
         select jsonb_agg(to_jsonb(c))
         from bundle.commit c
@@ -79,23 +83,13 @@ begin
     insert into bundle.repository (
         id,
         name,
-        head_commit_id,
-        checkout_commit_id,
-        tracked_rows_added,
-        stage_rows_to_add,
-        stage_rows_to_remove,
-        stage_fields_to_change
+        head_commit_id
     )
     select * from jsonb_to_record(bundle_jsonb->'repository')
     as x(
         id uuid,
         name text,
-        head_commit_id uuid,
-        checkout_commit_id uuid,
-        tracked_rows_added jsonb,
-        stage_rows_to_add jsonb,
-        stage_rows_to_remove jsonb,
-        stage_fields_to_change jsonb
+        head_commit_id uuid
     )
     on conflict (id) do nothing;
 
