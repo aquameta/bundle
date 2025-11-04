@@ -9,7 +9,6 @@
 create table blob (
     hash text primary key not null,
     value text
---     unique(hash, value)
 );
 create index blob_hash_hash_index on blob using hash (hash);
 
@@ -83,6 +82,9 @@ begin
     return public.digest(value, 'sha256');
 end;
 $$ language plpgsql;
+
+-- constraint on bundle.blob to verify hash matches hash(value)
+alter table blob add constraint blob_hash_matches_value check (hash = bundle.hash(value));
 
 
 -- Lookup the text value corresponding to supplied hash, in the blob table.
