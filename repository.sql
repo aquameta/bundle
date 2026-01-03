@@ -80,16 +80,34 @@ create table commit_migration (
 
 
 --
--- dependencies
+-- repository_dependency
+--
+-- Repository-level dependency requirements (like package.json)
+-- Specifies what versions a repository needs to function
+-- Mutable: changes when requirements change
 --
 
-create table dependency (
+create table repository_dependency (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid default null references bundle.repository(id),
-    commit_id uuid default null references bundle.commit(id),
-    version_range bundle.version
+    commit_id uuid not null references bundle.commit(id) on delete cascade,
+    depends_on_repository_id uuid not null references bundle.repository(id) on delete cascade,
+    version_range text not null check(version_range != '')
 );
 
+
+--
+-- commit_dependency
+--
+-- Commit-level dependency snapshot (like package-lock.json)
+-- Records exact versions that were checked out when commit was made
+-- Immutable: never changes once committed
+--
+
+create table commit_dependency (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    commit_id uuid not null references bundle.commit(id) on delete cascade,
+    depends_on_commit_id uuid not null references bundle.commit(id) on delete cascade
+);
 
 
 -------------------------------
