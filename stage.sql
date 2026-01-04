@@ -501,3 +501,82 @@ $$ language plpgsql;
 create or replace function stage_deleted_rows( repository_name text, relation_id_filter meta.relation_id default null ) returns void as $$
     select bundle._stage_deleted_rows(bundle.repository_id(repository_name), relation_id_filter);
 $$ language sql;
+
+
+--
+-- unstage_tracked_row()
+-- remove a row from stage_rows_to_add (move back to tracked_rows_added)
+--
+
+create or replace function _unstage_tracked_row( _repository_id uuid, _row_id meta.row_id ) returns void as $$
+declare
+    row_id_json jsonb := to_jsonb(_row_id);
+begin
+    -- remove from stage_rows_to_add
+    update bundle.repository
+    set stage_rows_to_add = (
+        select coalesce(jsonb_agg(elem), '[]'::jsonb)
+        from jsonb_array_elements(stage_rows_to_add) elem
+        where elem != row_id_json
+    )
+    where id = _repository_id;
+
+    -- add back to tracked_rows_added
+    update bundle.repository
+    set tracked_rows_added = tracked_rows_added || jsonb_build_array(row_id_json)
+    where id = _repository_id;
+end;
+$$ language plpgsql;
+
+create or replace function unstage_tracked_row( repository_name text, _row_id meta.row_id ) returns void as $$
+    select bundle._unstage_tracked_row(bundle.repository_id(repository_name), _row_id);
+$$ language sql;
+
+
+--
+-- unstage_field_to_change()
+-- remove a field from stage_fields_to_change
+--
+
+create or replace function _unstage_field_to_change( _repository_id uuid, _field_id meta.field_id ) returns void as $$
+declare
+    field_id_json jsonb := to_jsonb(_field_id);
+begin
+    update bundle.repository
+    set stage_fields_to_change = (
+        select coalesce(jsonb_agg(elem), '[]'::jsonb)
+        from jsonb_array_elements(stage_fields_to_change) elem
+        where elem != field_id_json
+    )
+    where id = _repository_id;
+end;
+$$ language plpgsql;
+
+create or replace function unstage_field_to_change( repository_name text, _field_id meta.field_id ) returns void as $$
+    select bundle._unstage_field_to_change(bundle.repository_id(repository_name), _field_id);
+$$ language sql;
+
+
+--
+-- unstage_all()
+-- clear all staged items, moving rows back to tracked_rows_added
+--
+
+create or replace function unstage_all( repository_name text ) returns void as $$
+declare
+    repo bundle.repository;
+begin
+    select * into repo from bundle.repository r where r.name = repository_name;
+    if not found then
+        raise exception 'Repository not found: %', repository_name;
+    end if;
+
+    -- move staged rows to add back to tracked_rows_added, clear all staging arrays
+    update bundle.repository
+    set tracked_rows_added = tracked_rows_added || coalesce(stage_rows_to_add, '[]'::jsonb),
+        stage_rows_to_add = '[]'::jsonb,
+        stage_rows_to_remove = '[]'::jsonb,
+        stage_fields_to_change = '[]'::jsonb
+    where id = repo.id;
+end;
+$$ language plpgsql;
