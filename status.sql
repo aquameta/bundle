@@ -254,6 +254,24 @@ as $$
         from bundle.commit c
             join bundle.repository r on c.repository_id=r.id
         where c.id = _commit_id
+    ),
+    -- pre-compute offstage fields per row
+    offstage_by_row as (
+        select
+            meta.field_id_to_row_id(ofu.field_id) as row_id,
+            jsonb_object_agg(ofu.field_id::jsonb->>'column_name', true) as fields
+        from repo r
+        cross join lateral bundle._get_offstage_updated_fields(r.id) ofu
+        group by meta.field_id_to_row_id(ofu.field_id)
+    ),
+    -- pre-compute stage fields per row
+    stage_by_row as (
+        select
+            meta.field_id_to_row_id(sfc) as row_id,
+            jsonb_object_agg(sfc::jsonb->>'column_name', true) as fields
+        from repo r
+        cross join lateral bundle._get_stage_fields_to_change(r.id) sfc
+        group by meta.field_id_to_row_id(sfc)
     )
 
 
@@ -269,10 +287,10 @@ as $$
 
         -- field-level
         jsonb_agg(cf.value_hash) != jsonb_agg(dcf.value_hash) as has_field_changes,
+        obr.fields as offstage_fields_updated,
+        sbr.fields as stage_fields_to_changes,
 
-        null, -- jsonb_object_agg(cf.field_id->>'column_name', cf.value_hash) as commit_value_hashes,
-        null, -- jsonb_object_agg(dcf.field_id->>'column_name', dcf.value_hash) as db_value_hashes,
-        false,
+        false as has_schema_changes,
         null::text[], -- TODO: compare db_value_hashes with commit_value_hashes for schema changes
         null::text[]
 
@@ -284,7 +302,9 @@ as $$
             on dcr.row_id = meta.field_id_to_row_id(cf.field_id)
         left join bundle._get_db_commit_fields(_commit_id) dcf
             on cf.field_id = dcf.field_id
-    group by dcr.row_id, srtr.row_id, dcr.exists
+        left join offstage_by_row obr on dcr.row_id = obr.row_id
+        left join stage_by_row sbr on dcr.row_id = sbr.row_id
+    group by dcr.row_id, srtr.row_id, dcr.exists, obr.fields, sbr.fields
 
 
     union
@@ -331,3 +351,111 @@ as $$
         bundle._get_db_tracked_rows_added(r.id) tra
 
 $$ language sql;
+
+
+--
+-- _get_row_ancestry()
+--
+-- Returns all commits in the ancestry chain that contain a specific row
+--
+
+create or replace function _get_row_ancestry(
+    _row_id meta.row_id,
+    _commit_id uuid default null
+)
+returns table (
+    commit_id uuid,
+    parent_id uuid,
+    message text,
+    author_name text,
+    commit_time timestamptz,
+    depth integer
+)
+language sql stable as $$
+    -- Walk the commit ancestry and return commits that contain this row
+    with ancestry as (
+        select
+            c.id,
+            c.parent_id,
+            c.message,
+            c.author_name,
+            c.commit_time,
+            ca.position as depth,
+            c.jsonb_rows
+        from bundle._get_commit_ancestry(
+            coalesce(_commit_id, (
+                select r.head_commit_id
+                from bundle.commit bc
+                join bundle.repository r on r.id = bc.repository_id
+                where bc.id = _commit_id
+                limit 1
+            ), _commit_id)
+        ) ca
+        join bundle.commit c on c.id = ca.commit_id
+    )
+    select
+        a.id as commit_id,
+        a.parent_id,
+        a.message,
+        a.author_name,
+        a.commit_time,
+        a.depth
+    from ancestry a
+    where exists (
+        select 1
+        from jsonb_array_elements(a.jsonb_rows) as row_data
+        where row_data->>'schema_name' = (_row_id::jsonb)->>'schema_name'
+          and row_data->>'relation_name' = (_row_id::jsonb)->>'relation_name'
+          and row_data->'pk_values' = (_row_id::jsonb)->'pk_values'
+    )
+    order by a.depth;
+$$;
+
+
+--
+-- _get_row_change_ancestry()
+--
+-- Returns commits where a specific row was actually changed (added or modified)
+--
+
+create or replace function _get_row_change_ancestry(
+    _row_id meta.row_id,
+    _commit_id uuid default null
+)
+returns table (
+    commit_id uuid,
+    parent_id uuid,
+    message text,
+    author_name text,
+    commit_time timestamptz,
+    depth integer
+)
+language sql stable as $$
+    -- Get all commits containing this row, then filter to ones where fields changed
+    with row_commits as (
+        select
+            ra.commit_id,
+            ra.parent_id,
+            ra.message,
+            ra.author_name,
+            ra.commit_time,
+            ra.depth,
+            -- Get field hashes for this row (jsonb_fields is keyed by row_id string)
+            c.jsonb_fields->(_row_id::text) as row_fields
+        from bundle._get_row_ancestry(_row_id, _commit_id) ra
+        join bundle.commit c on c.id = ra.commit_id
+    )
+    -- Return commits where fields differ from parent (or first commit with row)
+    select
+        rc.commit_id,
+        rc.parent_id,
+        rc.message,
+        rc.author_name,
+        rc.commit_time,
+        rc.depth
+    from row_commits rc
+    left join row_commits prc on prc.commit_id = rc.parent_id
+    where prc.row_fields is null  -- first commit containing this row
+       or rc.row_fields is distinct from prc.row_fields  -- fields changed
+    order by rc.depth;
+$$;

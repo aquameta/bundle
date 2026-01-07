@@ -109,3 +109,29 @@ returns jsonb as $$
     */
 $$
 language sql stable;
+
+
+--
+-- get_repository_by_row()
+--
+-- Given a row_id, returns the repository(s) it belongs to.
+
+create or replace function get_repository_by_row(
+    _row_id meta.row_id
+) returns table (
+    repository_id uuid,
+    repository_name text
+) as $$
+    -- committed rows (in head commit)
+    select r.id, r.name
+    from bundle.repository r
+    join bundle.commit c on c.id = r.head_commit_id
+    where c.jsonb_rows @> jsonb_build_array(_row_id)
+
+    union
+
+    -- tracked but not yet committed
+    select r.id, r.name
+    from bundle.repository r
+    where r.tracked_rows_added @> jsonb_build_array(_row_id)
+$$ language sql stable;
