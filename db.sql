@@ -245,8 +245,8 @@ declare
     obj jsonb;
 begin
     stmt := format('select * from %I.%I xx where %s',
-        _row_id.schema_name,
-        _row_id.relation_name,
+        _row_id->>'schema_name',
+        _row_id->>'relation_name',
         -- BAD!  This slows things down like 10x:
         -- meta._pk_stmt(_row_id, '%1$I::text = %2$L')
         meta._pk_stmt(_row_id, '%1$I = %2$L')
@@ -276,8 +276,8 @@ declare
 begin
     -- build key: value temp obj
     stmt := format('select to_json(xx) from %I.%I xx where %s',
-        _row_id.schema_name,
-        _row_id.relation_name,
+        _row_id->>'schema_name',
+        _row_id->>'relation_name',
         meta._pk_stmt(_row_id, '%1$I = %2$L')
     );
     execute stmt into obj;
@@ -438,9 +438,9 @@ begin
         col_stmts := '{}';
         foreach col_id in array meta.get_columns(rel_id) loop
             col_stmts := array_append(col_stmts, format('%L, bundle.hash(r.%I::text)',
-                col_id.name,
-                col_id.name,
-                col_id.name)
+                col_id->>'name',
+                col_id->>'name',
+                col_id->>'name')
             );
         end loop;
 
@@ -452,8 +452,8 @@ begin
                 join jsonb_array_elements_text(%s::jsonb) rs on %s',
 
             -- row_id
-            rel_id.schema_name,
-            rel_id.name,
+            rel_id->>'schema_name',
+            rel_id->>'name',
             'x',
             'x',
 
@@ -461,8 +461,8 @@ begin
             col_stmt,
 
             -- from relation
-            rel_id.schema_name,
-            rel_id.name,
+            rel_id->>'schema_name',
+            rel_id->>'name',
 
             -- rowset???
             quote_literal(rowset::text), -- inefficient as heck but thought you could use USING.  can't.

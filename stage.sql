@@ -602,9 +602,9 @@ begin
         cf.value_hash
     ) into _committed_fields
     from bundle._get_commit_fields(_checkout_commit_id) cf
-    where cf.field_id->>'schema_name' = _row_id.schema_name
-      and cf.field_id->>'relation_name' = _row_id.relation_name
-      and cf.field_id->'pk_values' = to_jsonb(_row_id.pk_values);
+    where cf.field_id->>'schema_name' = _row_id->>'schema_name'
+      and cf.field_id->>'relation_name' = _row_id->>'relation_name'
+      and cf.field_id->'pk_values' = _row_id->'pk_values';
 
     if _committed_fields is null then
         raise exception 'Row not found in checkout commit';
@@ -641,9 +641,9 @@ begin
         cf.value_hash
     ) into _committed_fields
     from bundle._get_commit_fields(_checkout_commit_id) cf
-    where cf.field_id->>'schema_name' = _row_id.schema_name
-      and cf.field_id->>'relation_name' = _row_id.relation_name
-      and cf.field_id->'pk_values' = to_jsonb(_row_id.pk_values);
+    where cf.field_id->>'schema_name' = _row_id->>'schema_name'
+      and cf.field_id->>'relation_name' = _row_id->>'relation_name'
+      and cf.field_id->'pk_values' = _row_id->'pk_values';
 
     if _committed_fields is null then
         raise exception 'Row not found in checkout commit';
