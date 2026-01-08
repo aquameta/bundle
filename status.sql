@@ -325,7 +325,7 @@ as $$
         null as new_columns,
         null as deleted_columns
 
-        from bundle.repository r,
+        from repo r,
         bundle._get_db_stage_rows_added(r.id) srta
 
 
@@ -347,7 +347,7 @@ as $$
         null as new_columns,
         null as deleted_columns
 
-        from bundle.repository r,
+        from repo r,
         bundle._get_db_tracked_rows_added(r.id) tra
 
 $$ language sql;

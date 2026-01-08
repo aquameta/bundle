@@ -26,6 +26,8 @@ $$ language plpgsql;
 
 
 -- add meta catalog views to trackable nontable relations for schema-as-data version control
+
+/* FIXME: -- one day we will track schema
 do $$
     begin
         perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'schema'), '{id}'::text[]);
@@ -36,7 +38,7 @@ do $$
         perform bundle._track_nontable_relation(meta.make_relation_id('meta', 'foreign_key'), '{id}'::text[]);
     end;
 $$ language plpgsql;
-
+*/
 
 -- track the ignore rules in the core bundle repo
 do $$

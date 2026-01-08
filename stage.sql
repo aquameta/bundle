@@ -61,8 +61,33 @@ $$ language plpgsql;
 
 
 --
--- unstage_tracked_row() TODO
+-- unstage_tracked_row()
 --
+
+create or replace function _unstage_tracked_row(_repository_id uuid, _row_id meta.row_id)
+returns void language plpgsql as $$
+begin
+    -- assert repository exists
+    if not bundle._repository_exists(_repository_id) then
+        raise exception 'Repository with id % does not exist.', _repository_id;
+    end if;
+
+    -- remove from stage_rows_to_add jsonb array
+    update bundle.repository
+    set stage_rows_to_add = (
+        select coalesce(jsonb_agg(elem.value), '[]'::jsonb)
+        from jsonb_array_elements(stage_rows_to_add) elem(value)
+        where elem.value != to_jsonb(_row_id)
+    )
+    where id = _repository_id;
+
+    -- re-track the row (correct column: tracked_rows_added)
+    update bundle.repository
+    set tracked_rows_added = coalesce(tracked_rows_added, '[]'::jsonb) || to_jsonb(_row_id)
+    where id = _repository_id
+    and not (coalesce(tracked_rows_added, '[]'::jsonb) @> jsonb_build_array(to_jsonb(_row_id)));
+end;
+$$;
 
 
 
@@ -162,10 +187,20 @@ $$ language plpgsql;
 -- unstage a field change
 --
 
-/*
-TODO
-create or replace function _unstage_field_to_change( _repository_id uuid, _field_id meta.field_id ) returns boolean as $$
-*/
+create or replace function _unstage_field_to_change(_repository_id uuid, _field_id meta.field_id)
+returns boolean
+language plpgsql as $$
+begin
+    update bundle.repository
+    set stage_fields_to_change = (
+        select coalesce(jsonb_agg(elem), '[]'::jsonb)
+        from jsonb_array_elements(stage_fields_to_change) as elem
+        where elem != _field_id::jsonb
+    )
+    where id = _repository_id;
+    return true;
+end;
+$$;
 
 --
 -- empty_stage()
@@ -501,3 +536,81 @@ $$ language plpgsql;
 create or replace function stage_deleted_rows( repository_name text, relation_id_filter meta.relation_id default null ) returns void as $$
     select bundle._stage_deleted_rows(bundle.repository_id(repository_name), relation_id_filter);
 $$ language sql;
+
+
+--
+-- unstage_all()
+-- Unstage all staged items (rows and fields) for a repository
+--
+
+create or replace function unstage_all(repository_name text)
+returns void language plpgsql as $$
+declare
+    _repository_id uuid;
+    _staged_row jsonb;
+begin
+    -- get repository id
+    select id into _repository_id from bundle.repository where name = repository_name;
+    if _repository_id is null then
+        raise exception 'Repository % does not exist.', repository_name;
+    end if;
+
+    -- move staged rows back to tracked
+    for _staged_row in
+        select elem.value from bundle.repository r,
+        jsonb_array_elements(coalesce(r.stage_rows_to_add, '[]'::jsonb)) elem(value)
+        where r.id = _repository_id
+    loop
+        update bundle.repository
+        set tracked_rows_added = coalesce(tracked_rows_added, '[]'::jsonb) || _staged_row
+        where id = _repository_id
+        and not (coalesce(tracked_rows_added, '[]'::jsonb) @> jsonb_build_array(_staged_row));
+    end loop;
+
+    -- clear all staging arrays
+    update bundle.repository
+    set stage_rows_to_add = '[]'::jsonb,
+        stage_rows_to_remove = '[]'::jsonb,
+        stage_fields_to_change = '[]'::jsonb
+    where id = _repository_id;
+end;
+$$;
+
+
+--
+-- revert_row()
+-- Restore a row to its committed state by checking out field values
+--
+
+create or replace function revert_row(_repository_id uuid, _row_id meta.row_id)
+returns void language plpgsql as $$
+declare
+    _checkout_commit_id uuid;
+    _committed_fields jsonb;
+begin
+    -- Get checkout commit id
+    select checkout_commit_id into _checkout_commit_id
+    from bundle.repository where id = _repository_id;
+
+    if _checkout_commit_id is null then
+        raise exception 'Repository has no checkout commit';
+    end if;
+
+    -- Get committed field values for this row
+    select jsonb_object_agg(
+        cf.field_id->>'column_name',
+        cf.value_hash
+    ) into _committed_fields
+    from bundle._get_commit_fields(_checkout_commit_id) cf
+    where cf.field_id->>'schema_name' = _row_id.schema_name
+      and cf.field_id->>'relation_name' = _row_id.relation_name
+      and cf.field_id->'pk_values' = to_jsonb(_row_id.pk_values);
+
+    if _committed_fields is null then
+        raise exception 'Row not found in checkout commit';
+    end if;
+
+    -- Use _checkout_row with upsert to restore the committed values
+    perform bundle._checkout_row(_row_id, _committed_fields, true);
+end;
+$$;
