@@ -11,12 +11,15 @@ SQL_FILES_STANDALONE = _begin.sql \
     trackable.sql \
     track.sql \
     stage.sql \
+    db2.sql \
     commit.sql \
     checkout.sql \
+    stash.sql \
     import-export.sql \
     remote.sql \
     merge.sql \
     status.sql \
+    history.sql \
     setup.sql \
     _end.sql
 
@@ -32,10 +35,12 @@ SQL_FILES_EXTENSION = _begin_extension.sql \
     stage.sql \
     commit.sql \
     checkout.sql \
+    stash.sql \
     import-export.sql \
     remote.sql \
     merge.sql \
     status.sql \
+    history.sql \
     setup.sql \
     _end_extension.sql
 

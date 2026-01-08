@@ -365,50 +365,6 @@ returns table (
        or meta.field_id_to_relation_id(staged.field_id) = relation_id_filter;
 $$ language sql;
 
-
---
--- _get_db_offstage_updated_fields
---
--- Wraps _get_offstage_updated_fields to include row_exists check
-
-create or replace function _get_db_offstage_updated_fields(
-    _repository_id uuid,
-    relation_id_filter meta.relation_id default null
-)
-returns table (
-    field_id meta.field_id,
-    db_value_hash text,
-    commit_value_hash text,
-    row_exists boolean
-) as $$
-    select
-        f.field_id,
-        f.db_value_hash,
-        f.commit_value_hash,
-        meta.row_exists(meta.field_id_to_row_id(f.field_id)) as row_exists
-    from bundle._get_offstage_updated_fields(_repository_id, relation_id_filter) f;
-$$ language sql;
-
-
---
--- _get_db_stage_rows_to_remove
---
--- Wraps _get_stage_rows_to_remove to include row_exists check
-
-create or replace function _get_db_stage_rows_to_remove(_repository_id uuid)
-returns table (
-    repository_id uuid,
-    row_id meta.row_id,
-    row_exists boolean
-) as $$
-    select
-        s.repository_id,
-        s.row_id,
-        meta.row_exists(s.row_id) as row_exists
-    from bundle._get_stage_rows_to_remove(_repository_id) s;
-$$ language sql;
-
-
 /*
 
 failure:
