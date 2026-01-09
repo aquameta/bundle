@@ -1,4 +1,0 @@
-comment = 'Data version control - git for data'
-default_version = '0.6.0'
-relocatable = false
-schema = 'bundle'
