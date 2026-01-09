@@ -47,7 +47,8 @@ $$ language sql immutable;
 -- Saves current state, then reverts to committed state
 create or replace function bundle._stash(
     _repository_id uuid,
-    _message text default null
+    _message text default null,
+    _keep_changes boolean default false
 ) returns uuid as $$
 declare
     _stash_id uuid;
@@ -140,15 +141,18 @@ begin
         _offstage_fields
     ) returning id into _stash_id;
 
-    -- Revert to committed state (upsert=true to handle existing rows)
-    perform bundle.checkout(_repo.name, true);
+    -- Only revert if not keeping changes
+    if not _keep_changes then
+        -- Revert to committed state (upsert=true to handle existing rows)
+        perform bundle.checkout(_repo.name, true);
 
-    -- Clear staging area
-    update bundle.repository set
-        stage_rows_to_add = '[]',
-        stage_rows_to_remove = '[]',
-        stage_fields_to_change = '[]'
-    where id = _repository_id;
+        -- Clear staging area
+        update bundle.repository set
+            stage_rows_to_add = '[]',
+            stage_rows_to_remove = '[]',
+            stage_fields_to_change = '[]'
+        where id = _repository_id;
+    end if;
 
     return _stash_id;
 end;
@@ -158,11 +162,13 @@ $$ language plpgsql;
 -- Convenience wrapper that takes repository name
 create or replace function bundle.stash(
     _repository_name text,
-    _message text default null
+    _message text default null,
+    _keep_changes boolean default false
 ) returns uuid as $$
     select bundle._stash(
         (select id from bundle.repository where name = _repository_name),
-        _message
+        _message,
+        _keep_changes
     );
 $$ language sql;
 
@@ -172,7 +178,8 @@ $$ language sql;
 create or replace function bundle._stash_rows(
     _repository_id uuid,
     _row_ids meta.row_id[],
-    _message text default null
+    _message text default null,
+    _keep_changes boolean default false
 ) returns uuid as $$
 declare
     _stash_id uuid;
@@ -299,27 +306,30 @@ begin
         _offstage_fields
     ) returning id into _stash_id;
 
-    -- Remove stashed items from staging area (keep non-stashed items)
-    update bundle.repository set
-        stage_rows_to_add = (
-            select coalesce(jsonb_agg(r), '[]')
-            from jsonb_array_elements(stage_rows_to_add) r
-            where not (r::meta.row_id = any(_stage_rows_add))
-        ),
-        stage_rows_to_remove = (
-            select coalesce(jsonb_agg(r), '[]')
-            from jsonb_array_elements(stage_rows_to_remove) r
-            where not (r::meta.row_id = any(_stage_rows_remove))
-        ),
-        stage_fields_to_change = (
-            select coalesce(jsonb_agg(f), '[]')
-            from jsonb_array_elements(stage_fields_to_change) f
-            where not (f::meta.field_id = any(_stage_fields))
-        )
-    where id = _repository_id;
+    -- Only remove from staging if not keeping changes
+    if not _keep_changes then
+        -- Remove stashed items from staging area (keep non-stashed items)
+        update bundle.repository set
+            stage_rows_to_add = (
+                select coalesce(jsonb_agg(r), '[]')
+                from jsonb_array_elements(stage_rows_to_add) r
+                where not (r::meta.row_id = any(_stage_rows_add))
+            ),
+            stage_rows_to_remove = (
+                select coalesce(jsonb_agg(r), '[]')
+                from jsonb_array_elements(stage_rows_to_remove) r
+                where not (r::meta.row_id = any(_stage_rows_remove))
+            ),
+            stage_fields_to_change = (
+                select coalesce(jsonb_agg(f), '[]')
+                from jsonb_array_elements(stage_fields_to_change) f
+                where not (f::meta.field_id = any(_stage_fields))
+            )
+        where id = _repository_id;
 
-    -- Note: Does NOT auto-revert. User must manually revert rows if desired.
-    -- Selective checkout would need to restore individual rows from commit.
+        -- Note: Does NOT auto-revert. User must manually revert rows if desired.
+        -- Selective checkout would need to restore individual rows from commit.
+    end if;
 
     return _stash_id;
 end;
@@ -330,7 +340,8 @@ $$ language plpgsql;
 create or replace function bundle.stash_rows(
     _repository_name text,
     _row_ids jsonb,
-    _message text default null
+    _message text default null,
+    _keep_changes boolean default false
 ) returns uuid as $$
 declare
     _row_id_array meta.row_id[];
@@ -345,7 +356,8 @@ begin
     return bundle._stash_rows(
         (select id from bundle.repository where name = _repository_name),
         _row_id_array,
-        _message
+        _message,
+        _keep_changes
     );
 end;
 $$ language plpgsql;
@@ -466,10 +478,13 @@ $$ language sql;
 
 
 -- Apply stash without removing (like git stash apply)
+-- _force: overwrite all conflicts
+-- _skip_conflicts: skip conflicting fields, apply safe ones
 create or replace function bundle._stash_apply(
     _repository_id uuid,
     _stash_id uuid default null,
-    _force boolean default false
+    _force boolean default false,
+    _skip_conflicts boolean default false
 ) returns uuid as $$
 declare
     _stash record;
@@ -477,7 +492,9 @@ declare
     _rid meta.row_id;
     _field_row_id meta.row_id;
     _conflicts text[];
+    _conflict_fields jsonb[];
     _current_value text;
+    _is_conflict boolean;
 begin
     -- Get specified stash or most recent
     if _stash_id is not null then
@@ -496,45 +513,54 @@ begin
         raise exception 'Stash not found';
     end if;
 
-    -- Check for conflicts: stash fields with different values from current uncommitted changes
-    if not _force then
-        _conflicts := '{}';
-        foreach _sfv in array _stash.offstage_updated_fields
-        loop
-            -- Check if this field is also uncommitted
-            if exists (
-                select 1 from bundle._get_offstage_updated_fields(_repository_id)
-                where field_id::jsonb = (((_sfv).field_id)::text::jsonb)
-            ) then
-                -- Get current value from database
-                execute format(
-                    'select %I::text from %I.%I where %I = %L',
-                    (_sfv).field_id->>'column_name',
-                    (_sfv).field_id->>'schema_name',
-                    (_sfv).field_id->>'relation_name',
-                    ((_sfv).field_id->'pk_column_names'->>0),
-                    ((_sfv).field_id->'pk_values'->>0)
-                ) into _current_value;
+    -- Build list of conflicting fields
+    _conflicts := '{}';
+    _conflict_fields := '{}';
+    foreach _sfv in array _stash.offstage_updated_fields
+    loop
+        -- Check if this field is also uncommitted
+        if exists (
+            select 1 from bundle._get_offstage_updated_fields(_repository_id)
+            where field_id::jsonb = (((_sfv).field_id)::text::jsonb)
+        ) then
+            -- Get current value from database
+            execute format(
+                'select %I::text from %I.%I where %I = %L',
+                (_sfv).field_id->>'column_name',
+                (_sfv).field_id->>'schema_name',
+                (_sfv).field_id->>'relation_name',
+                ((_sfv).field_id->'pk_column_names'->>0),
+                ((_sfv).field_id->'pk_values'->>0)
+            ) into _current_value;
 
-                -- Only conflict if values differ
-                if _current_value is distinct from (_sfv).value then
-                    _conflicts := array_append(_conflicts,
-                        ((_sfv).field_id->>'schema_name') || '.' ||
-                        ((_sfv).field_id->>'relation_name') || '.' ||
-                        ((_sfv).field_id->>'column_name')
-                    );
-                end if;
+            -- Only conflict if values differ
+            if _current_value is distinct from (_sfv).value then
+                _conflicts := array_append(_conflicts,
+                    ((_sfv).field_id->>'schema_name') || '.' ||
+                    ((_sfv).field_id->>'relation_name') || '.' ||
+                    ((_sfv).field_id->>'column_name')
+                );
+                _conflict_fields := array_append(_conflict_fields, ((_sfv).field_id)::jsonb);
             end if;
-        end loop;
-
-        if array_length(_conflicts, 1) > 0 then
-            raise exception 'CONFLICT: You have uncommitted changes to: %. Applying this stash would overwrite them.', array_to_string(_conflicts, ', ');
         end if;
+    end loop;
+
+    -- Handle conflicts based on mode
+    if array_length(_conflicts, 1) > 0 and not _force and not _skip_conflicts then
+        raise exception 'CONFLICT: You have uncommitted changes to: %. Applying this stash would overwrite them.', array_to_string(_conflicts, ', ');
     end if;
 
     -- Restore offstage updated field values (skip if row no longer exists)
     foreach _sfv in array _stash.offstage_updated_fields
     loop
+        -- Check if this field is a conflict
+        _is_conflict := ((_sfv).field_id)::jsonb = any(_conflict_fields);
+
+        -- Skip conflicts if _skip_conflicts is true
+        if _is_conflict and _skip_conflicts then
+            continue;
+        end if;
+
         -- Build row_id from field_id
         _field_row_id := jsonb_build_object(
             'schema_name', ((_sfv).field_id->>'schema_name'),
@@ -571,21 +597,18 @@ end;
 $$ language plpgsql;
 
 
--- Drop old function signatures before creating new ones (for clean upgrades)
-drop function if exists bundle.stash_apply(text, uuid);
-drop function if exists bundle.stash_pop(text);
-drop function if exists bundle.stash_rows(text, meta.row_id[], text);
-
 -- Convenience wrapper
 create or replace function bundle.stash_apply(
     _repository_name text,
     _stash_id uuid default null,
-    _force boolean default false
+    _force boolean default false,
+    _skip_conflicts boolean default false
 ) returns uuid as $$
     select bundle._stash_apply(
         (select id from bundle.repository where name = _repository_name),
         _stash_id,
-        _force
+        _force,
+        _skip_conflicts
     );
 $$ language sql;
 
@@ -1150,3 +1173,206 @@ begin
     return _stash_id;
 end;
 $$ language plpgsql;
+
+
+-- Preview what will happen when applying a stash
+-- Returns status: 'safe' (no conflict), 'identical' (same value), 'conflict' (different value)
+create or replace function bundle.stash_preview_apply(_stash_id uuid)
+returns table(
+    status text,
+    category text,
+    item_type text,
+    identifier text,
+    row_id jsonb,
+    field_name text,
+    stash_value text,
+    working_value text
+) language plpgsql as $function$
+declare
+    _stash record;
+    _repo record;
+    _repository_id uuid;
+begin
+    select * into _stash from bundle.stash where id = _stash_id;
+    if not found then
+        raise exception 'Stash not found: %', _stash_id;
+    end if;
+
+    _repository_id := _stash.repository_id;
+    select * into _repo from bundle.repository where id = _repository_id;
+
+    -- 1. Offstage field changes
+    return query
+    with stash_fields as (
+        select (sfv).field_id as field_id, (sfv).value as stash_val
+        from unnest(_stash.offstage_updated_fields) sfv
+    ),
+    working_changed_fields as (
+        select f.field_id from bundle._get_offstage_updated_fields(_repository_id) f
+    )
+    select
+        case
+            when wcf.field_id is null then 'safe'
+            when sf.stash_val = meta.field_id_literal_value(sf.field_id::meta.field_id) then 'identical'
+            else 'conflict'
+        end::text,
+        'offstage'::text,
+        'field'::text,
+        (sf.field_id->>'schema_name') || '.' || (sf.field_id->>'relation_name') || ':' || (sf.field_id->'pk_values'->>0),
+        jsonb_build_object('schema_name', sf.field_id->>'schema_name', 'relation_name', sf.field_id->>'relation_name',
+            'pk_column_names', sf.field_id->'pk_column_names', 'pk_values', sf.field_id->'pk_values'),
+        sf.field_id->>'column_name',
+        left(sf.stash_val, 100),
+        case when wcf.field_id is not null then left(meta.field_id_literal_value(sf.field_id::meta.field_id), 100) else null end
+    from stash_fields sf
+    left join working_changed_fields wcf on sf.field_id = wcf.field_id;
+
+    -- 2. Staged field changes
+    return query
+    with stash_fields as (select fid as field_id from unnest(_stash.stage_fields_to_change) fid),
+    working_fields as (select fid as field_id from jsonb_array_elements(_repo.stage_fields_to_change) fid)
+    select case when wf.field_id is null then 'safe' else 'identical' end::text, 'staged'::text, 'field'::text,
+        (sf.field_id->>'schema_name') || '.' || (sf.field_id->>'relation_name') || ':' || (sf.field_id->'pk_values'->>0),
+        jsonb_build_object('schema_name', sf.field_id->>'schema_name', 'relation_name', sf.field_id->>'relation_name',
+            'pk_column_names', sf.field_id->'pk_column_names', 'pk_values', sf.field_id->'pk_values'),
+        sf.field_id->>'column_name', null::text, null::text
+    from stash_fields sf left join working_fields wf on sf.field_id = wf.field_id;
+
+    -- 3. Offstage tracked rows added
+    return query
+    with stash_rows as (select rid as row_id from unnest(_stash.offstage_tracked_rows_added) rid),
+    working_rows as (select r.row_id::jsonb as row_id from bundle._get_tracked_rows_added(_repository_id) r)
+    select case when wr.row_id is null then 'safe' else 'identical' end::text, 'offstage'::text, 'row_add'::text,
+        (sr.row_id->>'schema_name') || '.' || (sr.row_id->>'relation_name') || ':' || (sr.row_id->'pk_values'->>0),
+        sr.row_id::jsonb, null::text, null::text, null::text
+    from stash_rows sr left join working_rows wr on sr.row_id::jsonb = wr.row_id;
+
+    -- 4. Staged rows to add
+    return query
+    with stash_rows as (select rid as row_id from unnest(_stash.stage_rows_to_add) rid),
+    working_rows as (select rid as row_id from jsonb_array_elements(_repo.stage_rows_to_add) rid)
+    select case when wr.row_id is null then 'safe' else 'identical' end::text, 'staged'::text, 'row_add'::text,
+        (sr.row_id->>'schema_name') || '.' || (sr.row_id->>'relation_name') || ':' || (sr.row_id->'pk_values'->>0),
+        sr.row_id::jsonb, null::text, null::text, null::text
+    from stash_rows sr left join working_rows wr on sr.row_id = wr.row_id;
+
+    -- 5. Offstage deleted rows
+    return query
+    with stash_rows as (select rid as row_id from unnest(_stash.offstage_deleted_rows) rid),
+    working_rows as (select rid::jsonb as row_id from bundle._get_offstage_deleted_rows(_repository_id) rid)
+    select case when wr.row_id is null then 'safe' else 'identical' end::text, 'offstage'::text, 'row_delete'::text,
+        (sr.row_id->>'schema_name') || '.' || (sr.row_id->>'relation_name') || ':' || (sr.row_id->'pk_values'->>0),
+        sr.row_id::jsonb, null::text, null::text, null::text
+    from stash_rows sr left join working_rows wr on sr.row_id::jsonb = wr.row_id;
+
+    -- 6. Staged rows to remove
+    return query
+    with stash_rows as (select rid as row_id from unnest(_stash.stage_rows_to_remove) rid),
+    working_rows as (select rid as row_id from jsonb_array_elements(_repo.stage_rows_to_remove) rid)
+    select case when wr.row_id is null then 'safe' else 'identical' end::text, 'staged'::text, 'row_remove'::text,
+        (sr.row_id->>'schema_name') || '.' || (sr.row_id->>'relation_name') || ':' || (sr.row_id->'pk_values'->>0),
+        sr.row_id::jsonb, null::text, null::text, null::text
+    from stash_rows sr left join working_rows wr on sr.row_id = wr.row_id;
+end;
+$function$;
+
+
+-- Apply only selected items from a stash
+-- _selected_items is a jsonb array of objects with: category, item_type, row_id, field_name
+create or replace function bundle.stash_apply_selected(
+    _stash_id uuid,
+    _selected_items jsonb,
+    _force boolean default false
+) returns void as $function$
+declare
+    _stash record;
+    _repo record;
+    _item jsonb;
+    _sfv bundle.stash_field_value;
+    _rid meta.row_id;
+    _field_id meta.field_id;
+    _field_row_id meta.row_id;
+    _current_value text;
+begin
+    -- Get stash
+    select * into _stash from bundle.stash where id = _stash_id;
+    if _stash is null then
+        raise exception 'Stash not found: %', _stash_id;
+    end if;
+
+    select * into _repo from bundle.repository where id = _stash.repository_id;
+
+    -- Process each selected item
+    for _item in select * from jsonb_array_elements(_selected_items)
+    loop
+        if _item->>'item_type' = 'field' then
+            -- Find the matching field in stash
+            foreach _sfv in array _stash.offstage_updated_fields
+            loop
+                _field_row_id := jsonb_build_object(
+                    'schema_name', ((_sfv).field_id->>'schema_name'),
+                    'relation_name', ((_sfv).field_id->>'relation_name'),
+                    'pk_column_names', ((_sfv).field_id->'pk_column_names'),
+                    'pk_values', ((_sfv).field_id->'pk_values')
+                )::meta.row_id;
+
+                -- Check if this field matches the selected item
+                if (_sfv).field_id->>'column_name' = _item->>'field_name' and
+                   _field_row_id::jsonb = _item->'row_id' then
+
+                    -- Check for conflict if not forcing
+                    if not _force then
+                        if exists (
+                            select 1 from bundle._get_offstage_updated_fields(_stash.repository_id)
+                            where field_id::jsonb = (((_sfv).field_id)::text::jsonb)
+                        ) then
+                            execute format(
+                                'select %I::text from %I.%I where %I = %L',
+                                (_sfv).field_id->>'column_name',
+                                (_sfv).field_id->>'schema_name',
+                                (_sfv).field_id->>'relation_name',
+                                ((_sfv).field_id->'pk_column_names'->>0),
+                                ((_sfv).field_id->'pk_values'->>0)
+                            ) into _current_value;
+
+                            if _current_value is distinct from (_sfv).value then
+                                raise exception 'CONFLICT: Field %.%.% has uncommitted changes',
+                                    (_sfv).field_id->>'schema_name',
+                                    (_sfv).field_id->>'relation_name',
+                                    (_sfv).field_id->>'column_name';
+                            end if;
+                        end if;
+                    end if;
+
+                    -- Apply the field value
+                    if meta.row_exists(_field_row_id) then
+                        execute format(
+                            'update %I.%I set %I = %L where %I = %L',
+                            (_sfv).field_id->>'schema_name',
+                            (_sfv).field_id->>'relation_name',
+                            (_sfv).field_id->>'column_name',
+                            (_sfv).value,
+                            ((_sfv).field_id->'pk_column_names'->>0),
+                            ((_sfv).field_id->'pk_values'->>0)
+                        );
+                    end if;
+
+                    exit; -- Found the field, move to next item
+                end if;
+            end loop;
+
+        elsif _item->>'item_type' = 'row_add' then
+            -- Re-track the row if it exists and not already tracked
+            _rid := (_item->'row_id')::meta.row_id;
+            if meta.row_exists(_rid) and not bundle._is_newly_tracked(_stash.repository_id, _rid) then
+                perform bundle._track_untracked_row(_stash.repository_id, _rid);
+            end if;
+
+        elsif _item->>'item_type' in ('row_delete', 'row_remove') then
+            -- These are more complex - typically handled by staging area restoration
+            -- For now, just note that the row was marked for deletion in the stash
+            null;
+        end if;
+    end loop;
+end;
+$function$ language plpgsql;
