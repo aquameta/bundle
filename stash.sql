@@ -1123,9 +1123,17 @@ declare
     _offstage_fields bundle.stash_field_value[];
     _elem jsonb;
 begin
-    -- Validate version
-    if (_json->>'version')::int != 1 then
-        raise exception 'Unsupported stash version: %', _json->>'version';
+    -- Validate required fields
+    if _json->>'version' is null or (_json->>'version')::int != 1 then
+        raise exception 'Unsupported or missing stash version: %', coalesce(_json->>'version', 'NULL');
+    end if;
+
+    if _json->>'type' is null or _json->>'type' != 'bundle.stash' then
+        raise exception 'Invalid or missing stash type: %', coalesce(_json->>'type', 'NULL');
+    end if;
+
+    if _json->>'repository_name' is null then
+        raise exception 'Missing repository_name in stash JSON';
     end if;
 
     -- Find repository by name
