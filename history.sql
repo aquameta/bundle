@@ -600,12 +600,59 @@ begin
         null;
     end;
 
-    -- TODO: Semver tag lookup (future)
-    -- if _version_spec ~ '^[0-9]+\.[0-9]+\.[0-9]+' then
-    --     select commit_id from bundle.tag where ...
-    -- end if;
+    -- Semver range: ^X.Y → highest version >= X.Y.0 and < (X+1).0.0
+    if _version_spec ~ '^\^[0-9]+\.[0-9]+' then
+        declare
+            _major int;
+            _minor int;
+            _repo_id uuid;
+        begin
+            _major := (regexp_match(_version_spec, '^\^([0-9]+)'))[1]::int;
+            _minor := (regexp_match(_version_spec, '^\^[0-9]+\.([0-9]+)'))[1]::int;
+
+            select id into _repo_id from bundle.repository where name = _repository_name;
+
+            -- Find highest version that satisfies ^X.Y (>= X.Y.0, < (X+1).0.0)
+            select c.id into _commit_id
+            from bundle.commit c
+            where c.repository_id = _repo_id
+              and c.version is not null
+              and bundle.major(c.version) = _major
+              and (bundle.major(c.version) > _major
+                   or bundle.minor(c.version) >= _minor)
+            order by c.version desc
+            limit 1;
+
+            if _commit_id is not null then
+                return _commit_id;
+            end if;
+        end;
+    end if;
+
+    -- Exact semver: X.Y.Z → specific version
+    if _version_spec ~ '^[0-9]+\.[0-9]+\.[0-9]+' then
+        declare
+            _repo_id uuid;
+        begin
+            select id into _repo_id from bundle.repository where name = _repository_name;
+
+            select c.id into _commit_id
+            from bundle.commit c
+            where c.repository_id = _repo_id
+              and c.version = _version_spec::bundle.version;
+
+            if _commit_id is not null then
+                return _commit_id;
+            end if;
+        end;
+    end if;
+
+    -- 'live' → return NULL (caller uses current database)
+    if _version_spec = 'live' then
+        return null;
+    end if;
 
     raise exception 'Unknown version specifier: %', _version_spec
-        using hint = 'Valid formats: latest, head, head~N, @timestamp, or commit UUID';
+        using hint = 'Valid formats: live, latest, head, head~N, @timestamp, ^X.Y, X.Y.Z, or commit UUID';
 end;
 $$ language plpgsql stable;
