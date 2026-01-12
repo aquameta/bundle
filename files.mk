@@ -1,7 +1,5 @@
-# Centralized SQL file order - single source of truth
-# This file is included by both Makefile and any scripts that need the file list
-
-SQL_FILES_STANDALONE = _begin.sql \
+# SQL files in order
+SQL_FILES = _begin.sql \
     util.sql \
     hash.sql \
     rowset.sql \
@@ -11,33 +9,17 @@ SQL_FILES_STANDALONE = _begin.sql \
     trackable.sql \
     track.sql \
     stage.sql \
+    db2.sql \
     commit.sql \
     checkout.sql \
+    stash.sql \
     import-export.sql \
     remote.sql \
     merge.sql \
     status.sql \
+    history.sql \
     setup.sql \
     _end.sql
-
-SQL_FILES_EXTENSION = _begin_extension.sql \
-    util.sql \
-    hash.sql \
-    rowset.sql \
-    semver.sql \
-    repository.sql \
-    db.sql \
-    trackable.sql \
-    track.sql \
-    stage.sql \
-    commit.sql \
-    checkout.sql \
-    import-export.sql \
-    remote.sql \
-    merge.sql \
-    status.sql \
-    setup.sql \
-    _end_extension.sql
 
 TEST_FILES = test/_begin.sql \
     test/util.sql \
@@ -52,9 +34,4 @@ TEST_FILES = test/_begin.sql \
     test/checkout.sql \
     test/remote.sql \
     test/merge.sql \
-    test/status.sql # \
-#    test/meta.sql \
-#    test/meta/schema.sql \
-#    test/meta/table.sql \
-#    test/meta/column.sql \
-#    test/_end.sql
+    test/status.sql

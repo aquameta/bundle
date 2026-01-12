@@ -20,12 +20,17 @@ create table commit (
     author_name text not null default '',
     author_email text not null default '',
     message text not null default '',
-    commit_time timestamptz not null default now()
+    commit_time timestamptz not null default now(),
+
+    -- semver release tag (nullable - most commits aren't releases)
+    version bundle.version
 );
 create index commit_jsonb_rows_idx on bundle.commit using gin (jsonb_rows);
 create index commit_jsonb_fields_idx on bundle.commit using gin (jsonb_fields);
 create index commit_repository_id_idx on bundle.commit (repository_id);
 create index commit_parent_id_idx on bundle.commit (parent_id);
+-- unique version per repo, nulls allowed
+create unique index commit_repository_version_idx on bundle.commit (repository_id, version) where version is not null;
 
 -- TODO: check constraint for only one null parent_id per repo
 -- TODO: i am not my own grandpa
@@ -80,16 +85,34 @@ create table commit_migration (
 
 
 --
--- dependencies
+-- repository_dependency
+--
+-- Repository-level dependency requirements (like package.json)
+-- Specifies what versions a repository needs to function
+-- Mutable: changes when requirements change
 --
 
-create table dependency (
+create table repository_dependency (
     id uuid not null default public.uuid_generate_v4() primary key,
-    repository_id uuid default null references bundle.repository(id),
-    commit_id uuid default null references bundle.commit(id),
-    version_range bundle.version
+    commit_id uuid not null references bundle.commit(id) on delete cascade,
+    depends_on_repository_id uuid not null references bundle.repository(id) on delete cascade,
+    version_range text not null check(version_range != '')
 );
 
+
+--
+-- commit_dependency
+--
+-- Commit-level dependency snapshot (like package-lock.json)
+-- Records exact versions that were checked out when commit was made
+-- Immutable: never changes once committed
+--
+
+create table commit_dependency (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    commit_id uuid not null references bundle.commit(id) on delete cascade,
+    depends_on_commit_id uuid not null references bundle.commit(id) on delete cascade
+);
 
 
 -------------------------------
@@ -138,6 +161,76 @@ $$ stable language sql;
 create or replace function checkout_commit_id( repository_name text ) returns uuid as $$
     select checkout_commit_id from bundle.repository where name=repository_name;
 $$ stable language sql;
+
+
+--
+-- resolve_version()
+--
+-- Resolve a version spec to a commit_id.
+-- Specs: live, head, head~N, UUID, or semver (1.0.0)
+--
+
+create or replace function resolve_version(
+    _repository_name text,
+    _version_spec text
+) returns uuid as $$
+declare
+    _repo_id uuid;
+    _commit_id uuid;
+    _n int;
+begin
+    -- get repository
+    select id, head_commit_id into _repo_id, _commit_id
+    from bundle.repository
+    where name = _repository_name;
+
+    if _repo_id is null then
+        raise exception 'repository not found: %', _repository_name;
+    end if;
+
+    -- live: return null (caller uses live DB, not time-travel)
+    if _version_spec = 'live' then
+        return null;
+    end if;
+
+    -- head: return head_commit_id
+    if _version_spec = 'head' then
+        return _commit_id;
+    end if;
+
+    -- head~N: walk back N commits
+    if _version_spec ~ '^head~[0-9]+$' then
+        _n := substring(_version_spec from 6)::int;
+        for i in 1.._n loop
+            select parent_id into _commit_id
+            from bundle.commit
+            where id = _commit_id;
+
+            if _commit_id is null then
+                return null; -- ran out of history
+            end if;
+        end loop;
+        return _commit_id;
+    end if;
+
+    -- UUID: return as-is if valid commit
+    if _version_spec ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+        select id into _commit_id
+        from bundle.commit
+        where id = _version_spec::uuid
+          and repository_id = _repo_id;
+        return _commit_id;
+    end if;
+
+    -- semver: lookup by version column
+    select id into _commit_id
+    from bundle.commit
+    where repository_id = _repo_id
+      and version = _version_spec::bundle.version;
+
+    return _commit_id;
+end;
+$$ language plpgsql stable;
 
 
 -------------------------------
@@ -533,3 +626,29 @@ returns table( relation_id meta.relation_id, row_count integer ) as $$
     from bundle._get_commit_rows(_commit_id)
     group by meta.row_id_to_relation_id(row_id)
 $$ language sql;
+
+
+--
+-- get_repository_by_row()
+--
+-- Given a row_id, returns the repository(s) it belongs to.
+
+create or replace function get_repository_by_row(
+    _row_id meta.row_id
+) returns table (
+    repository_id uuid,
+    repository_name text
+) as $$
+    -- committed rows (in head commit)
+    select r.id, r.name
+    from bundle.repository r
+    join bundle.commit c on c.id = r.head_commit_id
+    where c.jsonb_rows @> jsonb_build_array(_row_id)
+
+    union
+
+    -- tracked but not yet committed
+    select r.id, r.name
+    from bundle.repository r
+    where r.tracked_rows_added @> jsonb_build_array(_row_id)
+$$ language sql stable;

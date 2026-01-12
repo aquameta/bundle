@@ -6,13 +6,27 @@
 -- get_commit_ancestry()
 --
 
-create type _commit_ancestor as( commit_id uuid, position integer );
-create or replace function _get_commit_ancestry( _commit_id uuid ) returns setof _commit_ancestor as $$
+create type _commit_ancestor as(
+    commit_id uuid,
+    position integer,
+    commit_time timestamptz,
+    message text,
+    author_name text,
+    author_email text
+);
+
+create or replace function _get_commit_ancestry(_commit_id uuid) returns setof _commit_ancestor as $$
     with recursive parent as (
-        select c.id, c.parent_id, 1 as position from bundle.commit c where c.id=_commit_id
+        select c.id, c.parent_id, c.commit_time, c.message, c.author_name, c.author_email, 1 as position
+        from bundle.commit c
+        where c.id = _commit_id
         union
-        select c.id, c.parent_id, p.position + 1 from bundle.commit c join parent p on c.id = p.parent_id
-    ) select id, position from parent
+        select c.id, c.parent_id, c.commit_time, c.message, c.author_name, c.author_email, p.position + 1
+        from bundle.commit c
+        join parent p on c.id = p.parent_id
+    )
+    select id, position, commit_time, message, author_name, author_email
+    from parent
 $$ language sql;
 
 
@@ -29,16 +43,9 @@ returns table(
     author_email text,
     commit_time timestamptz
 ) as $$
-    select
-        a.position,
-        a.commit_id,
-        c.message,
-        c.author_name,
-        c.author_email,
-        c.commit_time
-    from bundle._get_commit_ancestry(bundle._head_commit_id(_repository_id)) a
-    join bundle.commit c on c.id = a.commit_id
-    order by a.position;
+    select position, commit_id, message, author_name, author_email, commit_time
+    from bundle._get_commit_ancestry(bundle._head_commit_id(_repository_id))
+    order by position;
 $$ language sql stable;
 
 create or replace function commit_log(repository_name text)
