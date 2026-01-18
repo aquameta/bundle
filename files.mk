@@ -1,15 +1,19 @@
 # SQL files in order
+# Reorganized structure:
+#   - types.sql: All type definitions consolidated
+#   - core.sql: Renamed from repository.sql for clarity
+#   - stage.sql: Merged db.sql + stage.sql + db2.sql for cohesion
+#   - checkout.sql: Now includes undelete/revert operations
+#   - track.sql: Consolidated all tracking operations
 SQL_FILES = _begin.sql \
+    types.sql \
     util.sql \
     hash.sql \
     rowset.sql \
-    semver.sql \
-    repository.sql \
-    db.sql \
+    core.sql \
     trackable.sql \
     track.sql \
     stage.sql \
-    db2.sql \
     commit.sql \
     checkout.sql \
     stash.sql \
@@ -25,8 +29,7 @@ TEST_FILES = test/_begin.sql \
     test/util.sql \
     test/hash.sql \
     test/rowset.sql \
-    test/repository.sql \
-    test/db.sql \
+    test/core.sql \
     test/trackable.sql \
     test/track.sql \
     test/stage.sql \

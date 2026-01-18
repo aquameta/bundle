@@ -134,3 +134,36 @@ $$ language sql;
 create or replace view tracked_row_added as
     select id as repository_id, jsonb_array_elements(tracked_rows_added)::meta.row_id as row_id
     from bundle.repository;
+
+
+--
+-- track_untracked_rows_by_relation()
+-- Track all untracked rows for a specific relation
+--
+
+create or replace function bundle._track_untracked_rows_by_relation( _repository_id uuid, _relation_id meta.relation_id )
+returns void as $$ -- returns setof uuid?
+declare
+    start_time timestamp := clock_timestamp();
+begin
+    -- assert repository exists
+    if not bundle._repository_exists(_repository_id) then
+        raise exception 'Repository with id % does not exist.', _repository_id;
+    end if;
+
+    -- if there are no untracked rows, jsonb_agg returns null, so coalesce to empty array
+    update bundle.repository
+    set tracked_rows_added = tracked_rows_added || coalesce(
+        (select jsonb_agg(row_id)
+         from bundle._get_untracked_rows(_relation_id) row_id),
+        '[]'::jsonb
+    ) where id = _repository_id;
+
+    raise notice '_track_untracked_rows_by_relation() ... %s', bundle.clock_diff(start_time);
+end;
+$$ language plpgsql;
+
+create or replace function bundle.track_untracked_rows_by_relation( repository_name text, relation_id meta.relation_id )
+returns void as $$ -- setof uuid?
+    select bundle._track_untracked_rows_by_relation(bundle.repository_id(repository_name), relation_id);
+$$ language sql;

@@ -212,3 +212,81 @@ exception
             target_schema, target_table, SQLERRM;
 end
 $$ language plpgsql;
+
+
+--
+-- undelete_row()
+-- Restore a deleted row from the commit back to the database
+--
+
+create or replace function undelete_row(_repository_id uuid, _row_id meta.row_id)
+returns void language plpgsql as $$
+declare
+    _checkout_commit_id uuid;
+    _committed_fields jsonb;
+begin
+    -- Get checkout commit id
+    select checkout_commit_id into _checkout_commit_id
+    from bundle.repository where id = _repository_id;
+
+    if _checkout_commit_id is null then
+        raise exception 'Repository has no checkout commit';
+    end if;
+
+    -- Get committed field values for this row
+    select jsonb_object_agg(
+        cf.field_id->>'column_name',
+        cf.value_hash
+    ) into _committed_fields
+    from bundle._get_commit_fields(_checkout_commit_id) cf
+    where cf.field_id->>'schema_name' = _row_id->>'schema_name'
+      and cf.field_id->>'relation_name' = _row_id->>'relation_name'
+      and cf.field_id->'pk_values' = _row_id->'pk_values';
+
+    if _committed_fields is null then
+        raise exception 'Row not found in checkout commit';
+    end if;
+
+    -- Use _checkout_row with upsert=true to restore the row
+    perform bundle._checkout_row(_row_id, _committed_fields, true);
+end;
+$$;
+
+
+--
+-- revert_row()
+-- Restore a row to its committed state by checking out field values
+--
+
+create or replace function revert_row(_repository_id uuid, _row_id meta.row_id)
+returns void language plpgsql as $$
+declare
+    _checkout_commit_id uuid;
+    _committed_fields jsonb;
+begin
+    -- Get checkout commit id
+    select checkout_commit_id into _checkout_commit_id
+    from bundle.repository where id = _repository_id;
+
+    if _checkout_commit_id is null then
+        raise exception 'Repository has no checkout commit';
+    end if;
+
+    -- Get committed field values for this row
+    select jsonb_object_agg(
+        cf.field_id->>'column_name',
+        cf.value_hash
+    ) into _committed_fields
+    from bundle._get_commit_fields(_checkout_commit_id) cf
+    where cf.field_id->>'schema_name' = _row_id->>'schema_name'
+      and cf.field_id->>'relation_name' = _row_id->>'relation_name'
+      and cf.field_id->'pk_values' = _row_id->'pk_values';
+
+    if _committed_fields is null then
+        raise exception 'Row not found in checkout commit';
+    end if;
+
+    -- Use _checkout_row with upsert to restore the committed values
+    perform bundle._checkout_row(_row_id, _committed_fields, true);
+end;
+$$;

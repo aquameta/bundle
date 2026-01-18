@@ -1,5 +1,6 @@
 ------------------------------------------------------------------------------
--- DATA MODEL
+-- CORE
+-- Core repository and commit tables and functions
 ------------------------------------------------------------------------------
 
 --
@@ -576,8 +577,7 @@ $$ language sql;
 -- get_commit_fields()
 --
 -- returns all fields and their value hashes
-
-create type field_hash as ( field_id meta.field_id, value_hash text);
+-- NOTE: field_hash type is defined in types.sql
 
 create or replace function _get_commit_fields(_commit_id uuid /*, _relation_id_filter meta.relation_id default null TODO? */)
 returns setof field_hash as $$
