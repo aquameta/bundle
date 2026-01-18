@@ -3,12 +3,6 @@
 -- Git-stash-like functionality for saving uncommitted changes
 ------------------------------------------------------------------------------
 
--- Type for storing field values in stash
-create type bundle.stash_field_value as (
-    field_id meta.field_id,
-    value text
-);
-
 -- Table to store stashes
 create table bundle.stash (
     id uuid primary key default public.uuid_generate_v4(),

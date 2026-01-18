@@ -227,9 +227,6 @@ $$ language plpgsql;
 -- Groups rows by row_id and shows whether they exist in db
 --
 
-
-create type row_state as enum ('tracked', 'staged', 'in_commit');
-
 create or replace function _get_commit_status(_commit_id uuid)
 returns table (
     -- row-level

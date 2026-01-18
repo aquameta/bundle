@@ -797,6 +797,42 @@ $$ language sql;
 --
 -- NOTE: field_hash_diff type is defined in types.sql
 
+create or replace function _get_db_stage_fields_to_change(
+    _repository_id uuid,
+    relation_id_filter meta.relation_id default null
+)
+returns table (
+    field_id meta.field_id,
+    row_exists boolean,
+    column_exists boolean,
+    field_is_changed boolean,
+    db_value_hash text
+) as $$
+    select
+        staged.field_id,
+        coalesce(db_rows.exists, false) as row_exists,
+        db_fields.field_id is not null as column_exists,
+        coalesce(commit_fields.value_hash != db_fields.value_hash, false) as field_is_changed,
+        db_fields.value_hash as db_value_hash
+    from (
+        select jsonb_array_elements(stage_fields_to_change)::meta.field_id as field_id
+        from bundle.repository
+        where id = _repository_id
+    ) staged
+    -- check if row exists
+    left join bundle._get_db_head_commit_rows(_repository_id) db_rows
+        on meta.field_id_to_row_id(staged.field_id) = db_rows.row_id
+    -- get current db value (tells us if column exists)
+    left join bundle._get_db_head_commit_fields(_repository_id) db_fields
+        on staged.field_id = db_fields.field_id
+    -- get committed value to compare
+    left join bundle._get_head_commit_fields(_repository_id) commit_fields
+        on staged.field_id = commit_fields.field_id
+    where relation_id_filter is null
+       or meta.field_id_to_relation_id(staged.field_id) = relation_id_filter;
+$$ language sql;
+
+
 create or replace function _get_offstage_updated_fields(
     _repository_id uuid,
     relation_id_filter meta.relation_id default null
@@ -1027,42 +1063,6 @@ returns table(row_id meta.row_id, row_exists boolean) as $$
          lateral jsonb_array_elements(r.stage_rows_to_add) elem
     where r.id = _repository_id;
 $$ language sql;
-
-create or replace function _get_db_stage_fields_to_change(
-    _repository_id uuid,
-    relation_id_filter meta.relation_id default null
-)
-returns table (
-    field_id meta.field_id,
-    row_exists boolean,
-    column_exists boolean,
-    field_is_changed boolean,
-    db_value_hash text
-) as $$
-    select
-        staged.field_id,
-        coalesce(db_rows.exists, false) as row_exists,
-        db_fields.field_id is not null as column_exists,
-        coalesce(commit_fields.value_hash != db_fields.value_hash, false) as field_is_changed,
-        db_fields.value_hash as db_value_hash
-    from (
-        select jsonb_array_elements(stage_fields_to_change)::meta.field_id as field_id
-        from bundle.repository
-        where id = _repository_id
-    ) staged
-    -- check if row exists
-    left join bundle._get_db_head_commit_rows(_repository_id) db_rows
-        on meta.field_id_to_row_id(staged.field_id) = db_rows.row_id
-    -- get current db value (tells us if column exists)
-    left join bundle._get_db_head_commit_fields(_repository_id) db_fields
-        on staged.field_id = db_fields.field_id
-    -- get committed value to compare
-    left join bundle._get_head_commit_fields(_repository_id) commit_fields
-        on staged.field_id = commit_fields.field_id
-    where relation_id_filter is null
-       or meta.field_id_to_relation_id(staged.field_id) = relation_id_filter;
-$$ language sql;
-
 
 create or replace function _get_db_offstage_updated_fields(
     _repository_id uuid,

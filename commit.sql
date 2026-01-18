@@ -2,19 +2,6 @@
 -- COMMIT
 ------------------------------------------------------------------------------
 
---
--- get_commit_ancestry()
---
-
-create type _commit_ancestor as(
-    commit_id uuid,
-    position integer,
-    commit_time timestamptz,
-    message text,
-    author_name text,
-    author_email text
-);
-
 create or replace function _get_commit_ancestry(_commit_id uuid) returns setof _commit_ancestor as $$
     with recursive parent as (
         select c.id, c.parent_id, c.commit_time, c.message, c.author_name, c.author_email, 1 as position
@@ -484,7 +471,6 @@ Approach:
 
 */
 
-create type bundle.schema_edge as (from_relation_id meta.relation_id, to_relation_id meta.relation_id);
 create or replace function bundle._topological_sort_relations( _relations meta.relation_id[] )
 returns meta.relation_id[] as $$
 declare
