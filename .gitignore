@@ -1,5 +1,8 @@
 # Generated SQL files
-bundle--*.sql
+*--*.sql
+
+# Generated agent context
+AGENTS.md
 
 # Editor temp files
 *.swp
