@@ -3,6 +3,77 @@
 ------------------------------------------------------------------------------
 
 --
+-- checkout_apply_hook
+--
+-- When a relation has an apply hook registered, after checkout restores rows
+-- to that relation, the apply_function is called for each row. This enables
+-- spec tables (like meta.function_spec) to apply their DDL to PostgreSQL.
+--
+
+create table checkout_apply_hook (
+    id uuid not null default public.uuid_generate_v4() primary key,
+    relation_id meta.relation_id not null unique,
+    relation_pk_column_names text[] not null default '{id}',
+    apply_function_id meta.function_id not null
+);
+
+create or replace function register_apply_hook(
+    _relation_id meta.relation_id,
+    _relation_pk_column_names text[],
+    _apply_function_id meta.function_id
+) returns uuid as $$
+    insert into bundle.checkout_apply_hook (relation_id, relation_pk_column_names, apply_function_id)
+    values (_relation_id, _relation_pk_column_names, _apply_function_id)
+    returning id;
+$$ language sql;
+
+create or replace function unregister_apply_hook(_relation_id meta.relation_id) returns void as $$
+    delete from bundle.checkout_apply_hook where relation_id = _relation_id;
+$$ language sql;
+
+
+--
+-- _maybe_apply_row_hook()
+--
+-- Called after each row is checked out. If the row's relation has an apply hook,
+-- calls the apply function for that row.
+--
+
+create or replace function _maybe_apply_row_hook(_row_id meta.row_id) returns void as $$
+declare
+    hook record;
+    apply_stmt text;
+begin
+    -- Check if this relation has a hook
+    select * into hook
+    from bundle.checkout_apply_hook
+    where relation_id->>'schema_name' = _row_id->>'schema_name'
+      and relation_id->>'name' = _row_id->>'relation_name';
+
+    if not found then
+        return;
+    end if;
+
+    -- Build and execute the apply function call
+    -- Use type_sig as "column names" so _pk_stmt generates 'value'::type for each arg
+    apply_stmt := format('select %I.%I(%s)',
+        hook.apply_function_id->>'schema_name',
+        hook.apply_function_id->>'name',
+        meta._pk_stmt(
+            hook.apply_function_id->'arg_types',
+            _row_id->'pk_values',
+            '%2$L::%1$s',
+            ', '
+        )
+    );
+
+    raise debug '_maybe_apply_row_hook: %', apply_stmt;
+    execute apply_stmt;
+end;
+$$ language plpgsql;
+
+
+--
 -- delete_checkout()
 --
 
@@ -83,6 +154,7 @@ begin
     loop
         -- raise notice 'CHECKING OUT ROW: % ===> %', (commit_row.row_id)::text, (commit_row.fields)::text;
         perform bundle._checkout_row(commit_row.row_id, commit_row.fields, upsert);
+        perform bundle._maybe_apply_row_hook(commit_row.row_id);
     end loop;
 
     -- Update repository checkout_commit_id
