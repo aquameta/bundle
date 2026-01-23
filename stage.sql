@@ -655,6 +655,33 @@ $$ language sql;
 
 
 --
+-- stage_all()
+--
+-- Stage all changes at once: tracked rows, updated fields, and deleted rows
+
+create or replace function _stage_all( _repository_id uuid, relation_id_filter meta.relation_id default null ) returns void as $$
+    begin
+        -- assert repository exists
+        if not bundle._repository_exists(_repository_id) then
+            raise exception 'Repository with id % does not exist.', _repository_id;
+        end if;
+
+        -- stage tracked rows (new rows)
+        perform bundle._stage_tracked_rows(_repository_id);
+
+        -- stage updated fields (changes to existing rows)
+        perform bundle._stage_updated_fields(_repository_id, relation_id_filter);
+
+        -- stage deleted rows (rows removed from db)
+        perform bundle._stage_deleted_rows(_repository_id, relation_id_filter);
+    end;
+$$ language plpgsql;
+
+create or replace function stage_all( repository_name text, relation_id_filter meta.relation_id default null ) returns void as $$
+    select bundle._stage_all(bundle.repository_id(repository_name), relation_id_filter);
+$$ language sql;
+
+--
 -- empty_stage()
 --
 

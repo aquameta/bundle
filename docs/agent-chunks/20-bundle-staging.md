@@ -6,6 +6,7 @@ Staging prepares changes for commit. Stage new rows, field changes, and deletion
 
 ## summary
 
+- `bundle.stage_all('name')` - stage everything: tracked rows, field changes, and deleted rows
 - `bundle.stage_tracked_row('name', row_id)` - stage one tracked row
 - `bundle.stage_tracked_rows('name')` - stage all tracked rows
 - `bundle.stage_updated_fields('name')` - stage all field changes
@@ -97,23 +98,40 @@ select bundle.empty_stage('org.aquameta.ui.ide');
 select bundle.unstage_all('org.aquameta.ui.ide');
 ```
 
+### Staging Everything at Once
+
+Use `stage_all()` to stage tracked rows, field changes, and deleted rows in one call:
+
+```sql
+-- Stage all changes at once
+select bundle.stage_all('org.aquameta.ui.ide');
+
+-- With optional relation filter
+select bundle.stage_all(
+    'org.aquameta.ui.ide',
+    meta.make_relation_id('widget', 'widget')
+);
+```
+
 ### Typical Workflow
 
 ```sql
 -- After making changes to widgets...
 
+-- Option A: Stage everything at once
+select bundle.stage_all('org.aquameta.ui.ide');
+
+-- Option B: Stage separately for more control
 -- 1. Stage any new tracked rows
 select bundle.stage_tracked_rows('org.aquameta.ui.ide');
-
 -- 2. Stage field changes (edits to existing rows)
 select bundle.stage_updated_fields('org.aquameta.ui.ide');
-
 -- 3. Stage deletions (if any rows were deleted)
 select bundle.stage_deleted_rows('org.aquameta.ui.ide');
 
--- 4. Check status
+-- Check status
 select bundle.status('org.aquameta.ui.ide');
 
--- 5. Commit
+-- Commit
 select bundle.commit('org.aquameta.ui.ide', 'message', 'author', 'email');
 ```
