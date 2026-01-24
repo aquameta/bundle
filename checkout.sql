@@ -93,8 +93,8 @@ begin
 
         pk_comparison_stmt := meta._pk_stmt(r.row_id, '%1$I::text = %2$L');
         stmt := format ('delete from %I.%I where %s',
-            (r.row_id).schema_name,
-            (r.row_id).relation_name,
+            (r.row_id)->>'schema_name',
+            (r.row_id)->>'relation_name',
             pk_comparison_stmt);
         -- raise notice 'delete_checkout() stmt: %', stmt;
         execute stmt;

@@ -47,6 +47,9 @@ create or replace function _track_untracked_row( _repository_id uuid, row_id met
             raise exception 'Row with row_id % does not exist.', row_id;
         end if;
 
+        -- assert row_id uses actual pk columns (not alternate keys)
+        perform meta.validate_row_id_pk(row_id);
+
         -- assert row is not already tracked
         if bundle._is_newly_tracked(_repository_id, row_id) then
             raise exception 'Row with row_id % is already tracked.', row_id;
