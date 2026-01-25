@@ -63,10 +63,10 @@ select * from bundle.get_repository_by_row(
 );
 -- Returns: repository_id | repository_name
 
--- Or manually check a specific bundle:
+-- Or manually check a specific bundle (compare as text, not uuid):
 select exists (
     select 1 from bundle.get_head_commit_rows('org.aquameta.ui.ide') hcr
-    where (hcr.row_id->'pk_values'->>0)::uuid = 'widget-uuid-here'
+    where hcr.row_id->'pk_values'->>0 = 'widget-uuid-here'
 );
 ```
 
